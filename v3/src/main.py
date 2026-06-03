@@ -11,185 +11,81 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from v3.src.core.agent import Agent
-from v3.src.core.tools import CalculatorTool, SearchTool
-from v3.src.utils.logger import setup_logger, get_logger
+from src.core.agent import Agent
+from src.core.tools import CalculatorTool, SearchTool
 
 
 def create_agent() -> Agent:
     """
     创建一个配置好的Agent实例
 
-    Returns:
-        Agent实例
+    TODO: 阶段二 - 从配置文件/env加载Agent参数
+      - LLM provider配置 (api_key, model, temperature等)
+      - 工具列表配置 (启用哪些工具)
+      - 记忆策略配置 (窗口大小、持久化方式)
     """
-    # 创建工具
-    calculator = CalculatorTool()
-    search = SearchTool()
+    # TODO: 阶段三 - 注册已实现的工具
+    # tools = [CalculatorTool(), SearchTool()]
+    tools = []
 
-    # 创建Agent
     agent = Agent(
         name="Assistant",
-        description="A helpful AI assistant with calculator and search capabilities",
+        description="A helpful AI assistant",
         memory_size=100,
-        tools=[calculator, search]
+        tools=tools
     )
-
     return agent
 
 
 def interactive_mode(agent: Agent) -> None:
     """
-    交互模式
+    交互模式 - 命令行对话
 
-    Args:
-        agent: Agent实例
+    TODO: 阶段五 - 增强交互体验
+      - 支持多行输入
+      - 支持命令 (/clear, /history, /tools, /save)
+      - 输入历史 (上下键)
+      - Markdown渲染输出
     """
-    logger = get_logger()
-    logger.info("Starting interactive mode. Type 'quit' or 'exit' to exit.")
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("Agent Interactive Mode")
-    print("="*50)
-    print("Type your message and press Enter.")
+    print("=" * 50)
     print("Type 'quit' or 'exit' to exit.")
-    print("Type 'status' to see agent status.")
-    print("Type 'history' to see conversation history.")
-    print("Type 'clear' to clear conversation history.")
-    print("="*50 + "\n")
+    print("=" * 50 + "\n")
 
     while True:
         try:
             user_input = input("You: ").strip()
-
             if not user_input:
                 continue
-
             if user_input.lower() in ("quit", "exit"):
                 print("Goodbye!")
                 break
 
-            if user_input.lower() == "status":
-                status = agent.get_status()
-                print("\nAgent Status:")
-                for key, value in status.items():
-                    print(f"  {key}: {value}")
-                print()
-                continue
-
-            if user_input.lower() == "history":
-                history = agent.get_conversation_history()
-                if not history:
-                    print("\nNo conversation history.\n")
-                else:
-                    print("\nConversation History:")
-                    for msg in history[-10:]:  # 显示最后10条
-                        role = msg["role"].capitalize()
-                        content = msg["content"][:100]  # 截断长消息
-                        print(f"  {role}: {content}")
-                print()
-                continue
-
-            if user_input.lower() == "clear":
-                agent.clear_memory()
-                print("\nMemory cleared.\n")
-                continue
-
-            # 处理用户消息
             response = agent.chat(user_input)
             print(f"\nAgent: {response}\n")
 
         except KeyboardInterrupt:
             print("\n\nGoodbye!")
             break
-        except Exception as e:
-            logger.error(f"Error: {e}")
-            print(f"\nError: {e}\n")
-
-
-def demo_mode(agent: Agent) -> None:
-    """
-    演示模式
-
-    Args:
-        agent: Agent实例
-    """
-    print("\n" + "="*50)
-    print("Agent Demo Mode")
-    print("="*50)
-
-    # 显示Agent状态
-    status = agent.get_status()
-    print("\nAgent Status:")
-    for key, value in status.items():
-        print(f"  {key}: {value}")
-
-    # 演示对话
-    demo_messages = [
-        "Hello! What can you do?",
-        "Calculate 2 + 2",
-        "Search for information about Python",
-        "What is the meaning of life?"
-    ]
-
-    print("\nDemo Conversation:")
-    print("-"*50)
-
-    for message in demo_messages:
-        print(f"\nUser: {message}")
-        response = agent.chat(message)
-        print(f"Agent: {response}")
-
-    print("\n" + "="*50)
-    print("Demo completed!")
-    print("="*50 + "\n")
 
 
 def main():
     """主函数"""
-    parser = argparse.ArgumentParser(
-        description="Agent Programming Project"
-    )
-
-    parser.add_argument(
-        "--mode",
-        choices=["interactive", "demo"],
-        default="interactive",
-        help="Run mode (default: interactive)"
-    )
-
-    parser.add_argument(
-        "--log-level",
-        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
-        default="INFO",
-        help="Log level (default: INFO)"
-    )
-
-    parser.add_argument(
-        "--log-file",
-        help="Log file path (optional)"
-    )
-
+    parser = argparse.ArgumentParser(description="Agent Service")
+    parser.add_argument("--mode", choices=["interactive", "api"],
+                        default="api", help="Run mode (default: api)")
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--port", type=int, default=8000)
     args = parser.parse_args()
 
-    # 设置日志
-    setup_logger(
-        name="ouragent",
-        level=args.log_level,
-        log_file=args.log_file
-    )
-
-    logger = get_logger()
-    logger.info(f"Starting Agent in {args.mode} mode")
-
-    # 创建Agent
-    agent = create_agent()
-    logger.info(f"Agent created: {agent.name} (ID: {agent.id})")
-
-    # 运行模式
-    if args.mode == "interactive":
+    if args.mode == "api":
+        # TODO: 阶段一 - 启动FastAPI服务
+        import uvicorn
+        uvicorn.run("src.api:app", host=args.host, port=args.port, reload=True)
+    else:
+        agent = create_agent()
         interactive_mode(agent)
-    elif args.mode == "demo":
-        demo_mode(agent)
 
 
 if __name__ == "__main__":

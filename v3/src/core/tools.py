@@ -3,7 +3,7 @@
 定义和管理Agent可用的工具
 """
 
-from typing import Dict, List, Any, Optional, Callable
+from typing import Dict, List, Any, Optional
 from abc import ABC, abstractmethod
 from datetime import datetime
 import uuid
@@ -21,14 +21,6 @@ class Tool(ABC):
         description: str,
         parameters: Optional[Dict[str, Any]] = None
     ):
-        """
-        初始化工具
-
-        Args:
-            name: 工具名称
-            description: 工具描述
-            parameters: 参数定义（JSON Schema格式）
-        """
         self.id = str(uuid.uuid4())
         self.name = name
         self.description = description
@@ -38,13 +30,9 @@ class Tool(ABC):
     @abstractmethod
     def execute(self, **kwargs) -> Any:
         """
-        执行工具（必须被子类实现）
+        执行工具 (子类必须实现)
 
-        Args:
-            **kwargs: 工具参数
-
-        Returns:
-            执行结果
+        TODO: 阶段三 - 为每个工具实现具体逻辑
         """
         pass
 
@@ -52,13 +40,8 @@ class Tool(ABC):
         """
         验证参数
 
-        Args:
-            params: 参数字典
-
-        Returns:
-            验证是否通过
+        TODO: 阶段三 - 增强参数校验 (类型检查、范围校验等)
         """
-        # 基础验证：检查必需参数
         required = self.parameters.get("required", [])
         for param_name in required:
             if param_name not in params:
@@ -66,7 +49,7 @@ class Tool(ABC):
         return True
 
     def get_schema(self) -> Dict[str, Any]:
-        """获取工具的JSON Schema"""
+        """获取工具的JSON Schema (供LLM function calling使用)"""
         return {
             "name": self.name,
             "description": self.description,
@@ -84,7 +67,6 @@ class ToolRegistry:
     """
 
     def __init__(self):
-        """初始化工具注册表"""
         self.tools: Dict[str, Tool] = {}
 
     def register(self, tool: Tool) -> None:
@@ -105,35 +87,29 @@ class ToolRegistry:
         return list(self.tools.keys())
 
     def get_all_schemas(self) -> List[Dict[str, Any]]:
-        """获取所有工具的Schema"""
+        """获取所有工具的Schema (供LLM function calling使用)"""
         return [tool.get_schema() for tool in self.tools.values()]
 
     def execute_tool(self, tool_name: str, **kwargs) -> Any:
-        """
-        执行指定工具
-
-        Args:
-            tool_name: 工具名称
-            **kwargs: 工具参数
-
-        Returns:
-            执行结果
-
-        Raises:
-            ValueError: 工具不存在
-        """
+        """执行指定工具"""
         tool = self.get_tool(tool_name)
         if tool is None:
             raise ValueError(f"Tool not found: {tool_name}")
-
         tool.validate_parameters(kwargs)
         return tool.execute(**kwargs)
 
 
-# 内置工具示例
+# ==================== 内置工具 (骨架) ====================
 
 class CalculatorTool(Tool):
-    """计算器工具示例"""
+    """
+    计算器工具
+
+    TODO: 阶段三 - 实现
+      - 安全的数学表达式求值
+      - 支持科学计算 (sin, cos, log等)
+      - 单位转换
+    """
 
     def __init__(self):
         super().__init__(
@@ -152,17 +128,19 @@ class CalculatorTool(Tool):
         )
 
     def execute(self, expression: str = "", **kwargs) -> Any:
-        """执行计算"""
-        try:
-            # 安全起见，使用受限的eval
-            result = eval(expression, {"__builtins__": {}}, {})
-            return {"result": result}
-        except Exception as e:
-            return {"error": str(e)}
+        # TODO: 阶段三 - 实现安全的表达式求值
+        raise NotImplementedError("CalculatorTool not yet implemented")
 
 
 class SearchTool(Tool):
-    """搜索工具示例"""
+    """
+    搜索工具
+
+    TODO: 阶段三 - 实现
+      - 接入搜索API (Google/Bing/DuckDuckGo)
+      - 结果摘要与排序
+      - 搜索结果缓存
+    """
 
     def __init__(self):
         super().__init__(
@@ -181,6 +159,15 @@ class SearchTool(Tool):
         )
 
     def execute(self, query: str = "", **kwargs) -> Any:
-        """执行搜索（示例实现）"""
-        # 这里只是一个示例，实际应该连接到搜索API
-        return {"results": [f"Result for: {query}"]}
+        # TODO: 阶段三 - 实现搜索API调用
+        raise NotImplementedError("SearchTool not yet implemented")
+
+
+# ==================== 扩展工具 (待实现) ====================
+
+# TODO: 阶段四 - 实现更多工具
+#   - WebBrowserTool: 网页浏览与内容提取
+#   - DatabaseTool: SQL查询执行
+#   - FileTool: 文件读写操作
+#   - CodeInterpreterTool: Python代码执行
+#   - APICallTool: 通用HTTP API调用

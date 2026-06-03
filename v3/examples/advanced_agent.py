@@ -2,8 +2,9 @@
 高级Agent示例
 展示高级Agent功能，包括自定义工具和内存管理
 """
-
+import os
 import sys
+from os import environ
 from pathlib import Path
 from typing import Dict, Any
 
@@ -14,7 +15,10 @@ sys.path.insert(0, str(project_root))
 from v3.src.core.agent import Agent
 from v3.src.core.tools import Tool, ToolRegistry
 from v3.src.utils.logger import setup_logger
+from v3.src.utils.config import get_config
 
+config = get_config(env_file=str(project_root / "config" / ".env"))
+mimo_api_key = config.get("MIMO_API_KEY")
 
 class WeatherTool(Tool):
     """天气查询工具示例"""

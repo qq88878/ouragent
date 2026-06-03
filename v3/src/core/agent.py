@@ -24,15 +24,6 @@ class Agent:
         memory_size: int = 100,
         tools: Optional[List[Tool]] = None
     ):
-        """
-        初始化Agent
-
-        Args:
-            name: Agent名称
-            description: Agent描述
-            memory_size: 记忆容量（最大对话轮数）
-            tools: 可用的工具列表
-        """
         self.id = str(uuid.uuid4())
         self.name = name
         self.description = description
@@ -63,41 +54,41 @@ class Agent:
         """
         与Agent对话
 
-        Args:
-            message: 用户消息
-            context: 上下文信息
+        TODO: 阶段二 - 接入LLM (OpenAI/Claude/本地模型)
+          1. 构造prompt (系统提示 + 历史消息 + 当前输入)
+          2. 调用LLM API获取回复
+          3. 解析回复，判断是否需要调用工具
+          4. 如需工具 -> 执行工具 -> 将结果反馈给LLM -> 获取最终回复
 
-        Returns:
-            Agent的回复
+        TODO: 阶段三 - 实现工具调用链 (ReAct模式)
+          1. LLM决定是否调用工具
+          2. 执行工具，获取结果
+          3. 将工具结果传回LLM
+          4. 循环直到LLM给出最终答案
         """
-        # 记录用户消息
         self.memory.add_message("user", message, context)
 
-        # 生成回复（基础实现，子类应覆盖）
         response = self._generate_response(message, context)
 
-        # 记录Agent回复
         self.memory.add_message("assistant", response)
-
         return response
 
     def _generate_response(self, message: str, context: Optional[Dict[str, Any]] = None) -> str:
         """
-        生成回复（应被子类覆盖）
+        生成回复
 
-        Args:
-            message: 用户消息
-            context: 上下文信息
-
-        Returns:
-            生成的回复
+        TODO: 阶段二 - 替换为LLM调用
+          - 根据配置选择LLM provider (openai/claude/local)
+          - 构造messages列表 (system + history + user)
+          - 处理streaming响应 (可选)
+          - 错误处理与重试
         """
-        # 基础实现：简单的回显
+        # 临时占位实现
         return f"Echo: {message}"
 
-    def get_conversation_history(self) -> List[Dict[str, Any]]:
+    def get_conversation_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """获取对话历史"""
-        return self.memory.get_messages()
+        return self.memory.get_messages(limit=limit)
 
     def clear_memory(self) -> None:
         """清除记忆"""

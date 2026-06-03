@@ -1,10 +1,9 @@
-// Java Controller示例
-// 展示如何在Java后端调用Python Agent服务
+// Spring Boot Controller
+// 处理前端请求，转发给Python Agent服务
 
 package com.yourcompany.agent.controller;
 
 import com.yourcompany.agent.client.AgentServiceClient;
-import com.yourcompany.agent.client.AgentServiceClient.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -13,7 +12,17 @@ import java.util.*;
 
 /**
  * Agent控制器
- * 处理前端请求，调用Python Agent服务
+ *
+ * TODO: 阶段一 - 实现基础接口
+ *   - POST /api/agent/chat  -> 转发给Python /agent/chat
+ *   - GET  /api/agent/health -> 转发给Python /health
+ *
+ * TODO: 阶段四 - 增强功能
+ *   - 请求参数校验 (@Valid)
+ *   - 统一异常处理 (@ControllerAdvice)
+ *   - 请求限流 (RateLimiter)
+ *   - 调用链追踪 (Sleuth/Micrometer)
+ *   - SSE流式响应 (支持打字机效果)
  */
 @RestController
 @RequestMapping("/api/agent")
@@ -26,138 +35,56 @@ public class AgentController {
     /**
      * 对话接口
      *
-     * 前端调用示例:
-     * POST /api/agent/chat
-     * {
-     *   "message": "你好",
-     *   "userId": "user123"
-     * }
+     * TODO: 阶段一 - 实现
+     *   1. 接收前端请求
+     *   2. 调用 agentClient.chat()
+     *   3. 封装统一响应格式返回
+     *
+     * 请求示例:
+     *   POST /api/agent/chat
+     *   {"message": "你好", "userId": "user123"}
      */
     @PostMapping("/chat")
-    public ResponseEntity<Map<String, Object>> chat(@RequestBody ChatRequest request) {
-        try {
-            // 调用Python Agent服务
-            String response = agentClient.chat(
-                request.getMessage(),
-                request.getUserId()
-            );
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("response", response);
-            result.put("timestamp", System.currentTimeMillis());
-
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("error", e.getMessage());
-
-            return ResponseEntity.internalServerError().body(error);
-        }
+    public ResponseEntity<Map<String, Object>> chat(@RequestBody Map<String, Object> request) {
+        // TODO: 实现
+        return ResponseEntity.status(501).body(Map.of("error", "Not implemented yet"));
     }
 
     /**
      * 工具调用接口
      *
-     * 前端调用示例:
-     * POST /api/agent/tool
-     * {
-     *   "toolName": "calculator",
-     *   "parameters": {"expression": "2+2"}
-     * }
+     * TODO: 阶段三 - 实现
      */
     @PostMapping("/tool")
-    public ResponseEntity<Map<String, Object>> callTool(@RequestBody ToolCallRequest request) {
-        try {
-            Object result = agentClient.callTool(
-                request.getToolName(),
-                request.getParameters()
-            );
-
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("result", result);
-            response.put("toolName", request.getToolName());
-
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("error", e.getMessage());
-
-            return ResponseEntity.internalServerError().body(error);
-        }
+    public ResponseEntity<Map<String, Object>> callTool(@RequestBody Map<String, Object> request) {
+        // TODO: 实现
+        return ResponseEntity.status(501).body(Map.of("error", "Not implemented yet"));
     }
 
     /**
      * 获取Agent状态
      *
-     * GET /api/agent/status
+     * TODO: 阶段一 - 实现
      */
     @GetMapping("/status")
     public ResponseEntity<Map<String, Object>> getStatus() {
-        try {
-            AgentStatus status = agentClient.getStatus();
-
-            Map<String, Object> result = new HashMap<>();
-            result.put("success", true);
-            result.put("status", status);
-
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            Map<String, Object> error = new HashMap<>();
-            error.put("success", false);
-            error.put("error", e.getMessage());
-
-            return ResponseEntity.internalServerError().body(error);
-        }
+        // TODO: 实现
+        return ResponseEntity.status(501).body(Map.of("error", "Not implemented yet"));
     }
 
     /**
      * 健康检查
      *
-     * GET /api/agent/health
+     * TODO: 阶段一 - 实现
      */
     @GetMapping("/health")
     public ResponseEntity<Map<String, Object>> healthCheck() {
-        boolean isHealthy = agentClient.isHealthy();
-
-        Map<String, Object> result = new HashMap<>();
-        result.put("healthy", isHealthy);
-        result.put("timestamp", System.currentTimeMillis());
-
-        return ResponseEntity.ok(result);
+        // TODO: 实现
+        return ResponseEntity.status(501).body(Map.of("error", "Not implemented yet"));
     }
 
-    // ==================== 请求模型 ====================
+    // ==================== 请求/响应模型 ====================
 
-    /**
-     * 对话请求
-     */
-    public static class ChatRequest {
-        private String message;
-        private String userId;
-        private Map<String, Object> context;
-
-        public String getMessage() { return message; }
-        public void setMessage(String message) { this.message = message; }
-        public String getUserId() { return userId; }
-        public void setUserId(String userId) { this.userId = userId; }
-        public Map<String, Object> getContext() { return context; }
-        public void setContext(Map<String, Object> context) { this.context = context; }
-    }
-
-    /**
-     * 工具调用请求
-     */
-    public static class ToolCallRequest {
-        private String toolName;
-        private Map<String, Object> parameters;
-
-        public String getToolName() { return toolName; }
-        public void setToolName(String toolName) { this.toolName = toolName; }
-        public Map<String, Object> getParameters() { return parameters; }
-        public void setParameters(Map<String, Object> parameters) { this.parameters = parameters; }
-    }
+    // TODO: 阶段一 - 抽取为独立DTO类 (ChatRequest, ChatResponse, ErrorResponse等)
+    // TODO: 阶段四 - 添加@Valid校验注解
 }

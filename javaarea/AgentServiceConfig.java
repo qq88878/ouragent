@@ -11,6 +11,17 @@ import com.yourcompany.agent.client.AgentServiceClient;
 
 /**
  * Agent服务配置
+ *
+ * 从 application.yml 读取配置:
+ *   agent.service.url=http://agent-service:8000
+ *   agent.service.timeout=5000
+ *   agent.service.retry.max-attempts=3
+ *   agent.service.retry.delay=1000
+ *
+ * TODO: 阶段四 - 增强配置
+ *   - 添加连接池配置 (最大连接数、空闲超时)
+ *   - 添加熔断器配置 (Resilience4j)
+ *   - 添加重试策略配置 (指数退避、最大重试间隔)
  */
 @Configuration
 @ConfigurationProperties(prefix = "agent.service")
@@ -20,7 +31,6 @@ public class AgentServiceConfig {
     private int timeout = 5000;
     private RetryConfig retry = new RetryConfig();
 
-    // Getters and Setters
     public String getUrl() { return url; }
     public void setUrl(String url) { this.url = url; }
     public int getTimeout() { return timeout; }
@@ -28,9 +38,6 @@ public class AgentServiceConfig {
     public RetryConfig getRetry() { return retry; }
     public void setRetry(RetryConfig retry) { this.retry = retry; }
 
-    /**
-     * 重试配置
-     */
     public static class RetryConfig {
         private int maxAttempts = 3;
         private long delay = 1000;
@@ -42,7 +49,10 @@ public class AgentServiceConfig {
     }
 
     /**
-     * RestTemplate Bean
+     * TODO: 阶段一 - 配置RestTemplate
+     *   - 设置超时 (connectTimeout, readTimeout)
+     *   - 配置消息转换器 (Jackson)
+     *   - 配置拦截器 (日志、认证)
      */
     @Bean
     public RestTemplate restTemplate() {
@@ -50,7 +60,7 @@ public class AgentServiceConfig {
     }
 
     /**
-     * Agent服务客户端 Bean
+     * TODO: 阶段一 - 配置Agent客户端
      */
     @Bean
     public AgentServiceClient agentServiceClient() {
