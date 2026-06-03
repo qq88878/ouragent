@@ -1,0 +1,79 @@
+# Docker Compose配置
+# 用于本地开发和测试
+
+version: '3.8'
+
+services:
+  # ==================== Agent服务 ====================
+  agent-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agent-service
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=development
+      - DEBUG=true
+      - LOG_LEVEL=INFO
+      - PORT=8000
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+  # ==================== Redis缓存（可选）====================
+  redis:
+    image: redis:7-alpine
+    container_name: agent-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+  # ==================== PostgreSQL数据库（可选）====================
+  postgres:
+    image: postgres:15-alpine
+    container_name: agent-postgres
+    environment:
+      POSTGRES_DB: agent_db
+      POSTGRES_USER: agent
+      POSTGRES_PASSWORD: agent_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agent -d agent_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - agent-network
+
+# ==================== 卷定义 ====================
+volumes:
+  redis-data:
+  postgres-data:
+
+# ==================== 网络定义 ====================
+networks:
+  agent-network:
+    driver: bridge

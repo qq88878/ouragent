@@ -1,0 +1,26 @@
+# Java Spring Boot集成Python Agent服务配置示例
+
+# ==================== application.yml ====================
+# 将以下配置添加到Java项目的application.yml中
+
+server:
+  port: 9000
+
+# Agent服务配置
+agent:
+  service:
+    url: http://agent-service:8000
+    timeout: 5000
+    retry:
+      max-attempts: 3
+      delay: 1000
+
+# Spring配置
+spring:
+  application:
+    name: your-java-app
+
+# 日志配置
+logging:
+  level:
+    com.yourcompany.agent: DEBUG
