@@ -1,0 +1,22 @@
+package com.edu.agent.module.chat.service;
+
+import com.edu.agent.module.chat.dto.ChatRequest;
+import com.edu.agent.module.chat.dto.ChatResponse;
+import com.edu.agent.module.chat.dto.ChatSessionDTO;
+import com.edu.agent.module.chat.entity.ChatMessage;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+
+import java.util.List;
+
+public interface ChatService {
+
+    ChatSessionDTO createSession(Long userId, Long courseId, String sessionType);
+
+    List<ChatSessionDTO> listSessions(Long userId);
+
+    IPage<ChatMessage> getSessionMessages(Long sessionId, int page, int size);
+
+    ChatResponse sendMessage(Long sessionId, Long userId, ChatRequest request);
+
+    void deleteSession(Long sessionId, Long userId);
+}
