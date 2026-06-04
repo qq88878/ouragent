@@ -1,10 +1,62 @@
 # Docker Compose配置
-# 用于本地开发和测试
-
-version: '3.8'
+# 教育系统完整服务编排: Java后端 + Python Agent + 数据库 + 缓存 + 反向代理
 
 services:
-  # ==================== Agent服务 ====================
+
+  # ==================== Nginx反向代理 ====================
+  nginx:
+    image: nginx:alpine
+    container_name: edu-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - java-backend
+      - agent-service
+    restart: unless-stopped
+    networks:
+      - edu-network
+
+  # ==================== Java教育系统后端 ====================
+  java-backend:
+    build:
+      context: ./javaarea
+      dockerfile: Dockerfile
+    container_name: java-backend
+    ports:
+      - "9000:9000"
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      - JAVA_OPTS=-Xms256m -Xmx512m
+      # 数据库
+      - DB_HOST=mysql
+      - DB_USER=edu_agent
+      - DB_PASSWORD=edu_agent_password
+      # Redis
+      - REDIS_HOST=redis
+      - REDIS_PASSWORD=
+      # Agent服务
+      - AGENT_SERVICE_URL=http://agent-service:8000
+      - AGENT_TIMEOUT=10000
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      agent-service:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/api/auth/me"]
+      interval: 30s
+      timeout: 10s
+      start_period: 40s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - edu-network
+
+  # ==================== Python Agent服务 ====================
   agent-service:
     build:
       context: .
@@ -13,41 +65,62 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - APP_ENV=development
-      - DEBUG=true
+      - APP_ENV=production
+      - DEBUG=false
       - LOG_LEVEL=INFO
       - PORT=8000
+      # PostgreSQL配置
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=agent_db
+      - DB_USER=agent
+      - DB_PASSWORD=agent_password
+      # Redis配置
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
     volumes:
-      - ./src:/app/src
-      - ./config:/app/config
+      - agent-uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
+      start_period: 15s
       retries: 3
-      start_period: 10s
     restart: unless-stopped
     networks:
-      - agent-network
+      - edu-network
 
-  # ==================== Redis缓存（可选）====================
-  redis:
-    image: redis:7-alpine
-    container_name: agent-redis
+  # ==================== MySQL数据库 (Java端) ====================
+  mysql:
+    image: mysql:8.0
+    container_name: edu-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: edu_agent
+      MYSQL_USER: edu_agent
+      MYSQL_PASSWORD: edu_agent_password
     ports:
-      - "6379:6379"
+      - "3306:3306"
     volumes:
-      - redis-data:/data
+      - mysql-data:/var/lib/mysql
+      - ./javaarea/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password"]
       interval: 10s
       timeout: 5s
-      retries: 3
+      start_period: 30s
+      retries: 5
     restart: unless-stopped
     networks:
-      - agent-network
+      - edu-network
 
-  # ==================== PostgreSQL数据库（可选）====================
+  # ==================== PostgreSQL数据库 (Agent端) ====================
   postgres:
     image: postgres:15-alpine
     container_name: agent-postgres
@@ -66,14 +139,33 @@ services:
       retries: 3
     restart: unless-stopped
     networks:
-      - agent-network
+      - edu-network
+
+  # ==================== Redis缓存 (共享) ====================
+  redis:
+    image: redis:7-alpine
+    container_name: edu-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - edu-network
 
 # ==================== 卷定义 ====================
 volumes:
-  redis-data:
+  mysql-data:
   postgres-data:
+  redis-data:
+  agent-uploads:
 
 # ==================== 网络定义 ====================
 networks:
-  agent-network:
+  edu-network:
     driver: bridge

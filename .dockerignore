@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Java
+javaarea/target/
+*.class
+
+# Logs and temp
+*.log
+true/
+v3/true/
+
+# Environment (secrets)
+.env
+.env.*
+!.env.example
+v3/config/.env
+
+# Claude Code
+.claude/
+
+# Docs (不需要进入镜像)
+docs/
+k8s/
+*.md

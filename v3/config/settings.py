@@ -3,6 +3,7 @@
 包含各种配置常量和默认值
 """
 
+import os
 from pathlib import Path
 
 
@@ -106,18 +107,31 @@ API_CONFIG = {
 }
 
 
-# 数据库配置（示例）
+# 数据库配置（从环境变量读取，支持Docker部署）
 DATABASE_CONFIG = {
-    "url": "sqlite:///./app.db",
-    "echo": False,
+    "url": os.getenv(
+        "DATABASE_URL",
+        f"postgresql://{os.getenv('DB_USER', 'agent')}:{os.getenv('DB_PASSWORD', 'agent_password')}"
+        f"@{os.getenv('DB_HOST', 'localhost')}:{os.getenv('DB_PORT', '5432')}"
+        f"/{os.getenv('DB_NAME', 'agent_db')}"
+    ),
+    "echo": os.getenv("DB_ECHO", "false").lower() == "true",
 }
 
 
 # 安全配置
 SECURITY_CONFIG = {
-    "secret_key": "change-this-in-production",
+    "secret_key": os.getenv("SECRET_KEY", "change-this-in-production"),
     "algorithm": "HS256",
     "access_token_expire_minutes": 30,
+}
+
+# Redis配置（从环境变量读取，支持Docker部署）
+REDIS_CONFIG = {
+    "host": os.getenv("REDIS_HOST", "localhost"),
+    "port": int(os.getenv("REDIS_PORT", "6379")),
+    "password": os.getenv("REDIS_PASSWORD", ""),
+    "db": int(os.getenv("REDIS_DB", "0")),
 }
 
 

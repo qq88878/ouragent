@@ -17,6 +17,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# 安装运行时依赖 (curl用于HEALTHCHECK)
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 # 从构建阶段复制依赖
 COPY --from=builder /root/.local /root/.local
 

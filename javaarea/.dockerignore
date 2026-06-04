@@ -1,0 +1,6 @@
+# Java构建上下文的.dockerignore
+.git
+.idea/
+target/
+*.class
+*.log

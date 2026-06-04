@@ -41,3 +41,9 @@ true/
 
 # Claude Code
 .claude/
+
+# Docker local overrides
+docker-compose.override.yml
+
+# K8s secrets (contains sensitive data)
+k8s/secrets.yaml

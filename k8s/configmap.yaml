@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: edu-config
+  namespace: edu-agent
+data:
+  # MySQL
+  MYSQL_DATABASE: edu_agent
+  MYSQL_USER: edu_agent
+  DB_HOST: mysql
+  # PostgreSQL
+  POSTGRES_DB: agent_db
+  POSTGRES_USER: agent
+  # Agent
+  APP_ENV: production
+  DEBUG: "false"
+  LOG_LEVEL: INFO
+  PORT: "8000"
+  DB_PORT: "5432"
+  DB_NAME: agent_db
+  DB_USER: agent
+  # Redis
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  # Java Backend
+  SPRING_PROFILES_ACTIVE: prod
+  JAVA_OPTS: "-Xms256m -Xmx512m"
+  REDIS_PASSWORD: ""
+  AGENT_SERVICE_URL: http://agent-service:8000
+  AGENT_TIMEOUT: "10000"
