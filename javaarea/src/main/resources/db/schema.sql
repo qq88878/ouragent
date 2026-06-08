@@ -1,3 +1,6 @@
+CREATE DATABASE edu;
+USE edu;
+
 -- ============================================================
 -- edu-agent Database Schema
 -- MySQL 8.x / DDL
