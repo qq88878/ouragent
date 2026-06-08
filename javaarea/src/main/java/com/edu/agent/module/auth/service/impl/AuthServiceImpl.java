@@ -9,6 +9,7 @@ import com.edu.agent.module.auth.service.AuthService;
 import com.edu.agent.module.user.entity.User;
 import com.edu.agent.module.user.mapper.UserMapper;
 import com.edu.agent.security.JwtProvider;
+import com.edu.agent.security.LoginUser;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,11 +38,16 @@ public class AuthServiceImpl implements AuthService {
         if (userMapper.selectByEmail(request.getEmail()) != null) {
             throw new BizException(ResultCode.EMAIL_ALREADY_EXISTS);
         }
+        if (request.getPassword() == null || request.getPassword().length() < 6) {
+            throw new BizException(ResultCode.PASSWORD_TOO_WEAK);
+        }
 
         User user = new User();
         user.setUsername(request.getUsername());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
         user.setEmail(request.getEmail());
+        user.setNickname(request.getNickname() != null ? request.getNickname() : request.getUsername());
+        user.setRole(request.getRole() != null ? request.getRole() : "STUDENT");
         userMapper.insert(user);
     }
 
@@ -71,6 +77,12 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public Object getCurrentUser() {
-        return SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (principal instanceof LoginUser loginUser) {
+            User user = loginUser.getUser();
+            user.setPassword(null);
+            return user;
+        }
+        return principal;
     }
 }

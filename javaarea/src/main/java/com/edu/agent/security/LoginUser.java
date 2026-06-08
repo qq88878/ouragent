@@ -1,80 +1,60 @@
 package com.edu.agent.security;
 
+import com.edu.agent.module.user.entity.User;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
-import java.util.Collections;
+import java.util.List;
 
-/**
- * UserDetails wrapper around the User entity for Spring Security.
- *
- * TODO: Replace Object user placeholder with actual User entity once created.
- */
 public class LoginUser implements UserDetails {
 
     private static final long serialVersionUID = 1L;
 
-    // TODO: Replace Object with actual User entity
-    private final Object user;
+    private final User user;
 
-    // TODO: Change constructor parameter type from Object to actual User entity
-    public LoginUser(Object user) {
+    public LoginUser(User user) {
         this.user = user;
     }
 
-    /**
-     * Get authorities from user's role field.
-     */
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        // TODO: Extract role from user entity and return as SimpleGrantedAuthority
-        //   e.g. return Collections.singletonList(new SimpleGrantedAuthority("ROLE_" + user.getRole()));
-        return Collections.emptyList();
+        String role = user.getRole() != null ? user.getRole() : "STUDENT";
+        return List.of(new SimpleGrantedAuthority("ROLE_" + role));
     }
 
     @Override
     public String getPassword() {
-        // TODO: return user.getPassword();
-        return null;
+        return user.getPassword();
     }
 
     @Override
     public String getUsername() {
-        // TODO: return user.getUsername();
-        return null;
+        return user.getUsername();
     }
 
     @Override
     public boolean isAccountNonExpired() {
-        // TODO: Implement based on business logic if needed
         return true;
     }
 
     @Override
     public boolean isAccountNonLocked() {
-        // TODO: Implement based on business logic if needed
         return true;
     }
 
     @Override
     public boolean isCredentialsNonExpired() {
-        // TODO: Implement based on business logic if needed
         return true;
     }
 
     @Override
     public boolean isEnabled() {
-        // TODO: Implement based on user status field if needed
-        return true;
+        return user.getStatus() == null || user.getStatus() == 0;
     }
 
-    /**
-     * Get the wrapped user entity.
-     */
-    // TODO: Change return type from Object to actual User entity
-    public Object getUser() {
+    public User getUser() {
         return user;
     }
 }

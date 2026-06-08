@@ -1,32 +1,29 @@
 package com.edu.agent.security;
 
+import com.edu.agent.module.user.entity.User;
+import com.edu.agent.module.user.mapper.UserMapper;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 
-/**
- * JWT authentication filter that runs once per request.
- *
- * TODO [Phase 1]: Implement JWT verification
- *   1. Extract Bearer token from Authorization header
- *   2. Validate token (signature, expiration)
- *   3. Parse user info and roles from token claims
- *   4. Build UsernamePasswordAuthenticationToken and set SecurityContextHolder
- *   5. Call filterChain.doFilter to continue the chain
- */
+@Slf4j
 @Component
+@RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    // TODO: Inject JwtUtils / JwtService for token parsing and validation
-    // private final JwtUtils jwtUtils;
-
-    // TODO: Inject UserDetailsService for loading user details if needed
-    // private final UserDetailsService userDetailsService;
+    private final JwtProvider jwtProvider;
+    private final UserMapper userMapper;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -34,17 +31,48 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain)
             throws ServletException, IOException {
 
-        // TODO [Phase 1] - Implement JWT verification
-        //   1. Get "Authorization" header from request
-        //   2. Check if header starts with "Bearer "
-        //   3. Extract token string (substring after "Bearer ")
-        //   4. Call jwtUtils.validateToken(token)
-        //   5. If valid, extract username and roles
-        //   6. Build UsernamePasswordAuthenticationToken (with authorities)
-        //   7. Set into SecurityContextHolder:
-        //      SecurityContextHolder.getContext().setAuthentication(authToken)
-        //   8. If token is invalid or missing, just continue (anonymous access)
+        String token = extractToken(request);
+        if (token == null) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        try {
+            if (jwtProvider.isTokenExpired(token)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            String username = jwtProvider.getUsernameFromToken(token);
+            if (username == null) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            User user = userMapper.selectByUsername(username);
+            if (user == null) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            LoginUser loginUser = new LoginUser(user);
+            UsernamePasswordAuthenticationToken authentication =
+                    new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities());
+            authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+            SecurityContextHolder.getContext().setAuthentication(authentication);
+        } catch (Exception e) {
+            log.debug("JWT auth failed: {}", e.getMessage());
+        }
 
         filterChain.doFilter(request, response);
+    }
+
+    private String extractToken(HttpServletRequest request) {
+        String bearerToken = request.getHeader("Authorization");
+        if (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer ")) {
+            return bearerToken.substring(7);
+        }
+        return null;
     }
 }

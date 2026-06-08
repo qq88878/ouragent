@@ -11,25 +11,24 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.Jackson2JsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
-/**
- * Redis configuration with Jackson JSON value serializer and String key serializer.
- */
 @Configuration
 public class RedisConfig {
 
-    // TODO: Extract Redis host/port/password from application properties if needed
-
     @Bean
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory connectionFactory) {
-        // TODO: Implement RedisTemplate setup
-        //   1. Create Jackson2JsonRedisSerializer with ObjectMapper
-        //   2. Configure ObjectMapper: visibility ALL, activate-default typing with LaissezFaireSubTypeValidator
-        //   3. Set StringRedisSerializer for key serializer
-        //   4. Set Jackson2JsonRedisSerializer for value serializer
-        //   5. Set hash key/value serializers
-        //   6. Set connection factory and return
+        ObjectMapper objectMapper = new ObjectMapper();
+        objectMapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
+        objectMapper.activateDefaultTyping(LaissezFaireSubTypeValidator.instance, ObjectMapper.DefaultTyping.NON_FINAL);
+
+        Jackson2JsonRedisSerializer<Object> jacksonSerializer = new Jackson2JsonRedisSerializer<>(objectMapper, Object.class);
+
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(connectionFactory);
+        template.setKeySerializer(new StringRedisSerializer());
+        template.setValueSerializer(jacksonSerializer);
+        template.setHashKeySerializer(new StringRedisSerializer());
+        template.setHashValueSerializer(jacksonSerializer);
+        template.afterPropertiesSet();
         return template;
     }
 }
