@@ -7,22 +7,17 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-/**
- * Global exception handler for REST controllers.
- */
 @Slf4j
-@RestControllerAdvice
+@RestControllerAdvice("com.edu.agent")
 public class GlobalExceptionHandler {
-
-    // TODO: Inject any required dependencies (e.g. i18n message source)
 
     /**
      * Handle business exceptions.
      */
     @ExceptionHandler(BizException.class)
     public Result<Void> handleBizException(BizException e) {
-        // TODO: Log and return Result.fail with e.getResultCode()
-        return null;
+        log.warn("Business Exception: code={}, message={}", e.getResultCode().getCode(), e.getMessage());
+        return Result.fail(e.getResultCode());
     }
 
     /**
@@ -30,8 +25,10 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public Result<Void> handleValidException(MethodArgumentNotValidException e) {
-        // TODO: Extract first field error message, return Result.fail(400, message)
-        return null;
+        // Extract the first validation error message
+        String message = e.getBindingResult().getAllErrors().get(0).getDefaultMessage();
+        log.warn("Validation Exception: {}", message);
+        return Result.fail(ResultCode.BAD_REQUEST.getCode(), message);
     }
 
     /**
@@ -39,7 +36,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public Result<Void> handleException(Exception e) {
-        // TODO: Log error stack, return Result.fail(500, "internal server error")
-        return null;
+        log.error("Unhandled Exception: ", e);
+        return Result.fail(ResultCode.INTERNAL_ERROR);
     }
 }

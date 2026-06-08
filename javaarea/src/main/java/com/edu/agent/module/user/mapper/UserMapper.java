@@ -1,6 +1,7 @@
 package com.edu.agent.module.user.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.edu.agent.module.user.entity.User;
 import org.apache.ibatis.annotations.Mapper;
 
@@ -14,8 +15,17 @@ public interface UserMapper extends BaseMapper<User> {
      * @return 用户实体
      */
     default User selectByUsername(String username) {
-        // TODO: 阶段一 - 实现根据用户名查询
-        throw new UnsupportedOperationException("Not implemented yet");
+        return selectOne(new QueryWrapper<User>().eq("username", username));
+    }
+
+    /**
+     * 根据邮箱查询用户
+     *
+     * @param email 邮箱
+     * @return 用户实体
+     */
+    default User selectByEmail(String email) {
+        return selectOne(new QueryWrapper<User>().eq("email", email));
     }
 
     /**

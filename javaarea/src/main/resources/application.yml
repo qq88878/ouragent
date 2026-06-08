@@ -1,11 +1,19 @@
 server:
-  port: 9000
+  port: 8080 # 统一使用 8080 端口
 
 spring:
   profiles:
     active: dev
   application:
-    name: edu-agent-system
+    name: edu
+  # ==================================================
+  # == 数据源配置 (请务必修改为您的真实信息) ==
+  # ==================================================
+  datasource:
+    url: jdbc:mysql://localhost:3306/your-database?useUnicode=true&characterEncoding=utf8&serverTimezone=UTC
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
   servlet:
     multipart:
       max-file-size: 50MB
@@ -24,7 +32,10 @@ mybatis-plus:
       logic-not-delete-value: 0
       id-type: auto
 
+# ==================================================
+# == JWT 配置 ==
+# ==================================================
 jwt:
-  secret: ${JWT_SECRET:change-this-in-production-use-at-least-256-bits}
-  expiration: 86400000
-  refresh-expiration: 604800000
+  secret: ${JWT_SECRET:default-secret-key-that-is-long-enough-to-be-secure}
+  access-token-expiration: 3600 # 1 小时 (单位: 秒)
+  refresh-token-expiration: 604800 # 7 天 (单位: 秒)

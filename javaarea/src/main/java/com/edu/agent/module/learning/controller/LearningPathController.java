@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/learning/paths")
+@RequestMapping("/learning/paths")
 @RequiredArgsConstructor
 public class LearningPathController {
 

@@ -1,55 +1,76 @@
 package com.edu.agent.module.auth.service.impl;
 
+import com.edu.agent.common.exception.BizException;
+import com.edu.agent.common.result.ResultCode;
 import com.edu.agent.module.auth.dto.LoginRequest;
 import com.edu.agent.module.auth.dto.RegisterRequest;
 import com.edu.agent.module.auth.dto.TokenResponse;
 import com.edu.agent.module.auth.service.AuthService;
+import com.edu.agent.module.user.entity.User;
+import com.edu.agent.module.user.mapper.UserMapper;
+import com.edu.agent.security.JwtProvider;
+import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
-    // TODO: 注入 UserMapper
-    // TODO: 注入 PasswordEncoder (BCrypt)
-    // TODO: 注入 JwtProvider
-    // TODO: 注入 RedisTemplate
+    private final UserMapper userMapper;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtProvider jwtProvider;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     @Override
     public void register(RegisterRequest request) {
-        // TODO: 阶段一 - 验证用户名唯一性
-        // TODO: 阶段一 - 验证邮箱唯一性
-        // TODO: 阶段一 - 使用BCrypt加密密码
-        // TODO: 阶段一 - 构建User实体并插入数据库
-        throw new UnsupportedOperationException("Not implemented yet");
+        if (userMapper.selectByUsername(request.getUsername()) != null) {
+            throw new BizException(ResultCode.USER_ALREADY_EXISTS);
+        }
+        if (userMapper.selectByEmail(request.getEmail()) != null) {
+            throw new BizException(ResultCode.EMAIL_ALREADY_EXISTS);
+        }
+
+        User user = new User();
+        user.setUsername(request.getUsername());
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setEmail(request.getEmail());
+        userMapper.insert(user);
     }
 
     @Override
     public TokenResponse login(LoginRequest request) {
-        // TODO: 阶段一 - 根据用户名查询用户
-        // TODO: 阶段一 - 验证密码 (BCrypt matches)
-        // TODO: 阶段一 - 生成JWT accessToken
-        // TODO: 阶段一 - 生成JWT refreshToken
-        // TODO: 阶段一 - 更新最后登录时间
-        // TODO: 阶段一 - 返回TokenResponse
-        throw new UnsupportedOperationException("Not implemented yet");
+        User user = userMapper.selectByUsername(request.getUsername());
+        if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new BizException(ResultCode.INVALID_CREDENTIALS);
+        }
+
+        String accessToken = jwtProvider.generateAccessToken(user);
+        String refreshToken = jwtProvider.generateRefreshToken(user);
+
+        return new TokenResponse(accessToken, refreshToken);
     }
 
     @Override
     public void logout(String token) {
-        // TODO: 阶段一 - 解析token获取过期时间
-        // TODO: 阶段一 - 将token加入Redis黑名单，设置与token相同的TTL
-        throw new UnsupportedOperationException("Not implemented yet");
+        String realToken = token.substring(7);
+        Claims claims = jwtProvider.getClaimsFromToken(realToken);
+        long expiration = claims.getExpiration().getTime();
+        long ttl = expiration - System.currentTimeMillis();
+        if (ttl > 0) {
+            redisTemplate.opsForValue().set("blacklist:" + realToken, "1", ttl, TimeUnit.MILLISECONDS);
+        }
     }
 
     @Override
     public Object getCurrentUser() {
-        // TODO: 阶段一 - 从SecurityContext获取当前认证信息
-        // TODO: 阶段一 - 根据用户ID查询用户详情
-        // TODO: 阶段一 - 返回UserDTO（排除密码字段）
-        throw new UnsupportedOperationException("Not implemented yet");
+        return SecurityContextHolder.getContext().getAuthentication().getPrincipal();
     }
 }

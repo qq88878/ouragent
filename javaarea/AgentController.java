@@ -25,7 +25,7 @@ import java.util.*;
  *   - SSE流式响应 (支持打字机效果)
  */
 @RestController
-@RequestMapping("/api/agent")
+@RequestMapping("/agent")
 @CrossOrigin(origins = "*")
 public class AgentController {
 
