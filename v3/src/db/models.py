@@ -7,7 +7,7 @@ from sqlalchemy.sql import func
 from datetime import datetime
 import uuid
 
-from db.database import Base
+from .database import Base
 
 
 class User(Base):

@@ -2,6 +2,9 @@ package com.edu.agent.module.chat.service.client;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
@@ -13,12 +16,25 @@ public class AgentServiceClient {
 
     private final RestTemplate restTemplate;
     private final String agentServiceUrl;
+    private final String serviceKey;
 
     public AgentServiceClient(
             RestTemplate restTemplate,
-            @Value("${agent.service.url:http://localhost:8000}") String agentServiceUrl) {
+            @Value("${agent.service.url:http://localhost:8000}") String agentServiceUrl,
+            @Value("${agent.service.key:default-dev-key}") String serviceKey) {
         this.restTemplate = restTemplate;
         this.agentServiceUrl = agentServiceUrl;
+        this.serviceKey = serviceKey;
+    }
+
+    /**
+     * 构建带服务间密钥的请求头
+     */
+    private HttpHeaders createHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.set("X-Service-Key", serviceKey);
+        return headers;
     }
 
     // ===== Phase 1: Basic =====
@@ -29,12 +45,12 @@ public class AgentServiceClient {
     }
 
     public boolean isHealthy() {
-        // TODO phase 1: GET /health
+        // TODO phase 1: GET /health (no auth needed)
         throw new UnsupportedOperationException("Not implemented yet - phase 1");
     }
 
     public Map<String, Object> getStatus() {
-        // TODO phase 1: GET /agent/status
+        // TODO phase 1: GET /agent/status (no auth needed)
         throw new UnsupportedOperationException("Not implemented yet - phase 1");
     }
 

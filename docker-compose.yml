@@ -28,7 +28,7 @@ services:
       - "9000:9000"
     environment:
       - SPRING_PROFILES_ACTIVE=prod
-      - JAVA_OPTS=-Xms256m -Xmx512m
+      - JAVA_OPTS=-Xms256m -Xmx512m -Djava.net.preferIPv4Stack=true
       # 数据库
       - DB_HOST=mysql
       - DB_USER=edu_agent
@@ -38,6 +38,7 @@ services:
       - REDIS_PASSWORD=
       # Agent服务
       - AGENT_SERVICE_URL=http://agent-service:8000
+      - AGENT_SERVICE_KEY=internal-agent-key-2024
       - AGENT_TIMEOUT=10000
     depends_on:
       mysql:
@@ -47,7 +48,7 @@ services:
       agent-service:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/api/auth/me"]
+      test: ["CMD", "curl", "-f", "-X", "POST", "-H", "Content-Type: application/json", "-d", '{"username":"health","password":"check"}', "http://localhost:9000/api/auth/login"]
       interval: 30s
       timeout: 10s
       start_period: 40s
@@ -81,11 +82,9 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
-      # Milvus配置
-      - MILVUS_HOST=milvus
-      - MILVUS_PORT=19530
       # 安全配置
       - SECRET_KEY=your-secret-key-change-in-production
+      - AGENT_SERVICE_KEY=internal-agent-key-2024
       # CORS配置
       - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
     volumes:
@@ -95,8 +94,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      milvus:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -118,7 +115,7 @@ services:
       MYSQL_USER: edu_agent
       MYSQL_PASSWORD: edu_agent_password
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql-data:/var/lib/mysql
       - ./javaarea/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
@@ -170,36 +167,11 @@ services:
     networks:
       - edu-network
 
-  # ==================== Milvus向量数据库 ====================
-  milvus:
-    image: milvusdb/milvus:v2.4.0
-    container_name: milvus-standalone
-    command: ["milvus", "run", "standalone"]
-    environment:
-      ETCD_USE_EMBED: "true"
-      ETCD_DATA_DIR: /var/lib/milvus/etcd
-      COMMON_STORAGETYPE: local
-    ports:
-      - "19530:19530"
-      - "9091:9091"
-    volumes:
-      - milvus-data:/var/lib/milvus
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
-      interval: 10s
-      timeout: 10s
-      start_period: 30s
-      retries: 5
-    restart: unless-stopped
-    networks:
-      - edu-network
-
 # ==================== 卷定义 ====================
 volumes:
   mysql-data:
   postgres-data:
   redis-data:
-  milvus-data:
   agent-uploads:
   agent-logs:
 

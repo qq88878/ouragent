@@ -5,7 +5,7 @@
 import asyncio
 from sqlalchemy import text
 
-from db.database import engine, init_db
+from .database import engine, init_db
 
 
 async def init_database():
