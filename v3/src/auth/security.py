@@ -1,100 +1,32 @@
 """
-认证工具 - JWT 和密码加密
-实现安全需求: S1密码加密、S2 JWT鉴权
+服务间认证 - Agent微服务内部调用鉴权
+使用共享密钥验证，不面向终端用户
 """
 
-from datetime import datetime, timedelta
-from typing import Optional
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import os
+from fastapi import Depends, HTTPException, Header, status
 
-from config.settings import settings
-
-# ==================== 密码加密 (安全需求 S1) ====================
-
-pwd_context = CryptContext(
-    schemes=[settings.PASSWORD_HASH_ALGORITHM],
-    deprecated="auto",
-)
+# 服务间共享密钥（从环境变量读取）
+AGENT_SERVICE_KEY = os.environ.get("AGENT_SERVICE_KEY", "default-dev-key")
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """验证密码"""
-    return pwd_context.verify(plain_password, hashed_password)
+async def get_current_user(x_service_key: str = Header(..., alias="X-Service-Key")) -> dict:
+    """
+    验证服务间密钥（FastAPI 依赖注入）
 
+    Java后端调用Agent时必须在请求头中携带:
+        X-Service-Key: <密钥>
 
-def get_password_hash(password: str) -> str:
-    """生成密码哈希"""
-    return pwd_context.hash(password)
+    Returns:
+        dict: 包含 service 信息的字典
 
-
-# ==================== JWT 令牌 (安全需求 S2) ====================
-
-security = HTTPBearer()
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """创建 Access Token"""
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-
-    to_encode.update({"exp": expire, "type": "access"})
-    encoded_jwt = jwt.encode(
-        to_encode,
-        settings.SECRET_KEY,
-        algorithm=settings.JWT_ALGORITHM
-    )
-    return encoded_jwt
-
-
-def create_refresh_token(data: dict) -> str:
-    """创建 Refresh Token"""
-    expires_delta = timedelta(days=settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS)
-    to_encode = data.copy()
-    to_encode.update({
-        "exp": datetime.utcnow() + expires_delta,
-        "type": "refresh"
-    })
-    encoded_jwt = jwt.encode(
-        to_encode,
-        settings.SECRET_KEY,
-        algorithm=settings.JWT_ALGORITHM
-    )
-    return encoded_jwt
-
-
-def decode_token(token: str) -> dict:
-    """解码 JWT 令牌"""
-    try:
-        payload = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=[settings.JWT_ALGORITHM]
-        )
-        return payload
-    except JWTError:
+    Raises:
+        HTTPException 403: 密钥不匹配
+    """
+    if x_service_key != AGENT_SERVICE_KEY:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无效的认证令牌",
-            headers={"WWW-Authenticate": "Bearer"},
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="无效的服务密钥",
         )
 
-
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
-    """获取当前用户 (FastAPI 依赖注入)"""
-    token = credentials.credentials
-    payload = decode_token(token)
-
-    username: str = payload.get("sub")
-    if username is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无法验证用户身份",
-        )
-
-    return payload
+    return {"service": "java-backend", "authenticated": True}

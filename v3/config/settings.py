@@ -60,9 +60,19 @@ class Settings(BaseSettings):
     PASSWORD_HASH_ROUNDS: int = Field(default=12, description="密码哈希轮数")
 
     # ==================== LLM配置 ====================
-    OPENAI_API_KEY: Optional[str] = Field(default=None, description="OpenAI API密钥")
-    OPENAI_MODEL: str = Field(default="gpt-3.5-turbo", description="OpenAI模型")
-    OPENAI_TEMPERATURE: float = Field(default=0.7, description="OpenAI温度参数")
+    LLM_PROVIDER: str = Field(default="openai", description="LLM提供商: spark / openai")
+
+    # 星火大模型配置
+    SPARK_APP_ID: Optional[str] = Field(default=None, description="星火 App ID")
+    SPARK_API_KEY: Optional[str] = Field(default=None, description="星火 API Key")
+    SPARK_API_SECRET: Optional[str] = Field(default=None, description="星火 API Secret")
+    SPARK_MODEL: str = Field(default="generalv3.5", description="星火模型版本")
+    SPARK_BASE_URL: str = Field(default="https://spark-api-open.xf-yun.com/v1", description="星火 API 地址")
+
+    # OpenAI 兼容接口配置（也支持 DeepSeek 等）
+    LLM_API_KEY: Optional[str] = Field(default=None, description="LLM API Key")
+    LLM_MODEL: str = Field(default="gpt-3.5-turbo", description="LLM 模型名称")
+    LLM_BASE_URL: str = Field(default="https://api.openai.com/v1", description="LLM API 地址")
 
     # ==================== CORS配置 ====================
     CORS_ORIGINS: str = Field(

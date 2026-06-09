@@ -8,7 +8,7 @@
 
 | 组件 | 是什么 | 干什么 | 类比 |
 |------|--------|--------|------|
-| **Docker** | 容器运行时 | 把应用打包成标准化的"集装箱" |  shipping container |
+| **Docker** | 容器运行时 | 把应用打包成标准化的"集装箱" | shipping container |
 | **Dockerfile** | 构建配方 | 告诉 Docker 怎么打包应用 | 菜谱 |
 | **Docker Compose** | 本地编排工具 | 一键启动多个容器 | 乐团指挥 |
 | **Kubernetes (K8s)** | 容器编排平台 | 管理大量容器的调度、扩缩、自愈 | 交通指挥中心 |
@@ -67,7 +67,6 @@ CMD ["python", "-m", "uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8
 ### 2.2 Docker Compose 详解
 
 ```yaml
-# docker-compose.yml 结构
 services:          # 服务列表
   web:             # 服务名
     image: nginx   # 使用的镜像
@@ -79,7 +78,6 @@ services:          # 服务列表
       - ENV=prod
     depends_on:    # 依赖关系
       - db
-
   db:
     image: mysql:8.0
     environment:
@@ -87,15 +85,9 @@ services:          # 服务列表
 
 volumes:           # 卷定义
   db-data:
-
 networks:          # 网络定义
   app-network:
 ```
-
-**核心概念：**
-- **services** - 你要运行的服务（容器）
-- **volumes** - 持久化数据，容器删了数据还在
-- **networks** - 服务间通信的网络
 
 ### 2.3 Docker 常用命令
 
@@ -153,20 +145,6 @@ docker-compose build        # 构建镜像
 
 ### 3.2 K8s 核心资源
 
-#### Pod - 最小部署单位
-```yaml
-apiVersion: v1
-kind: Pod
-metadata:
-  name: my-app
-spec:
-  containers:
-    - name: app
-      image: my-app:latest
-      ports:
-        - containerPort: 8000
-```
-
 #### Deployment - 管理 Pod 副本
 ```yaml
 apiVersion: apps/v1
@@ -174,7 +152,7 @@ kind: Deployment
 metadata:
   name: my-app
 spec:
-  replicas: 3              # 3个副本
+  replicas: 3
   selector:
     matchLabels:
       app: my-app
@@ -188,18 +166,18 @@ spec:
           image: my-app:latest
           ports:
             - containerPort: 8000
-          resources:        # 资源限制
+          resources:
             requests:
               memory: "128Mi"
               cpu: "100m"
             limits:
               memory: "256Mi"
               cpu: "200m"
-          livenessProbe:    # 存活检查
+          livenessProbe:
             httpGet:
               path: /health
               port: 8000
-          readinessProbe:   # 就绪检查
+          readinessProbe:
             httpGet:
               path: /health
               port: 8000
@@ -213,17 +191,12 @@ metadata:
   name: my-app-svc
 spec:
   selector:
-    app: my-app            # 选择带有 app=my-app 标签的 Pod
+    app: my-app
   ports:
-    - port: 80             # Service 端口
-      targetPort: 8000     # Pod 端口
-  type: ClusterIP          # 类型：ClusterIP/NodePort/LoadBalancer
+    - port: 80
+      targetPort: 8000
+  type: ClusterIP  # ClusterIP / NodePort / LoadBalancer
 ```
-
-**Service 类型：**
-- `ClusterIP` - 集群内部访问（默认）
-- `NodePort` - 通过节点端口外部访问
-- `LoadBalancer` - 云厂商负载均衡器
 
 #### ConfigMap 和 Secret
 ```yaml
@@ -234,7 +207,7 @@ metadata:
   name: app-config
 data:
   APP_ENV: production
-  LOG_LEVEL: INFO
+  DB_HOST: mysql
 
 ---
 # Secret - 敏感配置
@@ -245,19 +218,6 @@ metadata:
 type: Opaque
 stringData:
   DB_PASSWORD: my-password
-  API_KEY: my-api-key
-```
-
-**在 Pod 中使用：**
-```yaml
-spec:
-  containers:
-    - name: app
-      envFrom:
-        - configMapRef:
-            name: app-config
-        - secretRef:
-            name: app-secrets
 ```
 
 #### PersistentVolumeClaim - 持久化存储
@@ -274,104 +234,120 @@ spec:
       storage: 5Gi
 ```
 
-**在 Pod 中使用：**
-```yaml
-spec:
-  containers:
-    - name: app
-      volumeMounts:
-        - name: data
-          mountPath: /app/data
-  volumes:
-    - name: data
-      persistentVolumeClaim:
-        claimName: my-pvc
-```
-
-#### Namespace - 命名空间隔离
-```yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: my-project
-```
-
 ---
 
-## 四、完整部署流程
+## 四、本项目 K8s 配置
 
-### 4.1 部署前准备
-
-```
-1. 编写 Dockerfile
-   ↓
-2. 编写 docker-compose.yml（本地测试）
-   ↓
-3. 本地测试通过
-   ↓
-4. 编写 K8s YAML 文件
-   ↓
-5. 构建 Docker 镜像
-   ↓
-6. 部署到 K3s 集群
-   ↓
-7. 验证服务
-```
-
-### 4.2 K8s YAML 文件结构
-
-一个完整的项目通常需要这些文件：
+### 4.1 文件结构
 
 ```
 k8s/
-├── namespace.yaml      # 命名空间
-├── configmap.yaml      # 配置
-├── secrets.yaml        # 密钥（加入 .gitignore）
-├── mysql.yaml          # 数据库
-├── postgres.yaml       # 数据库
-├── redis.yaml          # 缓存
-├── app-service.yaml    # 应用服务
-├── nginx.yaml          # 反向代理
-└── deploy.sh           # 部署脚本
+├── namespace.yaml        # 命名空间 (edu-agent)
+├── configmap.yaml        # 非敏感配置
+├── secrets.yaml          # 密钥配置 (已加入 .gitignore)
+├── secrets.yaml.example  # 密钥配置示例
+├── mysql.yaml            # MySQL 数据库
+├── postgres.yaml         # PostgreSQL 数据库
+├── redis.yaml            # Redis 缓存
+├── agent-service.yaml    # Python Agent 服务
+├── java-backend.yaml     # Java 后端服务
+├── nginx.yaml            # Nginx 反向代理
+├── deploy.sh             # 部署脚本
+├── undeploy.sh           # 卸载脚本
+└── status.sh             # 状态查看脚本
 ```
 
-### 4.3 部署顺序（有依赖关系）
+### 4.2 服务架构
 
 ```
-1. Namespace          ← 最先创建
-2. ConfigMap + Secret ← 配置和密钥
-3. PVC                ← 存储声明
-4. Database (MySQL/PostgreSQL/Redis) ← 先启动基础设施
-5. App Service        ← 等数据库就绪后再启动
-6. Nginx/Ingress      ← 最后启动代理
+                    ┌─────────────┐
+                    │   Nginx     │ :30080 (NodePort)
+                    └──────┬──────┘
+                           │
+              ┌────────────┴────────────┐
+              │                         │
+              ▼                         ▼
+    ┌─────────────────┐       ┌─────────────────┐
+    │  Java Backend   │       │  Agent Service  │
+    │     :9000       │       │     :8000       │
+    └────────┬────────┘       └────────┬────────┘
+             │                         │
+    ┌────────┴────────┐       ┌────────┴────────┐
+    │     MySQL       │       │   PostgreSQL    │
+    │     :3306       │       │     :5432       │
+    └─────────────────┘       └─────────────────┘
+              │                         │
+              └────────────┬────────────┘
+                           │
+                    ┌──────┴──────┐
+                    │    Redis    │
+                    │    :6379    │
+                    └─────────────┘
 ```
 
-### 4.4 部署命令流程
+### 4.3 快速部署
 
 ```bash
-# 1. 创建命名空间
-kubectl apply -f namespace.yaml
+# 1. 构建镜像
+docker build -t ouragent-agent-service:latest -f Dockerfile .
+docker build -t ouragent-java-backend:latest -f javaarea/Dockerfile javaarea
 
-# 2. 创建配置和密钥
-kubectl apply -f configmap.yaml
-kubectl apply -f secrets.yaml
+# 2. 创建 secrets.yaml (从 secrets.yaml.example 复制)
+cp k8s/secrets.yaml.example k8s/secrets.yaml
 
-# 3. 创建存储声明
-kubectl apply -f mysql.yaml    # 包含 PVC
-kubectl apply -f postgres.yaml
-kubectl apply -f redis.yaml
+# 3. 部署
+cd k8s && chmod +x deploy.sh && ./deploy.sh
 
-# 4. 等待数据库就绪
-kubectl wait --for=condition=ready pod -l app=mysql -n my-namespace --timeout=120s
-
-# 5. 部署应用
-kubectl apply -f app-service.yaml
-kubectl apply -f nginx.yaml
-
-# 6. 查看状态
-kubectl get pods -n my-namespace
-kubectl get svc -n my-namespace
+# 4. 访问 http://localhost:30080
 ```
+
+### 4.4 部署顺序（有依赖关系）
+
+```
+1. Namespace          <- 最先创建
+2. ConfigMap + Secret <- 配置和密钥
+3. PVC                <- 存储声明
+4. Database (MySQL/PostgreSQL/Redis) <- 先启动基础设施
+5. App Service        <- 等数据库就绪后再启动
+6. Nginx/Ingress      <- 最后启动代理
+```
+
+### 4.5 环境变量
+
+**ConfigMap (非敏感):** APP_ENV, DEBUG, LOG_LEVEL, PORT, DB_HOST, DB_PORT, DB_NAME, DB_USER, REDIS_HOST, REDIS_PORT, SPRING_PROFILES_ACTIVE, JAVA_OPTS
+
+**Secret (敏感):** MYSQL_ROOT_PASSWORD, MYSQL_PASSWORD, POSTGRES_PASSWORD, JWT_SECRET
+
+### 4.6 存储
+
+| PVC | 用途 | 大小 |
+|-----|------|------|
+| mysql-pvc | MySQL 数据 | 5Gi |
+| postgres-pvc | PostgreSQL 数据 | 5Gi |
+| redis-pvc | Redis 数据 | 1Gi |
+| agent-uploads-pvc | Agent 上传文件 | 2Gi |
+
+### 4.7 健康检查
+
+| 服务 | 检查路径 | 初始延迟 |
+|------|----------|----------|
+| agent-service | /health | 15s |
+| java-backend | /api/auth/me | 40s |
+| mysql | mysqladmin ping | 30s |
+| postgres | pg_isready | 15s |
+| redis | redis-cli ping | 5s |
+| nginx | /health | 5s |
+
+### 4.8 资源限制
+
+| 服务 | CPU Request | CPU Limit | Memory Request | Memory Limit |
+|------|-------------|-----------|----------------|--------------|
+| agent-service | 250m | 500m | 256Mi | 512Mi |
+| java-backend | 500m | 1000m | 512Mi | 1Gi |
+| mysql | 250m | 500m | 256Mi | 512Mi |
+| postgres | 100m | 250m | 128Mi | 256Mi |
+| redis | 50m | 100m | 64Mi | 128Mi |
+| nginx | 50m | 100m | 64Mi | 128Mi |
 
 ---
 
@@ -379,330 +355,88 @@ kubectl get svc -n my-namespace
 
 ```bash
 # ========== 查看资源 ==========
-kubectl get pods                    # 查看 Pod
-kubectl get pods -n namespace       # 指定命名空间
-kubectl get pods -o wide            # 详细信息
-kubectl get svc                     # 查看 Service
-kubectl get deployments             # 查看 Deployment
-kubectl get pvc                     # 查看存储声明
-kubectl get nodes                   # 查看节点
+kubectl get pods -n edu-agent         # 查看 Pod
+kubectl get pods -o wide              # 详细信息
+kubectl get svc -n edu-agent          # 查看 Service
+kubectl get deployments -n edu-agent  # 查看 Deployment
+kubectl get pvc -n edu-agent          # 查看存储声明
+kubectl get nodes                     # 查看节点
 
 # ========== 查看详情 ==========
-kubectl describe pod pod-name       # Pod 详情
-kubectl describe svc svc-name       # Service 详情
+kubectl describe pod pod-name -n edu-agent
 
 # ========== 查看日志 ==========
-kubectl logs pod-name               # 查看日志
-kubectl logs -f pod-name            # 实时日志
-kubectl logs -l app=my-app          # 按标签查看
+kubectl logs -f deployment/agent-service -n edu-agent
 
 # ========== 进入容器 ==========
-kubectl exec -it pod-name -- bash
-
-# ========== 删除资源 ==========
-kubectl delete pod pod-name
-kubectl delete -f file.yaml
-kubectl delete namespace ns-name    # 删除整个命名空间
+kubectl exec -it deployment/agent-service -n edu-agent -- bash
 
 # ========== 应用配置 ==========
-kubectl apply -f file.yaml          # 创建或更新
-kubectl apply -f directory/         # 应用目录下所有 yaml
+kubectl apply -f file.yaml
+
+# ========== 删除资源 ==========
+kubectl delete -f file.yaml
+kubectl delete namespace edu-agent    # 删除整个命名空间
+
+# ========== 扩缩容 ==========
+kubectl scale deployment/agent-service --replicas=3 -n edu-agent
+
+# ========== 重启服务 ==========
+kubectl rollout restart deployment/agent-service -n edu-agent
 
 # ========== 调试 ==========
-kubectl get events                  # 查看事件
-kubectl top pods                    # 查看资源使用
+kubectl get events -n edu-agent --sort-by='.lastTimestamp'
+kubectl top pods -n edu-agent
 ```
 
 ---
 
-## 六、配置文件模板
+## 六、完整部署脚本模板
 
-### 6.1 完整的项目 K8s 配置示例
+```bash
+#!/bin/bash
+# deploy.sh - K8s 部署脚本
+set -e
+NAMESPACE="edu-agent"
+K8S_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-```yaml
-# ========== namespace.yaml ==========
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: my-project
+echo "=== 1. 构建镜像 ==="
+docker build -t ouragent-agent-service:latest -f Dockerfile ..
+docker build -t ouragent-java-backend:latest -f javaarea/Dockerfile javaarea
 
----
-# ========== configmap.yaml ==========
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: app-config
-  namespace: my-project
-data:
-  APP_ENV: production
-  DB_HOST: mysql
-  REDIS_HOST: redis
+echo "=== 2. 创建命名空间 ==="
+kubectl apply -f $K8S_DIR/namespace.yaml
 
----
-# ========== secrets.yaml ==========
-apiVersion: v1
-kind: Secret
-metadata:
-  name: app-secrets
-  namespace: my-project
-type: Opaque
-stringData:
-  DB_PASSWORD: your-password-here
-  JWT_SECRET: your-jwt-secret-here
+echo "=== 3. 创建配置 ==="
+kubectl apply -f $K8S_DIR/configmap.yaml
+kubectl apply -f $K8S_DIR/secrets.yaml
 
----
-# ========== mysql.yaml ==========
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: mysql
-  namespace: my-project
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: mysql
-  template:
-    metadata:
-      labels:
-        app: mysql
-    spec:
-      containers:
-        - name: mysql
-          image: mysql:8.0
-          ports:
-            - containerPort: 3306
-          env:
-            - name: MYSQL_ROOT_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: app-secrets
-                  key: DB_PASSWORD
-          volumeMounts:
-            - name: mysql-data
-              mountPath: /var/lib/mysql
-          readinessProbe:
-            exec:
-              command: ["mysqladmin", "ping", "-h", "localhost"]
-            initialDelaySeconds: 30
-            periodSeconds: 10
-          resources:
-            requests:
-              memory: "256Mi"
-              cpu: "250m"
-            limits:
-              memory: "512Mi"
-              cpu: "500m"
-      volumes:
-        - name: mysql-data
-          persistentVolumeClaim:
-            claimName: mysql-pvc
+echo "=== 4. 部署数据库 ==="
+kubectl apply -f $K8S_DIR/mysql.yaml
+kubectl apply -f $K8S_DIR/postgres.yaml
+kubectl apply -f $K8S_DIR/redis.yaml
+echo "等待数据库就绪..."
+kubectl wait --for=condition=ready pod -l app=mysql -n $NAMESPACE --timeout=120s
 
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: mysql
-  namespace: my-project
-spec:
-  selector:
-    app: mysql
-  ports:
-    - port: 3306
-      targetPort: 3306
-  type: ClusterIP
+echo "=== 5. 部署应用 ==="
+kubectl apply -f $K8S_DIR/agent-service.yaml
+kubectl apply -f $K8S_DIR/java-backend.yaml
+kubectl apply -f $K8S_DIR/nginx.yaml
 
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: mysql-pvc
-  namespace: my-project
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 5Gi
-
----
-# ========== app.yaml ==========
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: my-app
-  namespace: my-project
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: my-app
-  template:
-    metadata:
-      labels:
-        app: my-app
-    spec:
-      containers:
-        - name: app
-          image: my-app:latest
-          imagePullPolicy: Never   # 使用本地镜像
-          ports:
-            - containerPort: 8000
-          envFrom:
-            - configMapRef:
-                name: app-config
-            - secretRef:
-                name: app-secrets
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 10
-            periodSeconds: 5
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 30
-            periodSeconds: 10
-          resources:
-            requests:
-              memory: "128Mi"
-              cpu: "100m"
-            limits:
-              memory: "256Mi"
-              cpu: "200m"
-
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: my-app
-  namespace: my-project
-spec:
-  selector:
-    app: my-app
-  ports:
-    - port: 8000
-      targetPort: 8000
-  type: ClusterIP
-
----
-# ========== ingress.yaml (可选) ==========
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: my-app-ingress
-  namespace: my-project
-  annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /
-spec:
-  rules:
-    - host: myapp.local
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: my-app
-                port:
-                  number: 8000
+echo "=== 部署完成 ==="
+kubectl get pods -n $NAMESPACE
+kubectl get svc -n $NAMESPACE
 ```
 
 ---
 
-## 七、.gitignore 模板
-
-```gitignore
-# ========== IDE ==========
-.idea/
-*.iml
-.vscode/
-*.swp
-
-# ========== OS ==========
-.DS_Store
-Thumbs.db
-desktop.ini
-
-# ========== Python ==========
-__pycache__/
-*.pyc
-*.pyo
-.venv/
-venv/
-*.egg-info/
-dist/
-build/
-
-# ========== Java ==========
-*.class
-*.jar
-*.war
-target/
-.gradle/
-
-# ========== Environment ==========
-.env
-.env.local
-.env.production
-
-# ========== Logs ==========
-*.log
-logs/
-
-# ========== Docker local overrides ==========
-docker-compose.override.yml
-
-# ========== K8s secrets (contains sensitive data) ==========
-k8s/secrets.yaml
-
-# ========== Claude Code ==========
-.claude/
-```
-
----
-
-## 八、部署检查清单
-
-### 部署前
-
-- [ ] Dockerfile 编写完成
-- [ ] docker-compose.yml 本地测试通过
-- [ ] K8s YAML 文件编写完成
-- [ ] secrets.yaml 已加入 .gitignore
-- [ ] 镜像已构建
-
-### 部署中
-
-- [ ] 命名空间已创建
-- [ ] ConfigMap 和 Secret 已创建
-- [ ] PVC 已创建
-- [ ] 数据库服务已启动并就绪
-- [ ] 应用服务已启动
-- [ ] Ingress/代理已配置
-
-### 部署后
-
-- [ ] Pod 状态正常 (Running)
-- [ ] Service 可访问
-- [ ] 健康检查通过
-- [ ] 日志无报错
-- [ ] 数据持久化正常
-
----
-
-## 九、常见问题排查
+## 七、常见问题排查
 
 ### Pod 状态异常
 
 ```bash
-# 查看 Pod 详情
-kubectl describe pod pod-name -n namespace
-
-# 查看日志
-kubectl logs pod-name -n namespace
+kubectl describe pod pod-name -n edu-agent
+kubectl logs pod-name -n edu-agent
 
 # 常见状态：
 # Pending     - 资源不足或调度失败
@@ -714,87 +448,51 @@ kubectl logs pod-name -n namespace
 ### 服务无法访问
 
 ```bash
-# 检查 Service
-kubectl get svc -n namespace
-kubectl describe svc svc-name -n namespace
-
-# 检查 Endpoints
-kubectl get endpoints svc-name -n namespace
-
-# 测试连通性
-kubectl run test --image=busybox -it --rm -- wget -qO- http://svc-name:port
+kubectl get svc -n edu-agent
+kubectl describe svc svc-name -n edu-agent
+kubectl get endpoints svc-name -n edu-agent
 ```
 
 ### 存储问题
 
 ```bash
-# 检查 PVC 状态
-kubectl get pvc -n namespace
-
-# 检查 PV
+kubectl get pvc -n edu-agent
 kubectl get pv
 ```
 
+### 修改配置
+
+1. 修改 `configmap.yaml` 或 `secrets.yaml`
+2. `kubectl apply -f configmap.yaml`
+3. `kubectl rollout restart deployment/<name> -n edu-agent`
+
 ---
 
-## 十、部署脚本模板
+## 八、.gitignore 记得加
 
-```bash
-#!/bin/bash
-# deploy.sh - K8s 部署脚本
-
-set -e
-
-NAMESPACE="my-project"
-K8S_DIR="$(cd "$(dirname "$0")" && pwd)"
-
-echo "=== 1. 构建镜像 ==="
-docker build -t my-app:latest .
-
-echo "=== 2. 创建命名空间 ==="
-kubectl apply -f $K8S_DIR/namespace.yaml
-
-echo "=== 3. 创建配置 ==="
-kubectl apply -f $K8S_DIR/configmap.yaml
-kubectl apply -f $K8S_DIR/secrets.yaml
-
-echo "=== 4. 部署数据库 ==="
-kubectl apply -f $K8S_DIR/mysql.yaml
-echo "等待数据库就绪..."
-kubectl wait --for=condition=ready pod -l app=mysql -n $NAMESPACE --timeout=120s
-
-echo "=== 5. 部署应用 ==="
-kubectl apply -f $K8S_DIR/app.yaml
-kubectl wait --for=condition=ready pod -l app=my-app -n $NAMESPACE --timeout=120s
-
-echo "=== 部署完成 ==="
-kubectl get pods -n $NAMESPACE
-kubectl get svc -n $NAMESPACE
+```gitignore
+k8s/secrets.yaml
+docker-compose.override.yml
 ```
 
 ---
 
-## 十一、关键理解
+## 九、关键理解
 
 ### Docker vs K8s
 
 ```
 Docker 解决：怎么打包应用
 K8s 解决：怎么管理大量容器
-
-类比：
-- Docker = 标准化集装箱
-- K8s = 港口管理系统
 ```
 
 ### 声明式 vs 命令式
 
 ```bash
-# 命令式（告诉系统做什么）
+# 命令式
 docker run -d -p 80:80 nginx
 
-# 声明式（告诉系统要什么状态）
-# K8s YAML: 我要 3 个 nginx 副本
+# 声明式 (K8s YAML)
 spec:
   replicas: 3
 ```
@@ -802,43 +500,11 @@ spec:
 ### K8s 核心逻辑
 
 ```
-期望状态 → 控制器 → 实际状态
-    ↑                  ↓
-    └──── 不断对齐 ────┘
-```
-
-你告诉 K8s "我要 3 个 Pod"，K8s 会：
-1. 如果只有 2 个 → 创建 1 个
-2. 如果有 4 个 → 删除 1 个
-3. 如果某个挂了 → 自动重启
-
----
-
-## 十二、学习路径建议
-
-```
-1. 先掌握 Docker
-   ├── Dockerfile 编写
-   ├── docker build/run
-   └── docker-compose.yml
-
-2. 再学 K8s 基础
-   ├── Pod、Deployment、Service
-   ├── ConfigMap、Secret
-   └── kubectl 命令
-
-3. 实践部署
-   ├── 本地 K3s/Docker Desktop K8s
-   ├── 简单应用部署
-   └── 多服务编排
-
-4. 进阶
-   ├── Ingress 配置
-   ├── Helm 包管理
-   ├── CI/CD 集成
-   └── 监控和日志
+期望状态 -> 控制器 -> 实际状态
+    ^                  |
+    +--- 不断对齐 -----+
 ```
 
 ---
 
-*最后更新：2026-06-04*
+*最后更新：2026-06-09*

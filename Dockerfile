@@ -15,7 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
-COPY v3/requirements.txt .
+COPY v3/requirements-core.txt .
 
 # 创建虚拟环境并安装依赖
 RUN python -m venv /opt/venv
@@ -24,7 +24,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 # 使用清华镜像源安装依赖
 RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \
     --prefer-binary \
-    -r requirements.txt
+    -r requirements-core.txt
 
 # ==================== 第二阶段: 运行环境 ====================
 FROM python:3.13-slim
@@ -62,4 +62,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # 启动命令
-CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "src.api:app", "--host", "0.0.0.0", "--port", "8000"]

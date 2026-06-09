@@ -12,6 +12,7 @@ spring:
 agent:
   service:
     url: http://localhost:8000
+    key: default-dev-key
     timeout: 10000
     retry:
       max-attempts: 3
