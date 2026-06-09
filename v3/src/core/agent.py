@@ -22,12 +22,16 @@ class Agent:
         name: str = "Agent",
         description: str = "A helpful AI assistant",
         memory_size: int = 100,
-        tools: Optional[List[Tool]] = None
+        tools: Optional[List[Tool]] = None,
+        llm=None,
     ):
         self.id = str(uuid.uuid4())
         self.name = name
         self.description = description
         self.created_at = datetime.now()
+
+        # 初始化 LLM
+        self.llm = llm
 
         # 初始化内存
         self.memory = Memory(max_size=memory_size)
@@ -54,17 +58,12 @@ class Agent:
         """
         与Agent对话
 
-        TODO: 阶段二 - 接入LLM (OpenAI/Claude/本地模型)
-          1. 构造prompt (系统提示 + 历史消息 + 当前输入)
-          2. 调用LLM API获取回复
-          3. 解析回复，判断是否需要调用工具
-          4. 如需工具 -> 执行工具 -> 将结果反馈给LLM -> 获取最终回复
+        Args:
+            message: 用户消息
+            context: 可选上下文（session_id, knowledge_ids 等）
 
-        TODO: 阶段三 - 实现工具调用链 (ReAct模式)
-          1. LLM决定是否调用工具
-          2. 执行工具，获取结果
-          3. 将工具结果传回LLM
-          4. 循环直到LLM给出最终答案
+        Returns:
+            Agent 回复文本
         """
         self.memory.add_message("user", message, context)
 
@@ -75,16 +74,50 @@ class Agent:
 
     def _generate_response(self, message: str, context: Optional[Dict[str, Any]] = None) -> str:
         """
-        生成回复
+        生成回复 — 调用 LLM
 
-        TODO: 阶段二 - 替换为LLM调用
-          - 根据配置选择LLM provider (openai/claude/local)
-          - 构造messages列表 (system + history + user)
-          - 处理streaming响应 (可选)
-          - 错误处理与重试
+        构造 messages 列表: system prompt + 历史消息 + 当前用户消息
         """
-        # 临时占位实现
-        return f"Echo: {message}"
+        if not self.llm:
+            return f"Echo: {message}"
+
+        # 构造消息列表
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    f"你是 {self.name}，{self.description}。"
+                    "请用中文回答用户的问题，保持友好和专业。"
+                ),
+            }
+        ]
+
+        # 加入历史消息（最近 10 条）
+        history = self.memory.get_messages(limit=10)
+        for msg in history:
+            if msg["role"] in ("user", "assistant"):
+                messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"],
+                })
+
+        # 调用 LLM
+        try:
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # 在已有事件循环中（FastAPI），用 asyncio.ensure_future 等待
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    future = pool.submit(
+                        asyncio.run,
+                        self.llm.chat(messages)
+                    )
+                    return future.result(timeout=60)
+            else:
+                return asyncio.run(self.llm.chat(messages))
+        except Exception as e:
+            return f"[LLM 调用失败: {e}]"
 
     def get_conversation_history(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """获取对话历史"""
@@ -102,7 +135,8 @@ class Agent:
             "description": self.description,
             "created_at": self.created_at.isoformat(),
             "memory_size": len(self.memory),
-            "available_tools": self.list_tools()
+            "available_tools": self.list_tools(),
+            "llm_provider": type(self.llm).__name__ if self.llm else "None (Echo mode)",
         }
 
     def __repr__(self) -> str:

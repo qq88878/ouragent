@@ -37,6 +37,7 @@ from src.auth.security import get_current_user
 # 导入核心模块
 from src.core.agent import Agent
 from src.core.tools import CalculatorTool, SearchTool
+from src.core.llm import create_llm_provider
 
 
 # ==================== FastAPI应用 ====================
@@ -94,6 +95,14 @@ async def startup_event():
     print("🚀 Agent Service 启动中...")
     await init_db()
 
+    # 初始化 LLM 提供商
+    try:
+        llm = create_llm_provider()
+        print(f"✅ LLM 初始化完成: {type(llm).__name__}")
+    except Exception as e:
+        print(f"⚠️  LLM 初始化失败，将以 Echo 模式运行: {e}")
+        llm = None
+
     # 初始化 Agent 实例
     global agent
     agent = Agent(
@@ -101,6 +110,7 @@ async def startup_event():
         description="Main Agent for handling requests from Java backend",
         memory_size=settings.AGENT_DEFAULT_MEMORY_SIZE,
         tools=[CalculatorTool(), SearchTool()],
+        llm=llm,
     )
     print("✅ Agent Service 启动完成")
 
