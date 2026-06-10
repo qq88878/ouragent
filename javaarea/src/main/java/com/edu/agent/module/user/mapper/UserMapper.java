@@ -1,4 +1,4 @@
-﻿package com.edu.agent.module.user.mapper;
+package com.edu.agent.module.user.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;

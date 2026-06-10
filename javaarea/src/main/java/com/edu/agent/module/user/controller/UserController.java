@@ -1,4 +1,4 @@
-﻿package com.edu.agent.module.user.controller;
+package com.edu.agent.module.user.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.edu.agent.common.result.Result;
