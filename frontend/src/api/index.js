@@ -22,7 +22,7 @@ export const authApi = {
     register(data) { return http.post('/auth/register', data); },
     logout() { return http.post('/auth/logout'); },
     me() { return http.get('/auth/me'); },
-    sendVerifyCode(email) { return http.post('/auth/send-verify-code', null, { params: { email } }); },
+    sendVerifyCode(email) { return http.post('/auth/send-verify-code', { email }); },
     verifyEmail(email, code) { return http.post('/auth/verify-email', { email, code }); },
 };
 

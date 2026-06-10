@@ -9,10 +9,10 @@ spring:
     port: 6379
     database: 0
   mail:
-    host: ${MAIL_HOST:smtp.qq.com}
-    port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
+    host: smtp.qq.com
+    port: 587
+    username: 2370584562@qq.com
+    password: nvhsvheognthebib
     properties:
       mail:
         smtp:

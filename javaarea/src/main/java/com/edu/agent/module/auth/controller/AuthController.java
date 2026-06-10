@@ -8,10 +8,12 @@ import com.edu.agent.module.auth.dto.TokenResponse;
 import com.edu.agent.module.auth.service.AuthService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
@@ -25,7 +27,10 @@ public class AuthController {
             authService.register(request);
             return Result.success();
         } catch (BizException e) {
-            return Result.fail(e.getResultCode());
+            return Result.fail(e.getResultCode().getCode(), e.getMessage());
+        } catch (Exception e) {
+            log.error("Register error", e);
+            return Result.fail(500, e.getMessage());
         }
     }
 
@@ -35,7 +40,10 @@ public class AuthController {
             TokenResponse tokenResponse = authService.login(request);
             return Result.success(tokenResponse);
         } catch (BizException e) {
-            return Result.fail(e.getResultCode());
+            return Result.fail(e.getResultCode().getCode(), e.getMessage());
+        } catch (Exception e) {
+            log.error("Login error", e);
+            return Result.fail(500, e.getMessage());
         }
     }
 
@@ -51,12 +59,16 @@ public class AuthController {
     }
 
     @PostMapping("/send-verify-code")
-    public Result<Void> sendVerifyCode(@RequestParam String email) {
+    public Result<Void> sendVerifyCode(@RequestBody Map<String, String> body) {
         try {
+            String email = body.get("email");
             authService.sendVerificationCode(email);
             return Result.success();
         } catch (BizException e) {
-            return Result.fail(e.getResultCode());
+            return Result.fail(e.getResultCode().getCode(), e.getMessage());
+        } catch (Exception e) {
+            log.error("sendVerifyCode error", e);
+            return Result.fail(500, "发送失败: " + e.getMessage());
         }
     }
 
@@ -68,7 +80,10 @@ public class AuthController {
             authService.verifyEmail(email, code);
             return Result.success();
         } catch (BizException e) {
-            return Result.fail(e.getResultCode());
+            return Result.fail(e.getResultCode().getCode(), e.getMessage());
+        } catch (Exception e) {
+            log.error("verifyEmail error", e);
+            return Result.fail(500, "验证失败: " + e.getMessage());
         }
     }
 }

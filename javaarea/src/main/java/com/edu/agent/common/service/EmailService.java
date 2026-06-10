@@ -8,25 +8,48 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
 @Slf4j
 @Service
 public class EmailService {
 
     private final JavaMailSender mailSender;
     private final String from;
-    private final String baseUrl;
+
+    /** In-memory verification code store: email -> {code, expireTime} */
+    private final Map<String, CodeEntry> codeStore = new ConcurrentHashMap<>();
 
     public EmailService(
             JavaMailSender mailSender,
-            @Value("${spring.mail.username:}") String from,
-            @Value("${app.base-url:http://localhost:3000}") String baseUrl) {
+            @Value("${spring.mail.username:}") String from) {
         this.mailSender = mailSender;
         this.from = from;
-        this.baseUrl = baseUrl;
     }
 
     public boolean isConfigured() {
         return from != null && !from.isBlank();
+    }
+
+    public void storeCode(String email, String code) {
+        codeStore.put(email, new CodeEntry(code, Instant.now().plusSeconds(300)));
+        log.debug("Code stored for {}: {}", email, code);
+    }
+
+    public String getCode(String email) {
+        CodeEntry entry = codeStore.get(email);
+        if (entry == null) return null;
+        if (Instant.now().isAfter(entry.expireTime)) {
+            codeStore.remove(email);
+            return null;
+        }
+        return entry.code;
+    }
+
+    public void removeCode(String email) {
+        codeStore.remove(email);
     }
 
     public void sendVerificationCode(String to, String code) {
@@ -61,4 +84,6 @@ public class EmailService {
             </div>
             """.formatted(code);
     }
+
+    private record CodeEntry(String code, Instant expireTime) {}
 }

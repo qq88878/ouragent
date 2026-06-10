@@ -11,32 +11,22 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice("com.edu.agent")
 public class GlobalExceptionHandler {
 
-    /**
-     * Handle business exceptions.
-     */
     @ExceptionHandler(BizException.class)
     public Result<Void> handleBizException(BizException e) {
         log.warn("Business Exception: code={}, message={}", e.getResultCode().getCode(), e.getMessage());
-        return Result.fail(e.getResultCode());
+        return Result.fail(e.getResultCode().getCode(), e.getMessage());
     }
 
-    /**
-     * Handle validation exceptions from @Valid annotations.
-     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public Result<Void> handleValidException(MethodArgumentNotValidException e) {
-        // Extract the first validation error message
         String message = e.getBindingResult().getAllErrors().get(0).getDefaultMessage();
         log.warn("Validation Exception: {}", message);
         return Result.fail(ResultCode.BAD_REQUEST.getCode(), message);
     }
 
-    /**
-     * Handle all other uncaught exceptions.
-     */
     @ExceptionHandler(Exception.class)
     public Result<Void> handleException(Exception e) {
         log.error("Unhandled Exception: ", e);
-        return Result.fail(ResultCode.INTERNAL_ERROR);
+        return Result.fail(ResultCode.INTERNAL_ERROR.getCode(), ResultCode.INTERNAL_ERROR.getMessage());
     }
 }

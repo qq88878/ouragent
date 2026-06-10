@@ -25,10 +25,19 @@ CREATE TABLE IF NOT EXISTS `user` (
     `update_time`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted`        TINYINT      NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
-    UNIQUE KEY `uk_username` (`username`),
-    UNIQUE KEY `uk_email` (`email`),
-    INDEX `idx_role` (`role`)
+    INDEX `idx_role` (`role`),
+    INDEX `idx_email` (`email`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Virtual column: only non-deleted users enforce username uniqueness
+ALTER TABLE `user` ADD COLUMN `active_username` VARCHAR(64)
+    GENERATED ALWAYS AS (IF(deleted = 0, username, NULL)) VIRTUAL;
+CREATE UNIQUE INDEX `uk_active_username` ON `user` (`active_username`);
+
+-- Virtual column: only non-deleted users enforce email uniqueness
+ALTER TABLE `user` ADD COLUMN `active_email` VARCHAR(128)
+    GENERATED ALWAYS AS (IF(deleted = 0, email, NULL)) VIRTUAL;
+CREATE UNIQUE INDEX `uk_active_email` ON `user` (`active_email`);
 
 -- -----------------------------------------------------------
 -- 2. course

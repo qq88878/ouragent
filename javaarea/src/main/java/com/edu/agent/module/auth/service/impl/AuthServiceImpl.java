@@ -14,6 +14,7 @@ import com.edu.agent.security.LoginUser;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -53,7 +54,15 @@ public class AuthServiceImpl implements AuthService {
         user.setNickname(request.getNickname() != null ? request.getNickname() : request.getUsername());
         user.setRole(request.getRole() != null ? request.getRole() : "STUDENT");
         user.setEmailVerified(emailService.isConfigured() ? 0 : 1);
-        userMapper.insert(user);
+
+        try {
+            userMapper.insert(user);
+        } catch (DuplicateKeyException e) {
+            if (e.getMessage() != null && e.getMessage().contains("uk_email")) {
+                throw new BizException(ResultCode.EMAIL_ALREADY_EXISTS);
+            }
+            throw new BizException(ResultCode.USER_ALREADY_EXISTS);
+        }
 
         try {
             sendVerificationCode(request.getEmail());
@@ -121,16 +130,8 @@ public class AuthServiceImpl implements AuthService {
             throw new BizException(ResultCode.BAD_REQUEST, "邮箱已验证，无需重复验证");
         }
 
-        if (!emailService.isConfigured()) {
-            throw new BizException(ResultCode.INTERNAL_ERROR, "邮件服务未配置，请联系管理员");
-        }
-
         String code = String.format("%06d", ThreadLocalRandom.current().nextInt(1000000));
-        try {
-            redisTemplate.opsForValue().set("email:code:" + email, code, 5, TimeUnit.MINUTES);
-        } catch (Exception e) {
-            log.debug("Redis unavailable during code storage: {}", e.getMessage());
-        }
+        emailService.storeCode(email, code);
         emailService.sendVerificationCode(email, code);
     }
 
@@ -144,13 +145,7 @@ public class AuthServiceImpl implements AuthService {
             throw new BizException(ResultCode.BAD_REQUEST, "邮箱已验证，无需重复验证");
         }
 
-        String storedCode;
-        try {
-            storedCode = (String) redisTemplate.opsForValue().get("email:code:" + email);
-        } catch (Exception e) {
-            throw new BizException(ResultCode.INTERNAL_ERROR, "验证服务暂不可用，请稍后重试");
-        }
-
+        String storedCode = emailService.getCode(email);
         if (storedCode == null) {
             throw new BizException(ResultCode.BAD_REQUEST, "验证码已过期，请重新获取");
         }
@@ -160,9 +155,6 @@ public class AuthServiceImpl implements AuthService {
 
         user.setEmailVerified(1);
         userMapper.updateById(user);
-
-        try {
-            redisTemplate.delete("email:code:" + email);
-        } catch (Exception ignored) { }
+        emailService.removeCode(email);
     }
 }
