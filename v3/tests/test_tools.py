@@ -1,6 +1,5 @@
 """
-工具测试模块
-测试工具相关功能
+测试工具模块
 """
 
 import pytest
@@ -10,103 +9,93 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from v3.src.core.tools import Tool, ToolRegistry, CalculatorTool, SearchTool
+from src.core.tools.base import Tool, ToolRegistry
 
-
-# ==================== 工具基类测试 (阶段一即可通过) ====================
 
 class TestToolBase:
     """工具基类测试"""
 
-    def test_tool_initialization(self):
-        class DummyTool(Tool):
-            def execute(self, **kwargs):
+    def test_tool_schema(self):
+        class Dummy(Tool):
+            name = "dummy"
+            description = "test"
+            parameters = {"type": "object", "properties": {"x": {"type": "string"}}}
+
+            async def execute(self, **kwargs):
                 return "ok"
 
-        tool = DummyTool(name="test", description="desc")
-        assert tool.name == "test"
-        assert tool.id is not None
-
-    def test_tool_schema_generation(self):
-        class DummyTool(Tool):
-            def execute(self, **kwargs):
-                return "ok"
-
-        params = {"type": "object", "properties": {"input": {"type": "string"}}}
-        tool = DummyTool(name="test", description="desc", parameters=params)
+        tool = Dummy()
         schema = tool.get_schema()
-        assert schema["name"] == "test"
-        assert schema["parameters"] == params
+        assert schema["name"] == "dummy"
+        assert "x" in schema["parameters"]["properties"]
 
-    def test_tool_validate_required_params(self):
-        class DummyTool(Tool):
-            def execute(self, **kwargs):
-                return "ok"
-
-        tool = DummyTool(
-            name="test", description="desc",
-            parameters={"required": ["expression"]}
-        )
-        assert tool.validate_parameters({"expression": "1+1"}) is True
-        with pytest.raises(ValueError):
-            tool.validate_parameters({})
-
-
-# ==================== 工具注册表测试 (阶段一即可通过) ====================
-
-class TestToolRegistry:
-    """工具注册表测试"""
-
-    def test_register_and_list(self):
+    def test_registry_register_and_list(self):
         registry = ToolRegistry()
-        class DummyTool(Tool):
-            def execute(self, **kwargs):
-                return "ok"
 
-        registry.register(DummyTool(name="t1", description="d"))
+        class T1(Tool):
+            name = "t1"
+            description = "d"
+            async def execute(self, **kwargs):
+                pass
+
+        registry.register(T1())
         assert "t1" in registry.list_tools()
 
-    def test_unregister(self):
+    def test_registry_get_nonexistent(self):
         registry = ToolRegistry()
-        class DummyTool(Tool):
-            def execute(self, **kwargs):
-                return "ok"
+        assert registry.get("nope") is None
 
-        registry.register(DummyTool(name="t1", description="d"))
-        registry.unregister("t1")
-        assert "t1" not in registry.list_tools()
-
-    def test_get_nonexistent_tool(self):
+    def test_registry_execute(self):
         registry = ToolRegistry()
-        assert registry.get_tool("nonexistent") is None
+
+        class Echo(Tool):
+            name = "echo"
+            description = "echo"
+            async def execute(self, **kwargs):
+                return kwargs
+
+        registry.register(Echo())
+        import asyncio
+        result = asyncio.run(registry.execute("echo", a=1))
+        assert result == {"a": 1}
+
+    def test_registry_execute_unknown(self):
+        registry = ToolRegistry()
+        import asyncio
+        with pytest.raises(ValueError):
+            asyncio.run(registry.execute("nope"))
 
 
-# ==================== 内置工具测试 ====================
+class TestToolSchemas:
+    """测试各工具的 schema 定义"""
 
-class TestCalculatorTool:
-    """
-    计算器工具测试
+    def test_retrieval_tool_schema(self):
+        from src.core.tools.retrieval import RetrievalTool
+        tool = RetrievalTool(rag_pipeline=None)
+        schema = tool.get_schema()
+        assert schema["name"] == "knowledge_retrieval"
+        assert "query" in schema["parameters"]["properties"]
 
-    TODO: 阶段三 - 实现CalculatorTool后启用
-      - test_basic_operations: 基本四则运算
-      - test_complex_expressions: 复杂表达式
-      - test_invalid_input: 错误输入处理
-    """
+    def test_web_search_schema(self):
+        from src.core.tools.web_search import WebSearchTool
+        tool = WebSearchTool()
+        schema = tool.get_schema()
+        assert schema["name"] == "web_search"
 
-    @pytest.mark.skip(reason="TODO: 阶段三 - CalculatorTool实现后启用")
-    def test_basic_operations(self):
-        pass
+    def test_question_gen_schema(self):
+        from src.core.tools.question_gen import QuestionGenTool
+        tool = QuestionGenTool(llm=None)
+        schema = tool.get_schema()
+        assert schema["name"] == "question_generator"
 
+    def test_mindmap_gen_schema(self):
+        from src.core.tools.mindmap_gen import MindmapGenTool
+        tool = MindmapGenTool(llm=None)
+        schema = tool.get_schema()
+        assert schema["name"] == "mindmap_generator"
 
-class TestSearchTool:
-    """
-    搜索工具测试
-
-    TODO: 阶段三 - 实现SearchTool后启用
-      - test_search_returns_results: 搜索返回结果
-      - test_search_api_error: 搜索API异常处理
-    """
-
-    @pytest.mark.skip(reason="TODO: 阶段三 - SearchTool实现后启用")
-    def test_search_returns_results(self):
-        pass
+    def test_study_plan_schema(self):
+        from src.core.tools.study_plan import StudyPlanTool
+        tool = StudyPlanTool(llm=None)
+        schema = tool.get_schema()
+        assert schema["name"] == "study_plan"

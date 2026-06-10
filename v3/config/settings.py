@@ -69,10 +69,15 @@ class Settings(BaseSettings):
     SPARK_MODEL: str = Field(default="generalv3.5", description="星火模型版本")
     SPARK_BASE_URL: str = Field(default="https://spark-api-open.xf-yun.com/v1", description="星火 API 地址")
 
-    # OpenAI 兼容接口配置（也支持 DeepSeek 等）
+    # OpenAI 兼容接口配置（也支持 DeepSeek、MIMO 等）
     LLM_API_KEY: Optional[str] = Field(default=None, description="LLM API Key")
     LLM_MODEL: str = Field(default="gpt-3.5-turbo", description="LLM 模型名称")
     LLM_BASE_URL: str = Field(default="https://api.openai.com/v1", description="LLM API 地址")
+
+    # Embedding 配置（默认复用 LLM 的 key 和 url）
+    EMBEDDING_API_KEY: Optional[str] = Field(default=None, description="Embedding API Key")
+    EMBEDDING_BASE_URL: Optional[str] = Field(default=None, description="Embedding API 地址")
+    EMBEDDING_MODEL: str = Field(default="text-embedding-3-small", description="Embedding 模型名称")
 
     # ==================== CORS配置 ====================
     CORS_ORIGINS: str = Field(
@@ -91,6 +96,14 @@ class Settings(BaseSettings):
             import warnings
             warnings.warn("⚠️  警告: 使用默认 SECRET_KEY，生产环境必须修改！")
         return v
+
+    @property
+    def embedding_api_key(self) -> str:
+        return self.EMBEDDING_API_KEY or self.LLM_API_KEY or ""
+
+    @property
+    def embedding_base_url(self) -> str:
+        return self.EMBEDDING_BASE_URL or self.LLM_BASE_URL
 
     @property
     def DATABASE_URL(self) -> str:
@@ -119,7 +132,7 @@ class Settings(BaseSettings):
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
 
     class Config:
-        env_file = ".env"
+        env_file = str(Path(__file__).parent / ".env")
         env_file_encoding = "utf-8"
         case_sensitive = True
 

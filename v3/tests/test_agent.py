@@ -1,125 +1,120 @@
 """
-Agent测试模块
-测试Agent核心功能
+测试 RAG Pipeline 和 VectorStore
 """
 
 import pytest
 import sys
+import numpy as np
 from pathlib import Path
 
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from v3.src.core.agent import Agent
-from v3.src.core.tools import Tool
+from src.core.rag.vector_store import VectorStore, Document
+from src.core.rag.chunker import TextChunker
+from src.core.rag.document_loader import DocumentLoader
 
 
-# ==================== 阶段一: 基础框架测试 ====================
+class TestVectorStore:
+    """向量存储测试"""
 
-class TestAgentBasic:
-    """Agent基础功能测试 (阶段一即可通过)"""
+    def test_add_and_count(self):
+        store = VectorStore(dimension=4)
+        doc = Document(id="1", content="hello", embedding=np.array([1, 0, 0, 0], dtype=np.float32))
+        store.add(doc)
+        assert store.count() == 1
 
-    def test_agent_creation(self):
-        agent = Agent(name="TestAgent", description="test")
-        assert agent.name == "TestAgent"
-        assert agent.id is not None
+    def test_search_returns_sorted(self):
+        store = VectorStore(dimension=3)
+        store.add(Document(id="1", content="a", embedding=np.array([1, 0, 0], dtype=np.float32)))
+        store.add(Document(id="2", content="b", embedding=np.array([0, 1, 0], dtype=np.float32)))
+        store.add(Document(id="3", content="c", embedding=np.array([0, 0, 1], dtype=np.float32)))
 
-    def test_agent_id_unique(self):
-        agent1 = Agent(name="A1")
-        agent2 = Agent(name="A2")
-        assert agent1.id != agent2.id
+        query = np.array([1, 0, 0], dtype=np.float32)
+        results = store.search(query, top_k=2)
+        assert len(results) == 2
+        assert results[0][0].id == "1"
+        assert results[0][1] > results[1][1]
 
-    def test_agent_chat_returns_string(self):
-        agent = Agent()
-        response = agent.chat("Hello")
-        assert isinstance(response, str)
-        assert len(response) > 0
+    def test_delete_by_source(self):
+        store = VectorStore(dimension=2)
+        store.add(Document(id="1", content="a", embedding=np.array([1, 0], dtype=np.float32), metadata={"source": "file1"}))
+        store.add(Document(id="2", content="b", embedding=np.array([0, 1], dtype=np.float32), metadata={"source": "file2"}))
 
-    def test_agent_memory_records_messages(self):
-        agent = Agent()
-        agent.chat("msg1")
-        agent.chat("msg2")
-        history = agent.get_conversation_history()
-        assert len(history) == 4  # 2 user + 2 assistant
+        removed = store.delete_by_source("file1")
+        assert removed == 1
+        assert store.count() == 1
 
-    def test_agent_clear_memory(self):
-        agent = Agent()
-        agent.chat("test")
-        agent.clear_memory()
-        assert len(agent.get_conversation_history()) == 0
+    def test_save_and_load(self, tmp_path):
+        store = VectorStore(dimension=2)
+        store.add(Document(id="1", content="hello", embedding=np.array([1, 0], dtype=np.float32)))
 
-    def test_agent_status(self):
-        agent = Agent(name="Test")
-        status = agent.get_status()
-        assert "id" in status
-        assert "name" in status
-        assert status["name"] == "Test"
+        path = str(tmp_path / "store.json")
+        store.save(path)
 
+        store2 = VectorStore(dimension=2)
+        loaded = store2.load(path)
+        assert loaded == 1
+        assert store2.count() == 1
 
-# ==================== 阶段二: LLM集成测试 ====================
-
-class TestAgentLLM:
-    """
-    LLM集成测试
-
-    TODO: 阶段二 - 实现
-      - test_chat_calls_llm: 验证chat()调用了LLM API
-      - test_chat_with_system_prompt: 验证系统提示正确传递
-      - test_chat_error_handling: LLM调用失败时的降级处理
-      - test_chat_streaming: 流式响应测试
-    """
-
-    @pytest.mark.skip(reason="TODO: 阶段二 - LLM集成后启用")
-    def test_chat_calls_llm(self):
-        pass
-
-    @pytest.mark.skip(reason="TODO: 阶段二 - LLM集成后启用")
-    def test_chat_error_handling(self):
-        pass
+    def test_empty_search(self):
+        store = VectorStore(dimension=3)
+        results = store.search(np.array([1, 0, 0], dtype=np.float32))
+        assert results == []
 
 
-# ==================== 阶段三: 工具调用测试 ====================
+class TestTextChunker:
+    """文本分块测试"""
 
-class TestAgentToolCalling:
-    """
-    工具调用测试
+    def test_basic_chunking(self):
+        chunker = TextChunker(chunk_size=100, overlap=20)
+        text = "段落一。\n\n段落二。\n\n段落三。"
+        chunks = chunker.chunk(text)
+        assert len(chunks) >= 1
+        assert chunks[0].index == 0
 
-    TODO: 阶段三 - 实现
-      - test_agent_registers_tools: 验证工具注册
-      - test_agent_calls_calculator: 验证计算器工具调用
-      - test_agent_calls_search: 验证搜索工具调用
-      - test_agent_tool_error_handling: 工具执行失败时的处理
-      - test_agent_multi_step_tool: 多步工具调用链
-    """
+    def test_empty_text(self):
+        chunker = TextChunker()
+        assert chunker.chunk("") == []
+        assert chunker.chunk("   ") == []
 
-    @pytest.mark.skip(reason="TODO: 阶段三 - 工具实现后启用")
-    def test_agent_registers_tools(self):
-        pass
+    def test_long_paragraph_split(self):
+        chunker = TextChunker(chunk_size=50, overlap=10)
+        long_text = "。".join([f"这是第{i}个句子" for i in range(20)])
+        chunks = chunker.chunk(long_text)
+        assert len(chunks) > 1
 
-    @pytest.mark.skip(reason="TODO: 阶段三 - 工具实现后启用")
-    def test_agent_calls_calculator(self):
-        pass
+    def test_metadata_preserved(self):
+        chunker = TextChunker(chunk_size=100)
+        chunks = chunker.chunk("一些文本", metadata={"source": "test.txt"})
+        assert all(c.metadata.get("source") == "test.txt" for c in chunks)
 
 
-# ==================== 记忆模块测试 ====================
+class TestDocumentLoader:
+    """文档加载器测试"""
 
-class TestMemory:
-    """记忆模块测试 (阶段一即可通过)"""
+    def test_load_txt(self, tmp_path):
+        f = tmp_path / "test.txt"
+        f.write_text("Hello World", encoding="utf-8")
+        loader = DocumentLoader()
+        text = loader.load(str(f))
+        assert text == "Hello World"
 
-    def test_memory_initialization(self):
-        agent = Agent(memory_size=50)
-        assert agent.memory is not None
-        assert len(agent.memory) == 0
+    def test_load_md(self, tmp_path):
+        f = tmp_path / "test.md"
+        f.write_text("# Title\n\nContent", encoding="utf-8")
+        loader = DocumentLoader()
+        text = loader.load(str(f))
+        assert "Title" in text
 
-    def test_memory_limit(self):
-        agent = Agent(memory_size=5)
-        for i in range(10):
-            agent.chat(f"msg {i}")
-        assert len(agent.memory) == 10
+    def test_unsupported_format(self, tmp_path):
+        f = tmp_path / "test.xyz"
+        f.write_text("data")
+        loader = DocumentLoader()
+        with pytest.raises(ValueError):
+            loader.load(str(f))
 
-    def test_memory_context_window(self):
-        agent = Agent()
-        for i in range(10):
-            agent.chat(f"msg {i}")
-        context = agent.memory.get_context_window(window_size=5)
-        assert len(context) == 5
+    def test_load_bytes_txt(self):
+        loader = DocumentLoader()
+        text = loader.load_bytes(b"Hello", "test.txt")
+        assert text == "Hello"

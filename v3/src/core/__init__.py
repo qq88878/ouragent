@@ -1,10 +1,15 @@
-"""
-核心模块 - Agent编程的核心功能实现
-包含Agent、Memory、Tool等核心类
-"""
+"""核心模块 - RAG 增强的教育智能体系统"""
 
-from .agent import Agent
-from .memory import Memory
-from .tools import Tool
+from .agents.orchestrator import Orchestrator
+from .rag.rag_pipeline import RAGPipeline
+from .rag.vector_store import VectorStore
+from .rag.embeddings import create_embedding_provider
+from .llm import create_llm_provider
 
-__all__ = ["Agent", "Memory", "Tool"]
+__all__ = [
+    "Orchestrator",
+    "RAGPipeline",
+    "VectorStore",
+    "create_embedding_provider",
+    "create_llm_provider",
+]
