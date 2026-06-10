@@ -78,13 +78,17 @@ class Orchestrator:
         student_profile = context.get("student_profile")
         history = context.get("history")
 
-        # RAG 检索
-        retrieved = await self.rag.retrieve(
-            query=message,
-            top_k=5,
-            knowledge_ids=knowledge_ids,
-        )
-        knowledge_context = "\n\n---\n\n".join(r["content"] for r in retrieved) if retrieved else ""
+        # RAG 检索（失败时降级为纯 LLM 对话）
+        try:
+            retrieved = await self.rag.retrieve(
+                query=message,
+                top_k=5,
+                knowledge_ids=knowledge_ids,
+            )
+            knowledge_context = "\n\n---\n\n".join(r["content"] for r in retrieved) if retrieved else ""
+        except Exception as e:
+            logger.warning("RAG 检索失败，降级为纯 LLM 对话: %s", e)
+            knowledge_context = ""
 
         # 构造个性化 prompt
         system_prompt = self._build_chat_system_prompt(student_profile, knowledge_context)

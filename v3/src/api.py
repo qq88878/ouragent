@@ -128,9 +128,14 @@ async def lifespan(app: FastAPI):
         print(f"LLM 初始化失败，将以 Echo 模式运行: {e}")
         llm = None
 
-    # 初始化 RAG Pipeline
+    # 初始化 RAG Pipeline（Embedding 优先用 API，不可用则降级为本地 TF-IDF）
+    has_embedding_api = (
+        settings.EMBEDDING_API_KEY
+        and settings.EMBEDDING_BASE_URL
+        and "mimo" not in (settings.EMBEDDING_BASE_URL or "").lower()
+    )
     embedding_provider = create_embedding_provider(
-        provider="openai",
+        provider="openai" if has_embedding_api else "local",
         api_key=settings.embedding_api_key,
         base_url=settings.embedding_base_url,
         model=settings.EMBEDDING_MODEL,

@@ -155,14 +155,14 @@ class LocalEmbeddingProvider(EmbeddingProvider):
 
 
 def create_embedding_provider(
-    provider: str = "openai",
+    provider: str = "local",
     api_key: str = "",
     base_url: str = "",
     model: str = "text-embedding-ada-002",
 ) -> EmbeddingProvider:
     """工厂方法：根据配置创建嵌入提供者"""
-    if provider == "openai" and api_key:
+    if provider == "openai" and api_key and base_url:
         return OpenAIEmbeddingProvider(api_key=api_key, base_url=base_url, model=model)
     else:
-        logger.warning("无可用 Embedding API，降级为本地 TF-IDF 方案")
+        logger.warning("无可用 Embedding API，使用本地 TF-IDF 方案")
         return LocalEmbeddingProvider()

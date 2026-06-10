@@ -46,16 +46,18 @@ class ResourceAgent(BaseAgent):
         question_type: str = "mixed",
     ) -> Dict[str, Any]:
         """生成练习题"""
-        # 先从知识库检索相关内容
         context = ""
         if "knowledge_retrieval" in self.tools:
-            results = await self.call_tool(
-                "knowledge_retrieval",
-                query=topic,
-                knowledge_ids=knowledge_ids,
-                top_k=5,
-            )
-            context = "\n\n".join(r["content"] for r in results)
+            try:
+                results = await self.call_tool(
+                    "knowledge_retrieval",
+                    query=topic,
+                    knowledge_ids=knowledge_ids,
+                    top_k=5,
+                )
+                context = "\n\n".join(r["content"] for r in results)
+            except Exception as e:
+                logger.warning("知识检索失败: %s", e)
 
         prompt = f"""请为以下主题生成 {count} 道练习题。
 
@@ -98,12 +100,16 @@ class ResourceAgent(BaseAgent):
         """生成思维导图"""
         context = ""
         if "knowledge_retrieval" in self.tools:
-            results = await self.call_tool(
-                "knowledge_retrieval",
-                query=topic,
-                knowledge_ids=knowledge_ids,
-                top_k=5,
-            )
+            try:
+                results = await self.call_tool(
+                    "knowledge_retrieval",
+                    query=topic,
+                    knowledge_ids=knowledge_ids,
+                    top_k=5,
+                )
+                context = "\n\n".join(r["content"] for r in results)
+            except Exception as e:
+                logger.warning("知识检索失败: %s", e)
             context = "\n\n".join(r["content"] for r in results)
 
         prompt = f"""请为以下主题生成思维导图结构。
@@ -143,12 +149,16 @@ class ResourceAgent(BaseAgent):
         """生成学习摘要"""
         context = ""
         if "knowledge_retrieval" in self.tools:
-            results = await self.call_tool(
-                "knowledge_retrieval",
-                query=topic,
-                knowledge_ids=knowledge_ids,
-                top_k=5,
-            )
+            try:
+                results = await self.call_tool(
+                    "knowledge_retrieval",
+                    query=topic,
+                    knowledge_ids=knowledge_ids,
+                    top_k=5,
+                )
+                context = "\n\n".join(r["content"] for r in results)
+            except Exception as e:
+                logger.warning("知识检索失败: %s", e)
             context = "\n\n".join(r["content"] for r in results)
 
         prompt = f"""请为以下主题生成简洁的学习摘要。
