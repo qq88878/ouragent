@@ -21,7 +21,7 @@ class Settings(BaseSettings):
 
     # ==================== 数据库配置 ====================
     DB_HOST: str = Field(default="localhost", description="数据库主机")
-    DB_PORT: int = Field(default=5432, description="数据库端口")
+    DB_PORT: int = Field(default=3306, description="数据库端口")
     DB_NAME: str = Field(default="agent_db", description="数据库名称")
     DB_USER: str = Field(default="agent", description="数据库用户")
     DB_PASSWORD: str = Field(default="agent_password", description="数据库密码")
@@ -107,9 +107,9 @@ class Settings(BaseSettings):
 
     @property
     def DATABASE_URL(self) -> str:
-        """获取数据库连接 URL (使用 asyncpg 异步驱动)"""
+        """获取数据库连接 URL (使用 aiomysql 异步驱动)"""
         return (
-            f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}"
+            f"mysql+aiomysql://{self.DB_USER}:{self.DB_PASSWORD}"
             f"@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         )
 

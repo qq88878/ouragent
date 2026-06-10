@@ -5,7 +5,6 @@
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
-from sqlalchemy.pool import NullPool
 from typing import AsyncGenerator
 
 from config.settings import settings
@@ -13,9 +12,9 @@ from config.settings import settings
 # ==================== 数据库引擎 ====================
 
 # 创建异步引擎 (支持连接池)
-# 注意：使用 asyncpg 驱动，URL 前缀为 postgresql+asyncpg
+# 注意：使用 aiomysql 驱动，URL 前缀为 mysql+aiomysql
 engine = create_async_engine(
-    settings.DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://"),
+    settings.DATABASE_URL,
     echo=settings.DEBUG,  # 开发环境打印 SQL
     pool_size=settings.DB_POOL_SIZE,  # 连接池大小
     max_overflow=settings.DB_MAX_OVERFLOW,  # 最大溢出连接

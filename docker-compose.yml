@@ -75,8 +75,8 @@ services:
       - DEBUG=false
       - LOG_LEVEL=INFO
       - PORT=8000
-      - DB_HOST=postgres
-      - DB_PORT=5432
+      - DB_HOST=mysql
+      - DB_PORT=3306
       - DB_NAME=agent_db
       - DB_USER=agent
       - DB_PASSWORD=agent_password
@@ -92,7 +92,7 @@ services:
       - agent-uploads:/app/uploads
       - agent-logs:/app/logs
     depends_on:
-      postgres:
+      mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -106,7 +106,7 @@ services:
     networks:
       - edu-network
 
-  # ==================== MySQL 数据库 (Java端) ====================
+  # ==================== MySQL 数据库 (Java端 + Python Agent) ====================
   mysql:
     image: mysql:8.0
     container_name: edu-mysql
@@ -120,33 +120,13 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
       - ./javaarea/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./v3/config/mysql-init.sql:/docker-entrypoint-initdb.d/02-agent.sql:ro
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password"]
       interval: 10s
       timeout: 5s
       start_period: 30s
       retries: 5
-    restart: unless-stopped
-    networks:
-      - edu-network
-
-  # ==================== PostgreSQL 数据库 (Agent端) ====================
-  postgres:
-    image: postgres:15-alpine
-    container_name: agent-postgres
-    environment:
-      POSTGRES_DB: agent_db
-      POSTGRES_USER: agent
-      POSTGRES_PASSWORD: agent_password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agent -d agent_db"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
     restart: unless-stopped
     networks:
       - edu-network
@@ -170,7 +150,6 @@ services:
 
 volumes:
   mysql-data:
-  postgres-data:
   redis-data:
   agent-uploads:
   agent-logs:
