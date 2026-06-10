@@ -1,0 +1,94 @@
+"""学生画像分析 Agent - 分析学生学习特征和薄弱点"""
+
+from __future__ import annotations
+
+import json
+import logging
+from typing import Any, Dict, List, Optional
+
+from .base import BaseAgent
+
+logger = logging.getLogger(__name__)
+
+
+class ProfileAgent(BaseAgent):
+    """
+    学生画像分析 Agent
+
+    职责：
+    - 分析学生的学习历史和对话记录
+    - 推断学习风格（视觉/听觉/阅读/动手）
+    - 识别知识薄弱点和优势领域
+    - 生成结构化的学生画像
+    """
+
+    name = "profile_agent"
+    description = "分析学生学习特征、识别薄弱点、生成学习画像"
+
+    @property
+    def system_prompt(self) -> str:
+        return """你是一位教育心理学专家，专注于学习者画像分析。
+
+你的任务是根据学生的学习记录、对话历史和考试表现，分析出:
+1. 学习风格偏好（visual/auditory/reading/kinesthetic）
+2. 知识掌握情况（强项和薄弱点）
+3. 学习兴趣方向
+4. 适合的学习策略
+
+输出必须是结构化的 JSON 格式。"""
+
+    async def analyze(
+        self,
+        chat_history: List[Dict[str, str]],
+        study_records: List[Dict[str, Any]],
+        current_profile: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        分析学生并生成/更新画像
+
+        Args:
+            chat_history: 聊天记录
+            study_records: 学习记录
+            current_profile: 现有画像（增量更新）
+
+        Returns:
+            结构化画像 JSON
+        """
+        history_text = "\n".join(
+            f"{m['role']}: {m['content']}" for m in chat_history[-20:]
+        )
+        records_text = json.dumps(study_records, ensure_ascii=False) if study_records else "暂无学习记录"
+        profile_text = json.dumps(current_profile, ensure_ascii=False) if current_profile else "暂无画像"
+
+        prompt = f"""请分析以下学生信息，生成学习画像。
+
+最近对话记录:
+{history_text}
+
+学习记录:
+{records_text}
+
+现有画像:
+{profile_text}
+
+请输出 JSON 格式:
+{{
+  "learning_style": "visual|auditory|reading|kinesthetic",
+  "strengths": ["强项1", "强项2"],
+  "weaknesses": ["薄弱点1", "薄弱点2"],
+  "interests": ["兴趣1", "兴趣2"],
+  "grade_level": "beginner|intermediate|advanced",
+  "recommended_strategy": "建议的学习策略",
+  "confidence": 0.8
+}}"""
+
+        response = await self.chat(prompt)
+
+        try:
+            response = response.strip()
+            if response.startswith("```"):
+                response = response.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+            return json.loads(response)
+        except json.JSONDecodeError:
+            logger.warning("画像分析结果不是有效 JSON")
+            return {"raw_response": response, "confidence": 0}
