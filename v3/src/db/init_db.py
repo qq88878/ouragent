@@ -17,12 +17,15 @@ async def init_database():
 
     # 执行自定义初始化 (可选)
     async with engine.begin() as conn:
-        # 示例: 创建索引
+        # 创建索引 (与 schema.sql 一致)
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
+            CREATE INDEX IF NOT EXISTS idx_user_username ON user(username);
         """))
         await conn.execute(text("""
-            CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+            CREATE INDEX IF NOT EXISTS idx_user_email ON user(email);
+        """))
+        await conn.execute(text("""
+            CREATE INDEX IF NOT EXISTS idx_user_role ON user(role);
         """))
 
     print("✅ 数据库初始化完成")
