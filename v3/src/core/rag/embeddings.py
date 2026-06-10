@@ -79,6 +79,11 @@ class LocalEmbeddingProvider(EmbeddingProvider):
 
     当没有 API 可用时，用 TF-IDF 做简单向量化。
     效果不如 API，但能保证流程跑通。
+
+    TODO: 替换为真正的 Embedding API
+      - 星火: https://spark-api-open.xf-yun.com/v1/embeddings
+      - 或其他 OpenAI 兼容的 Embedding 接口
+      - 配置 EMBEDDING_API_KEY / EMBEDDING_BASE_URL / EMBEDDING_MODEL 即可自动切换
     """
 
     def __init__(self, dimension: int = 384):

@@ -128,7 +128,9 @@ async def lifespan(app: FastAPI):
         print(f"LLM 初始化失败，将以 Echo 模式运行: {e}")
         llm = None
 
-    # 初始化 RAG Pipeline（Embedding 优先用 API，不可用则降级为本地 TF-IDF）
+    # TODO: Embedding 当前降级为本地 TF-IDF（MIMO 不支持 /embeddings 端点）
+    #       后续接入星火/其他有 Embedding API 的服务后，改为 provider="openai"
+    #       只需在 .env 中配置 EMBEDDING_API_KEY / EMBEDDING_BASE_URL / EMBEDDING_MODEL
     has_embedding_api = (
         settings.EMBEDDING_API_KEY
         and settings.EMBEDDING_BASE_URL
