@@ -10,6 +10,8 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/auth")
 @RequiredArgsConstructor
@@ -46,5 +48,27 @@ public class AuthController {
     @GetMapping("/me")
     public Result<Object> getCurrentUser() {
         return Result.success(authService.getCurrentUser());
+    }
+
+    @PostMapping("/send-verify-code")
+    public Result<Void> sendVerifyCode(@RequestParam String email) {
+        try {
+            authService.sendVerificationCode(email);
+            return Result.success();
+        } catch (BizException e) {
+            return Result.fail(e.getResultCode());
+        }
+    }
+
+    @PostMapping("/verify-email")
+    public Result<Void> verifyEmail(@RequestBody Map<String, String> body) {
+        try {
+            String email = body.get("email");
+            String code = body.get("code");
+            authService.verifyEmail(email, code);
+            return Result.success();
+        } catch (BizException e) {
+            return Result.fail(e.getResultCode());
+        }
     }
 }

@@ -1,4 +1,4 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 
 const http = axios.create({
     baseURL: '/api',
@@ -22,6 +22,17 @@ export const authApi = {
     register(data) { return http.post('/auth/register', data); },
     logout() { return http.post('/auth/logout'); },
     me() { return http.get('/auth/me'); },
+    sendVerifyCode(email) { return http.post('/auth/send-verify-code', null, { params: { email } }); },
+    verifyEmail(email, code) { return http.post('/auth/verify-email', { email, code }); },
+};
+
+export const userApi = {
+    getProfile() { return http.get('/users/me'); },
+    updateProfile(data) { return http.put('/users/me', data); },
+    listUsers(page = 1, size = 10) { return http.get('/users/', { params: { page, size } }); },
+    getUserById(id) { return http.get(`/users/${id}`); },
+    updateStatus(id, status) { return http.put(`/users/${id}/status`, null, { params: { status } }); },
+    deleteUser(id) { return http.delete(`/users/${id}`); },
 };
 
 export default http;

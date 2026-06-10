@@ -28,5 +28,7 @@ public class User extends BaseEntity {
 
     private Integer status;
 
+    private Integer emailVerified;
+
     private LocalDateTime lastLoginTime;
 }

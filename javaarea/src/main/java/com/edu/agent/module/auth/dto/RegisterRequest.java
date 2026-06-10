@@ -2,6 +2,7 @@ package com.edu.agent.module.auth.dto;
 
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import lombok.Data;
 
 @Data
@@ -18,5 +19,6 @@ public class RegisterRequest {
 
     private String nickname;
 
+    @Pattern(regexp = "STUDENT|TEACHER", message = "角色只能是 STUDENT 或 TEACHER")
     private String role = "STUDENT";
 }

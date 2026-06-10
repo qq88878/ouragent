@@ -51,7 +51,8 @@ public class LoginUser implements UserDetails {
 
     @Override
     public boolean isEnabled() {
-        return user.getStatus() == null || user.getStatus() == 0;
+        // status=1 means active, status=0 means disabled (matching DB schema)
+        return user.getStatus() == null || user.getStatus() != 0;
     }
 
     public User getUser() {

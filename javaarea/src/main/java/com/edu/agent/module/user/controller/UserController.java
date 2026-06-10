@@ -43,4 +43,10 @@ public class UserController {
         userService.updateStatus(id, status);
         return Result.success();
     }
+
+    @DeleteMapping("/{id}")
+    public Result<Void> deleteUser(@PathVariable Long id) {
+        userService.deleteUser(id);
+        return Result.success();
+    }
 }

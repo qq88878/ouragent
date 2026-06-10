@@ -1,4 +1,4 @@
-﻿import { defineStore } from 'pinia';
+import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { authApi } from '@/api';
 
@@ -6,27 +6,36 @@ export const useAuthStore = defineStore('auth', () => {
     const token = ref(localStorage.getItem('accessToken') || '');
     const refreshToken = ref(localStorage.getItem('refreshToken') || '');
     const user = ref(null);
+    const emailVerified = ref(localStorage.getItem('emailVerified') !== '0');
 
     const isLoggedIn = computed(() => !!token.value);
 
-    function setTokens(access, refresh) {
+    function setTokens(access, refresh, verified) {
         token.value = access;
         refreshToken.value = refresh;
         localStorage.setItem('accessToken', access);
         localStorage.setItem('refreshToken', refresh);
+        if (verified !== undefined && verified !== null) {
+            emailVerified.value = verified === 1;
+            localStorage.setItem('emailVerified', String(verified));
+        }
     }
 
     function clearAuth() {
         token.value = '';
         refreshToken.value = '';
         user.value = null;
+        emailVerified.value = true;
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
+        localStorage.removeItem('emailVerified');
     }
 
     async function login(username, password) {
         const res = await authApi.login(username, password);
-        if (res.code === 200) setTokens(res.data.accessToken, res.data.refreshToken);
+        if (res.code === 200) {
+            setTokens(res.data.accessToken, res.data.refreshToken, res.data.emailVerified);
+        }
         return res;
     }
 
@@ -37,7 +46,13 @@ export const useAuthStore = defineStore('auth', () => {
     async function fetchUser() {
         try {
             const res = await authApi.me();
-            if (res.code === 200) user.value = res.data;
+            if (res.code === 200) {
+                user.value = res.data;
+                if (res.data.emailVerified === 1) {
+                    emailVerified.value = true;
+                    localStorage.setItem('emailVerified', '1');
+                }
+            }
             return res;
         } catch { return null; }
     }
@@ -47,5 +62,5 @@ export const useAuthStore = defineStore('auth', () => {
         clearAuth();
     }
 
-    return { token, refreshToken, user, isLoggedIn, login, register, fetchUser, logout, clearAuth };
+    return { token, refreshToken, user, emailVerified, isLoggedIn, login, register, fetchUser, logout, clearAuth, setTokens };
 });

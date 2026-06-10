@@ -2,10 +2,8 @@ package com.edu.agent.module.auth.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.NoArgsConstructor;
 
 @Data
-@NoArgsConstructor
 @AllArgsConstructor
 public class TokenResponse {
 
@@ -13,4 +11,9 @@ public class TokenResponse {
 
     private String refreshToken;
 
+    private Integer emailVerified;
+
+    public TokenResponse(String accessToken, String refreshToken) {
+        this(accessToken, refreshToken, null);
+    }
 }

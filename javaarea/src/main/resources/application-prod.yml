@@ -9,6 +9,17 @@ spring:
     port: 6379
     password: ${REDIS_PASSWORD:}
     database: 0
+  mail:
+    host: ${MAIL_HOST:smtp.qq.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
 agent:
   service:
@@ -27,3 +38,6 @@ file:
   upload:
     path: /data/uploads
     allowed-types: pdf,docx,md,txt
+
+app:
+  base-url: ${APP_BASE_URL:http://localhost}

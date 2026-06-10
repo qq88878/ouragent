@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
@@ -24,6 +25,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtProvider jwtProvider;
     private final UserMapper userMapper;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -43,6 +45,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 return;
             }
 
+            try {
+                if (Boolean.TRUE.equals(redisTemplate.hasKey("blacklist:" + token))) {
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+            } catch (Exception e) {
+                log.debug("Redis unavailable, skipping blacklist check: {}", e.getMessage());
+            }
+
             String username = jwtProvider.getUsernameFromToken(token);
             if (username == null) {
                 filterChain.doFilter(request, response);
@@ -56,6 +67,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
 
             LoginUser loginUser = new LoginUser(user);
+            if (!loginUser.isEnabled()) {
+                log.debug("User {} is disabled, rejecting request", username);
+                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write("{\"code\":403,\"message\":\"账号已被禁用\"}");
+                return;
+            }
+
             UsernamePasswordAuthenticationToken authentication =
                     new UsernamePasswordAuthenticationToken(loginUser, null, loginUser.getAuthorities());
             authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));

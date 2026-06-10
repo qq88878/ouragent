@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS `user` (
     `avatar`         VARCHAR(255) DEFAULT NULL,
     `role`           VARCHAR(32)  NOT NULL DEFAULT 'STUDENT' COMMENT 'STUDENT / TEACHER / ADMIN',
     `status`         TINYINT      NOT NULL DEFAULT 1 COMMENT '1=active 0=disabled',
+    `email_verified` TINYINT      NOT NULL DEFAULT 0 COMMENT '0=unverified 1=verified',
     `last_login_time` DATETIME    DEFAULT NULL,
     `create_time`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `update_time`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

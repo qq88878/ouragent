@@ -1,4 +1,4 @@
-﻿import { createRouter, createWebHistory } from 'vue-router';
+import { createRouter, createWebHistory } from 'vue-router';
 
 const routes = [
   { path: '/', redirect: '/login' },
@@ -18,6 +18,18 @@ const routes = [
     path: '/dashboard',
     name: 'Dashboard',
     component: () => import('@/views/DashboardView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/profile',
+    name: 'UserProfile',
+    component: () => import('@/views/UserProfileView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/admin/users',
+    name: 'UserManagement',
+    component: () => import('@/views/UserManagementView.vue'),
     meta: { requiresAuth: true },
   },
 ];
