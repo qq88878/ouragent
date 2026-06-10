@@ -1,9 +1,16 @@
-# Docker Compose配置
-# 教育系统完整服务编排: Java后端 + Python Agent + 数据库 + 缓存 + 向量数据库 + 反向代理
+# ============================================================
+# Docker Compose — 教育系统完整服务编排
+# Java后端 + Python Agent + Vue前端(Nginx) + MySQL + PostgreSQL + Redis
+#
+# 使用前先构建前端:
+#   cd frontend && npm install && npm run build
+# 然后:
+#   docker-compose up -d
+# ============================================================
 
 services:
 
-  # ==================== Nginx反向代理 ====================
+  # ==================== Nginx 反向代理 + Vue 前端 ====================
   nginx:
     image: nginx:alpine
     container_name: edu-nginx
@@ -11,6 +18,7 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
     depends_on:
       - java-backend
       - agent-service
@@ -18,7 +26,7 @@ services:
     networks:
       - edu-network
 
-  # ==================== Java教育系统后端 ====================
+  # ==================== Java 教育系统后端 ====================
   java-backend:
     build:
       context: ./javaarea
@@ -29,14 +37,11 @@ services:
     environment:
       - SPRING_PROFILES_ACTIVE=prod
       - JAVA_OPTS=-Xms256m -Xmx512m -Djava.net.preferIPv4Stack=true
-      # 数据库
       - DB_HOST=mysql
       - DB_USER=edu_agent
       - DB_PASSWORD=edu_agent_password
-      # Redis
       - REDIS_HOST=redis
       - REDIS_PASSWORD=
-      # Agent服务
       - AGENT_SERVICE_URL=http://agent-service:8000
       - AGENT_SERVICE_KEY=internal-agent-key-2024
       - AGENT_TIMEOUT=10000
@@ -57,7 +62,7 @@ services:
     networks:
       - edu-network
 
-  # ==================== Python Agent服务 ====================
+  # ==================== Python Agent 服务 ====================
   agent-service:
     build:
       context: .
@@ -70,7 +75,6 @@ services:
       - DEBUG=false
       - LOG_LEVEL=INFO
       - PORT=8000
-      # PostgreSQL配置
       - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=agent_db
@@ -78,14 +82,11 @@ services:
       - DB_PASSWORD=agent_password
       - DB_POOL_SIZE=10
       - DB_MAX_OVERFLOW=20
-      # Redis配置
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
-      # 安全配置
       - SECRET_KEY=your-secret-key-change-in-production
       - AGENT_SERVICE_KEY=internal-agent-key-2024
-      # CORS配置
       - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
     volumes:
       - agent-uploads:/app/uploads
@@ -105,7 +106,7 @@ services:
     networks:
       - edu-network
 
-  # ==================== MySQL数据库 (Java端) ====================
+  # ==================== MySQL 数据库 (Java端) ====================
   mysql:
     image: mysql:8.0
     container_name: edu-mysql
@@ -129,7 +130,7 @@ services:
     networks:
       - edu-network
 
-  # ==================== PostgreSQL数据库 (Agent端) ====================
+  # ==================== PostgreSQL 数据库 (Agent端) ====================
   postgres:
     image: postgres:15-alpine
     container_name: agent-postgres
@@ -150,7 +151,7 @@ services:
     networks:
       - edu-network
 
-  # ==================== Redis缓存 (共享) ====================
+  # ==================== Redis 缓存 (共享) ====================
   redis:
     image: redis:7-alpine
     container_name: edu-redis
@@ -167,7 +168,6 @@ services:
     networks:
       - edu-network
 
-# ==================== 卷定义 ====================
 volumes:
   mysql-data:
   postgres-data:
@@ -175,7 +175,6 @@ volumes:
   agent-uploads:
   agent-logs:
 
-# ==================== 网络定义 ====================
 networks:
   edu-network:
     driver: bridge

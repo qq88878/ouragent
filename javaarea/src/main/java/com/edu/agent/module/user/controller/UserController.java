@@ -1,4 +1,4 @@
-package com.edu.agent.module.user.controller;
+﻿package com.edu.agent.module.user.controller;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.edu.agent.common.result.Result;
@@ -16,33 +16,31 @@ public class UserController {
 
     @GetMapping("/me")
     public Result<UserDTO> getCurrentUser() {
-        // TODO: 阶段一 - 调用userService.getCurrentUser()
-        throw new UnsupportedOperationException("Not implemented yet");
+        return Result.success(userService.getCurrentUser());
     }
 
     @PutMapping("/me")
     public Result<Void> updateCurrentUser(@RequestBody UserDTO dto) {
-        // TODO: 阶段一 - 获取当前用户ID并调用userService.updateUser()
-        throw new UnsupportedOperationException("Not implemented yet");
+        UserDTO current = userService.getCurrentUser();
+        userService.updateUser(current.getId(), dto);
+        return Result.success();
     }
 
     @GetMapping("/")
     public Result<IPage<UserDTO>> listUsers(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "10") int size) {
-        // TODO: 阶段一 - 需要ADMIN角色，调用userService.listUsers()
-        throw new UnsupportedOperationException("Not implemented yet");
+        return Result.success(userService.listUsers(page, size));
     }
 
     @GetMapping("/{id}")
     public Result<UserDTO> getUserById(@PathVariable Long id) {
-        // TODO: 阶段一 - 需要ADMIN角色，调用userService.getUserById()
-        throw new UnsupportedOperationException("Not implemented yet");
+        return Result.success(userService.getUserById(id));
     }
 
     @PutMapping("/{id}/status")
     public Result<Void> updateStatus(@PathVariable Long id, @RequestParam Integer status) {
-        // TODO: 阶段一 - 需要ADMIN角色，调用userService.updateStatus()
-        throw new UnsupportedOperationException("Not implemented yet");
+        userService.updateStatus(id, status);
+        return Result.success();
     }
 }
