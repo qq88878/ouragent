@@ -14,13 +14,13 @@ public class StudyRecordDTO {
 
     private String courseName;
 
-    private String studyType;
+    private Long sessionId;
 
-    private Integer durationMinutes;
+    private Integer duration;  // seconds
 
-    private BigDecimal score;
+    private Integer interactionCount;
 
-    private String contentSummary;
+    private String summary;
 
     private LocalDateTime createTime;
 }

@@ -23,8 +23,7 @@ public class ChatController {
     // TODO phase 3: get current user id from SecurityContext
 
     @PostMapping("/sessions")
-    public Result<ChatSessionDTO> createSession(@RequestParam(required = false) Long courseId,
-                                                @RequestParam(defaultValue = "GENERAL") String sessionType) {
+    public Result<ChatSessionDTO> createSession(@RequestParam(required = false) Long courseId) {
         // TODO phase 3: extract userId from auth context, call chatService.createSession
         throw new UnsupportedOperationException("Not implemented yet - phase 3");
     }

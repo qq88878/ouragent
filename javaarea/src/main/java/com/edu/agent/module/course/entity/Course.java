@@ -16,5 +16,4 @@ public class Course extends BaseEntity {
     private String category;
     private String difficulty;  // BEGINNER / INTERMEDIATE / ADVANCED
     private Integer status;     // 1=published, 0=draft
-    private Integer studentCount;
 }

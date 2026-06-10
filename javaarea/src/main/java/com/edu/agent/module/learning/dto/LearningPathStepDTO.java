@@ -15,11 +15,7 @@ public class LearningPathStepDTO {
 
     private String description;
 
-    private String stepType;
+    private Long knowledgeBaseId;
 
-    private BigDecimal estimatedHours;
-
-    private String status;
-
-    private String knowledgeIds;
+    private Integer status;  // 0=pending, 1=in_progress, 2=completed
 }

@@ -10,9 +10,6 @@ import lombok.EqualsAndHashCode;
 @TableName("chat_session")
 public class ChatSession extends BaseEntity {
     private Long userId;
-    private String title;
-    private String sessionType;  // GENERAL / LEARNING / EVALUATION
     private Long courseId;
-    private Integer status;      // 1=active, 0=closed
-    private Integer messageCount;
+    private String title;
 }

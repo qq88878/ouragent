@@ -20,38 +20,6 @@ from v3.src.utils.config import get_config
 config = get_config(env_file=str(project_root / "config" / ".env"))
 mimo_api_key = config.get("MIMO_API_KEY")
 
-class WeatherTool(Tool):
-    """天气查询工具示例"""
-
-    def __init__(self):
-        super().__init__(
-            name="weather",
-            description="Get weather information for a location",
-            parameters={
-                "type": "object",
-                "properties": {
-                    "location": {
-                        "type": "string",
-                        "description": "Location name (e.g., 'Beijing', 'New York')"
-                    }
-                },
-                "required": ["location"]
-            }
-        )
-
-    def execute(self, location: str = "", **kwargs) -> Any:
-        """执行天气查询（示例）"""
-        # 这里只是示例，实际应该调用天气API
-        weather_data = {
-            "location": location,
-            "temperature": 22,
-            "condition": "Sunny",
-            "humidity": 65,
-            "wind": "10 km/h"
-        }
-        return weather_data
-
-
 class TranslationTool(Tool):
     """翻译工具示例"""
 

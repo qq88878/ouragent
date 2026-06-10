@@ -5,34 +5,15 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-
 @Data
 @EqualsAndHashCode(callSuper = true)
 @TableName("student_profile")
 public class StudentProfile extends BaseEntity {
-
     private Long userId;
-
-    /** BEGINNER / INTERMEDIATE / ADVANCED */
-    private String knowledgeLevel;
-
-    /** VISUAL / READING / HANDS_ON / MIXED */
-    private String learningStyle;
-
-    /** JSON array */
-    private String strongPoints;
-
-    /** JSON array */
-    private String weakPoints;
-
-    /** JSON array */
+    private String learningStyle;  // VISUAL / AUDITORY / READING / KINESTHETIC
+    private String strengths;
+    private String weaknesses;
     private String interests;
-
-    private BigDecimal totalStudyHours;
-
-    private Integer profileVersion;
-
-    private LocalDateTime lastAssessmentTime;
+    private String gradeLevel;
+    private String preferences;  // JSON
 }

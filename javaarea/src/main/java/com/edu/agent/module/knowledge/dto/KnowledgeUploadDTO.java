@@ -8,6 +8,7 @@ import jakarta.validation.constraints.NotNull;
 public class KnowledgeUploadDTO {
     @NotNull
     private Long courseId;
-    private String title;
+    private String name;
+    private String description;
     // Note: file is handled via MultipartFile in controller, not in this DTO
 }

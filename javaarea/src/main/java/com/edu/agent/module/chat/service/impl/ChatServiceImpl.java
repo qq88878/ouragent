@@ -24,10 +24,10 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
     private AgentServiceClient agentServiceClient;
 
     @Override
-    public ChatSessionDTO createSession(Long userId, Long courseId, String sessionType) {
+    public ChatSessionDTO createSession(Long userId, Long courseId) {
         // TODO phase 3: create session record
-        //  1. build ChatSession entity with userId, courseId, sessionType
-        //  2. set default title, status=1, messageCount=0
+        //  1. build ChatSession entity with userId, courseId
+        //  2. set default title
         //  3. save to DB
         //  4. convert to ChatSessionDTO and return
         throw new UnsupportedOperationException("Not implemented yet - phase 3");

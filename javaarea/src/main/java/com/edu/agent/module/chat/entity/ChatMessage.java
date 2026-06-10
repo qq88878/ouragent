@@ -12,6 +12,5 @@ public class ChatMessage extends BaseEntity {
     private Long sessionId;
     private String role;      // USER / ASSISTANT / SYSTEM
     private String content;
-    private String agentId;
     private Integer tokenCount;
 }

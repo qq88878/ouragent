@@ -22,9 +22,7 @@ public class LearningPathDTO {
 
     private Integer completedSteps;
 
-    private String status;
-
-    private String generatedBy;
+    private Integer status;  // 0=in_progress, 1=completed, 2=abandoned
 
     private List<LearningPathStepDTO> steps;
 

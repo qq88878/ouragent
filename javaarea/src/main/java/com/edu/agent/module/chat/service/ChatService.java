@@ -10,7 +10,7 @@ import java.util.List;
 
 public interface ChatService {
 
-    ChatSessionDTO createSession(Long userId, Long courseId, String sessionType);
+    ChatSessionDTO createSession(Long userId, Long courseId);
 
     List<ChatSessionDTO> listSessions(Long userId);
 

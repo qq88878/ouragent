@@ -15,6 +15,5 @@ public class CourseDTO {
     private String category;
     private String difficulty;
     private Integer status;
-    private Integer studentCount;
     private LocalDateTime createTime;
 }

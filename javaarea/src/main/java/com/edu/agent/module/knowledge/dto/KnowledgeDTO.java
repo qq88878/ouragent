@@ -8,12 +8,11 @@ import java.time.LocalDateTime;
 public class KnowledgeDTO {
     private Long id;
     private Long courseId;
-    private String title;
+    private String name;
+    private String description;
     private String filePath;
     private String fileType;
     private Long fileSize;
-    private String processingStatus;
-    private Long uploadedBy;
-    private String uploadedByName;
+    private Integer status;  // 0=pending, 1=indexed, 2=failed
     private LocalDateTime createTime;
 }
