@@ -1,0 +1,132 @@
+"""
+LLM 调用抽象层
+支持多种 LLM 提供商（星火、OpenAI 兼容接口）
+"""
+
+import httpx
+import json
+import asyncio
+from abc import ABC, abstractmethod
+from typing import List, Dict, Any, Optional
+
+from config.settings import settings
+
+
+class LLMProvider(ABC):
+    """LLM 提供商基类"""
+
+    @abstractmethod
+    async def chat(self, messages: List[Dict[str, str]], **kwargs) -> str:
+        """
+        发送对话请求
+
+        Args:
+            messages: [{"role": "system/user/assistant", "content": "..."}]
+
+        Returns:
+            LLM 回复文本
+        """
+        pass
+
+
+class SparkProvider(LLMProvider):
+    """
+    星火大模型（讯飞星火）
+    使用 HTTP 接口调用，兼容星火 Lite/Pro/Max
+    """
+
+    def __init__(self):
+        self.api_key = settings.SPARK_API_KEY
+        self.api_secret = settings.SPARK_API_SECRET
+        self.app_id = settings.SPARK_APP_ID
+        self.model = settings.SPARK_MODEL
+        self.base_url = settings.SPARK_BASE_URL
+
+    async def chat(self, messages: List[Dict[str, str]], **kwargs) -> str:
+        """调用星火 API"""
+        if not self.api_key:
+            raise ValueError("SPARK_API_KEY 未配置")
+
+        # 星火 HTTP API 格式
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": kwargs.get("max_tokens", 2048),
+            "temperature": kwargs.get("temperature", 0.7),
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                headers=headers,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            return data["choices"][0]["message"]["content"]
+
+
+class OpenAIProvider(LLMProvider):
+    """
+    OpenAI 兼容接口
+    支持 OpenAI、DeepSeek、以及其他兼容接口
+    """
+
+    def __init__(self):
+        self.api_key = settings.LLM_API_KEY
+        self.model = settings.LLM_MODEL
+        self.base_url = settings.LLM_BASE_URL
+
+    async def chat(self, messages: List[Dict[str, str]], **kwargs) -> str:
+        """调用 OpenAI 兼容 API"""
+        if not self.api_key:
+            raise ValueError("LLM_API_KEY 未配置")
+
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": kwargs.get("max_tokens", 2048),
+            "temperature": kwargs.get("temperature", 0.7),
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                headers=headers,
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            return data["choices"][0]["message"]["content"]
+
+
+def create_llm_provider(provider: Optional[str] = None) -> LLMProvider:
+    """
+    根据配置创建 LLM 提供商实例
+
+    Args:
+        provider: 提供商名称，可选 "spark" 或 "openai"。默认从配置读取。
+
+    Returns:
+        LLMProvider 实例
+    """
+    provider = provider or settings.LLM_PROVIDER
+
+    if provider == "spark":
+        return SparkProvider()
+    elif provider == "openai":
+        return OpenAIProvider()
+    else:
+        raise ValueError(f"不支持的 LLM 提供商: {provider}")
