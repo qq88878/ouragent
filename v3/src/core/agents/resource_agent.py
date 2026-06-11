@@ -26,6 +26,11 @@ class ResourceAgent(BaseAgent):
     name = "resource_agent"
     description = "生成教学资源：练习题、思维导图、学习摘要"
 
+    # 支持的任务类型
+    TASK_GENERATE_QUESTIONS = "generate_questions"
+    TASK_GENERATE_MINDMAP = "generate_mindmap"
+    TASK_GENERATE_SUMMARY = "generate_summary"
+
     @property
     def system_prompt(self) -> str:
         return """你是一位资深教育内容创作者。
@@ -36,6 +41,35 @@ class ResourceAgent(BaseAgent):
 3. 学习摘要：简洁易懂，突出重点
 
 所有内容必须基于提供的知识库，不要编造。"""
+
+    async def execute(self, task_type: str, **kwargs) -> Dict[str, Any]:
+        """
+        统一任务执行接口
+
+        Args:
+            task_type: "generate_questions" | "generate_mindmap" | "generate_summary"
+            **kwargs: 对应方法的参数
+        """
+        if task_type == self.TASK_GENERATE_QUESTIONS:
+            return await self.generate_questions(
+                topic=kwargs.get("topic", ""),
+                knowledge_ids=kwargs.get("knowledge_ids"),
+                difficulty=kwargs.get("difficulty", "medium"),
+                count=kwargs.get("count", 5),
+                question_type=kwargs.get("question_type", "mixed"),
+            )
+        elif task_type == self.TASK_GENERATE_MINDMAP:
+            return await self.generate_mindmap(
+                topic=kwargs.get("topic", ""),
+                knowledge_ids=kwargs.get("knowledge_ids"),
+            )
+        elif task_type == self.TASK_GENERATE_SUMMARY:
+            return await self.generate_summary(
+                topic=kwargs.get("topic", ""),
+                knowledge_ids=kwargs.get("knowledge_ids"),
+            )
+        else:
+            raise ValueError(f"ResourceAgent 不支持任务类型: {task_type}")
 
     async def generate_questions(
         self,
@@ -110,7 +144,6 @@ class ResourceAgent(BaseAgent):
                 context = "\n\n".join(r["content"] for r in results)
             except Exception as e:
                 logger.warning("知识检索失败: %s", e)
-            context = "\n\n".join(r["content"] for r in results)
 
         prompt = f"""请为以下主题生成思维导图结构。
 
@@ -159,7 +192,6 @@ class ResourceAgent(BaseAgent):
                 context = "\n\n".join(r["content"] for r in results)
             except Exception as e:
                 logger.warning("知识检索失败: %s", e)
-            context = "\n\n".join(r["content"] for r in results)
 
         prompt = f"""请为以下主题生成简洁的学习摘要。
 

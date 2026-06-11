@@ -25,6 +25,9 @@ class PlannerAgent(BaseAgent):
     name = "planner_agent"
     description = "生成个性化学习路径和学习计划"
 
+    # 支持的任务类型
+    TASK_GENERATE_PATH = "generate_path"
+
     @property
     def system_prompt(self) -> str:
         return """你是一位教育规划专家，擅长制定个性化学习计划。
@@ -37,6 +40,24 @@ class PlannerAgent(BaseAgent):
 5. 设置阶段性检查点
 
 输出必须是结构化的 JSON 格式。"""
+
+    async def execute(self, task_type: str, **kwargs) -> Dict[str, Any]:
+        """
+        统一任务执行接口
+
+        Args:
+            task_type: "generate_path"
+            **kwargs: generate_path(student_profile, course_title, course_knowledge, goal)
+        """
+        if task_type == self.TASK_GENERATE_PATH:
+            return await self.generate_path(
+                student_profile=kwargs.get("student_profile", {}),
+                course_title=kwargs.get("course_title", ""),
+                course_knowledge=kwargs.get("course_knowledge", []),
+                goal=kwargs.get("goal", "掌握课程核心知识"),
+            )
+        else:
+            raise ValueError(f"PlannerAgent 不支持任务类型: {task_type}")
 
     async def generate_path(
         self,

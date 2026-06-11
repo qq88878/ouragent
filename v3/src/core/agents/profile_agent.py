@@ -25,6 +25,9 @@ class ProfileAgent(BaseAgent):
     name = "profile_agent"
     description = "分析学生学习特征、识别薄弱点、生成学习画像"
 
+    # 支持的任务类型
+    TASK_ANALYZE = "analyze"
+
     @property
     def system_prompt(self) -> str:
         return """你是一位教育心理学专家，专注于学习者画像分析。
@@ -36,6 +39,23 @@ class ProfileAgent(BaseAgent):
 4. 适合的学习策略
 
 输出必须是结构化的 JSON 格式。"""
+
+    async def execute(self, task_type: str, **kwargs) -> Dict[str, Any]:
+        """
+        统一任务执行接口
+
+        Args:
+            task_type: "analyze"
+            **kwargs: analyze(chat_history, study_records, current_profile)
+        """
+        if task_type == self.TASK_ANALYZE:
+            return await self.analyze(
+                chat_history=kwargs.get("chat_history", []),
+                study_records=kwargs.get("study_records", []),
+                current_profile=kwargs.get("current_profile"),
+            )
+        else:
+            raise ValueError(f"ProfileAgent 不支持任务类型: {task_type}")
 
     async def analyze(
         self,

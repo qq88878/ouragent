@@ -93,7 +93,7 @@ class KnowledgeIngestRequest(BaseModel):
     knowledge_id: int = Field(..., gt=0)
     course_id: int = Field(..., gt=0)
     content: str = Field(..., min_length=1)
-    file_type: Literal["txt", "md", "pdf", "docx"] = "txt"
+    file_type: Literal["txt", "md", "pdf", "docx", "pptx", "xlsx", "html"] = "txt"
 
 
 class KnowledgeIngestResponse(BaseModel):
@@ -609,5 +609,220 @@ async def list_user_sessions(
     try:
         sessions = await orchestrator.list_user_sessions(user_id, limit)
         return {"user_id": user_id, "sessions": sessions, "count": len(sessions)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 学习进度接口 ====================
+
+
+class CompleteStepRequest(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=100)
+    course_id: int = Field(..., gt=0)
+    step_id: int = Field(..., ge=0)
+    duration_minutes: int = Field(default=0, ge=0)
+
+
+class UpdateMasteryRequest(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=100)
+    knowledge_id: int = Field(..., gt=0)
+    score_delta: float = Field(..., ge=-100, le=100)
+
+
+class RecordAnswerRequest(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=100)
+    question_id: str = Field(..., min_length=1)
+    is_correct: bool
+    knowledge_id: Optional[int] = Field(None, gt=0)
+
+
+@app.get("/agent/progress/{user_id}/course/{course_id}")
+async def get_course_progress(
+    user_id: str,
+    course_id: int,
+    _: dict = Depends(get_current_user),
+):
+    """
+    获取用户在某课程的学习进度
+
+    Java 调用:
+      GET /agent/progress/{user_id}/course/{course_id}
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    try:
+        progress = await orchestrator.get_course_progress(user_id, course_id)
+        return progress
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/agent/progress/complete-step")
+async def complete_learning_step(
+    request: CompleteStepRequest,
+    _: dict = Depends(get_current_user),
+):
+    """
+    完成一个学习步骤
+
+    Java 调用:
+      POST /agent/progress/complete-step
+      {"user_id": "123", "course_id": 1, "step_id": 0, "duration_minutes": 30}
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    try:
+        progress = await orchestrator.complete_learning_step(
+            user_id=request.user_id,
+            course_id=request.course_id,
+            step_id=request.step_id,
+            duration_minutes=request.duration_minutes,
+        )
+        return progress
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/agent/mastery/{user_id}")
+async def get_knowledge_mastery(
+    user_id: str,
+    knowledge_ids: Optional[str] = None,
+    _: dict = Depends(get_current_user),
+):
+    """
+    获取知识点掌握度
+
+    Java 调用:
+      GET /agent/mastery/{user_id}?knowledge_ids=1,2,3
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    try:
+        ids = None
+        if knowledge_ids:
+            ids = [int(kid.strip()) for kid in knowledge_ids.split(",")]
+        mastery = await orchestrator.get_knowledge_mastery(user_id, ids)
+        # 将 int key 转为 string（JSON 要求）
+        return {"user_id": user_id, "mastery": {str(k): v for k, v in mastery.items()}}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/agent/mastery/update")
+async def update_knowledge_mastery(
+    request: UpdateMasteryRequest,
+    _: dict = Depends(get_current_user),
+):
+    """
+    更新知识点掌握度
+
+    Java 调用:
+      POST /agent/mastery/update
+      {"user_id": "123", "knowledge_id": 1, "score_delta": 5.0}
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    try:
+        new_score = await orchestrator.update_knowledge_mastery(
+            user_id=request.user_id,
+            knowledge_id=request.knowledge_id,
+            score_delta=request.score_delta,
+        )
+        return {"new_score": new_score, "status": "updated"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/agent/stats/{user_id}")
+async def get_learning_stats(
+    user_id: str,
+    _: dict = Depends(get_current_user),
+):
+    """
+    获取学习统计
+
+    Java 调用:
+      GET /agent/stats/{user_id}
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    try:
+        stats = await orchestrator.get_learning_stats(user_id)
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/agent/summary/{user_id}")
+async def get_learning_summary(
+    user_id: str,
+    _: dict = Depends(get_current_user),
+):
+    """
+    获取学习摘要（包含统计、薄弱点、建议）
+
+    Java 调用:
+      GET /agent/summary/{user_id}
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    try:
+        summary = await orchestrator.get_learning_summary(user_id)
+        return summary
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/agent/history/{user_id}")
+async def get_learning_history(
+    user_id: str,
+    limit: int = 20,
+    _: dict = Depends(get_current_user),
+):
+    """
+    获取学习历史记录
+
+    Java 调用:
+      GET /agent/history/{user_id}?limit=20
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    try:
+        history = await orchestrator.get_learning_history(user_id, limit)
+        return {"user_id": user_id, "history": history, "count": len(history)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/agent/answer/result")
+async def record_answer_result(
+    request: RecordAnswerRequest,
+    _: dict = Depends(get_current_user),
+):
+    """
+    记录答题结果
+
+    Java 调用:
+      POST /agent/answer/result
+      {"user_id": "123", "question_id": "q1", "is_correct": true, "knowledge_id": 1}
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    try:
+        result = await orchestrator.record_answer_result(
+            user_id=request.user_id,
+            question_id=request.question_id,
+            is_correct=request.is_correct,
+            knowledge_id=request.knowledge_id,
+        )
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

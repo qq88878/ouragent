@@ -25,6 +25,10 @@ class EvaluatorAgent(BaseAgent):
     name = "evaluator_agent"
     description = "评估学习效果、批改答案、提供反馈"
 
+    # 支持的任务类型
+    TASK_EVALUATE_ANSWER = "evaluate_answer"
+    TASK_ASSESS_PROGRESS = "assess_progress"
+
     @property
     def system_prompt(self) -> str:
         return """你是一位严格的教育评估专家。
@@ -40,6 +44,30 @@ class EvaluatorAgent(BaseAgent):
 - 准确性：概念是否正确
 - 逻辑性：推理是否合理
 - 表达：是否清晰"""
+
+    async def execute(self, task_type: str, **kwargs) -> Dict[str, Any]:
+        """
+        统一任务执行接口
+
+        Args:
+            task_type: "evaluate_answer" | "assess_progress"
+            **kwargs: 对应方法的参数
+        """
+        if task_type == self.TASK_EVALUATE_ANSWER:
+            return await self.evaluate_answer(
+                question=kwargs.get("question", ""),
+                student_answer=kwargs.get("student_answer", ""),
+                reference_answer=kwargs.get("reference_answer", ""),
+                knowledge_context=kwargs.get("knowledge_context", ""),
+            )
+        elif task_type == self.TASK_ASSESS_PROGRESS:
+            return await self.assess_progress(
+                student_id=kwargs.get("student_id", ""),
+                recent_records=kwargs.get("recent_records", []),
+                current_profile=kwargs.get("current_profile", {}),
+            )
+        else:
+            raise ValueError(f"EvaluatorAgent 不支持任务类型: {task_type}")
 
     async def evaluate_answer(
         self,

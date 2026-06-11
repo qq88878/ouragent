@@ -9,6 +9,7 @@ from ..memory.redis_client import get_redis, RedisClient
 from ..memory.session_manager import SessionManager
 from ..memory.conversation_memory import ConversationMemory
 from ..memory.profile_cache import ProfileCache, RAGCache
+from ..memory.learning_progress import LearningProgress
 from ..rag.rag_pipeline import RAGPipeline
 from ..tools.base import ToolRegistry
 from ..tools.retrieval import RetrievalTool
@@ -44,6 +45,7 @@ class Orchestrator:
         self._session_manager: Optional[SessionManager] = None
         self._profile_cache: Optional[ProfileCache] = None
         self._rag_cache: Optional[RAGCache] = None
+        self._learning_progress: Optional[LearningProgress] = None
 
         # 注册工具
         self.tools = ToolRegistry()
@@ -71,12 +73,17 @@ class Orchestrator:
             self._session_manager = SessionManager(self._redis_client)
             self._profile_cache = ProfileCache(self._redis_client)
             self._rag_cache = RAGCache(self._redis_client)
+            self._learning_progress = LearningProgress(self._redis_client)
             logger.info("Redis 记忆系统初始化完成")
         return self._redis_client
 
     @property
     def session_manager(self) -> SessionManager:
         return self._session_manager
+
+    @property
+    def learning_progress(self) -> LearningProgress:
+        return self._learning_progress
 
     @property
     def profile_cache(self) -> ProfileCache:
@@ -366,3 +373,127 @@ class Orchestrator:
         """列出用户的会话"""
         await self._ensure_redis()
         return await self._session_manager.list_user_sessions(user_id, limit)
+
+    # ==================== 学习进度管理 ====================
+
+    async def get_course_progress(
+        self,
+        user_id: str,
+        course_id: int,
+    ) -> Dict[str, Any]:
+        """获取用户在某课程的学习进度"""
+        await self._ensure_redis()
+        return await self._learning_progress.get_course_progress(user_id, course_id)
+
+    async def complete_learning_step(
+        self,
+        user_id: str,
+        course_id: int,
+        step_id: int,
+        duration_minutes: int = 0,
+    ) -> Dict[str, Any]:
+        """完成一个学习步骤"""
+        await self._ensure_redis()
+
+        # 更新步骤进度
+        progress = await self._learning_progress.complete_step(
+            user_id, course_id, step_id, duration_minutes,
+        )
+
+        # 更新学习时长统计
+        await self._learning_progress.add_study_time(user_id, duration_minutes)
+
+        # 记录学习历史
+        await self._learning_progress.add_history(user_id, {
+            "type": "step_completed",
+            "course_id": course_id,
+            "step_id": step_id,
+            "duration_minutes": duration_minutes,
+        })
+
+        return progress
+
+    async def get_knowledge_mastery(
+        self,
+        user_id: str,
+        knowledge_ids: Optional[List[int]] = None,
+    ) -> Dict[str, float]:
+        """获取知识点掌握度"""
+        await self._ensure_redis()
+        return await self._learning_progress.get_mastery(user_id, knowledge_ids)
+
+    async def update_knowledge_mastery(
+        self,
+        user_id: str,
+        knowledge_id: int,
+        score_delta: float,
+    ) -> float:
+        """更新知识点掌握度"""
+        await self._ensure_redis()
+
+        new_score = await self._learning_progress.update_mastery(
+            user_id, knowledge_id, score_delta,
+        )
+
+        # 记录历史
+        await self._learning_progress.add_history(user_id, {
+            "type": "mastery_updated",
+            "knowledge_id": knowledge_id,
+            "score_delta": score_delta,
+            "new_score": new_score,
+        })
+
+        return new_score
+
+    async def get_learning_stats(
+        self,
+        user_id: str,
+    ) -> Dict[str, Any]:
+        """获取学习统计"""
+        await self._ensure_redis()
+        return await self._learning_progress.get_stats(user_id)
+
+    async def get_learning_summary(
+        self,
+        user_id: str,
+    ) -> Dict[str, Any]:
+        """获取学习摘要（包含统计、薄弱点、建议）"""
+        await self._ensure_redis()
+        return await self._learning_progress.get_user_summary(user_id)
+
+    async def get_learning_history(
+        self,
+        user_id: str,
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
+        """获取学习历史记录"""
+        await self._ensure_redis()
+        return await self._learning_progress.get_history(user_id, limit)
+
+    async def record_answer_result(
+        self,
+        user_id: str,
+        question_id: str,
+        is_correct: bool,
+        knowledge_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """记录答题结果"""
+        await self._ensure_redis()
+
+        # 更新答题统计
+        await self._learning_progress.add_question_result(user_id, is_correct)
+
+        # 如果答错，降低知识点掌握度；答对，提高掌握度
+        if knowledge_id is not None:
+            delta = 5.0 if is_correct else -3.0
+            await self._learning_progress.update_mastery(user_id, knowledge_id, delta)
+
+        # 记录历史
+        await self._learning_progress.add_history(user_id, {
+            "type": "question_answered",
+            "question_id": question_id,
+            "is_correct": is_correct,
+            "knowledge_id": knowledge_id,
+        })
+
+        return {"recorded": True, "is_correct": is_correct}
