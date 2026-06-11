@@ -1,9 +1,9 @@
-# IDEA configuration
-.idea/
-*.iml
+# Git
+.git
+.gitignore
 
 # Python
-__pycache__/
+__pycache__
 *.py[cod]
 *$py.class
 *.so
@@ -29,28 +29,30 @@ venv/
 env/
 ENV/
 
-# VS Code
+# IDE
+.idea/
 .vscode/
-
-# Environment (敏感信息)
-.env
-.env.local
-.env.*.local
-config/.env
+*.swp
+*.swo
 
 # Logs
 logs/*.log
-*.log
 
-# Data
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Data (不要打包运行时数据)
 data/vector_store.json
 data/*.db
 
-# Test
+# Tests
+tests/
 .pytest_cache/
 htmlcov/
-.coverage
 
-# OS
-.DS_Store
-Thumbs.db
+# Documentation
+docs/
+*.md
+!README.md

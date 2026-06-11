@@ -113,12 +113,14 @@ X-Service-Key: <key>
 | `context` | object | 否 | 上下文信息 |
 | `context.knowledge_ids` | int[] | 否 | 限定 RAG 检索范围的知识库 ID 列表 |
 | `context.student_profile` | object | 否 | 学生画像，用于个性化回答 |
-| `context.history` | array | 否 | 对话历史 `[{"role":"user","content":"..."}]` |
+| `context.history` | array | 否 | 对话历史（如果提供 session_id，优先使用 Redis 中的历史） |
+| `session_id` | string | 否 | 会话 ID，用于记忆对话历史 |
 
 **响应：**
 ```json
 {
   "response": "Python列表是...",
+  "session_id": "xxx",
   "status": "success"
 }
 ```
@@ -539,7 +541,163 @@ X-Service-Key: <key>
 
 ---
 
-## 6. Java AgentServiceClient 方法映射
+## 6. 会话管理接口（Redis 记忆）
+
+### 6.1 创建会话
+
+```
+POST /agent/sessions
+Content-Type: application/json
+X-Service-Key: <key>
+```
+
+**请求体：**
+```json
+{
+  "user_id": "123",
+  "course_id": 1
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `user_id` | string | 是 | 用户 ID |
+| `course_id` | int | 否 | 课程 ID |
+
+**响应：**
+```json
+{
+  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "status": "created"
+}
+```
+
+**说明：** 创建会话后，后续对话请求携带 `session_id` 即可自动记忆对话历史。
+
+---
+
+### 6.2 获取会话信息
+
+```
+GET /agent/sessions/{session_id}
+X-Service-Key: <key>
+```
+
+**响应：**
+```json
+{
+  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "user_id": "123",
+  "course_id": 1,
+  "created_at": "2026-06-11T10:30:00",
+  "last_active": "2026-06-11T11:45:00",
+  "message_count": 12
+}
+```
+
+---
+
+### 6.3 删除会话
+
+```
+DELETE /agent/sessions/{session_id}
+X-Service-Key: <key>
+```
+
+**响应：**
+```json
+{
+  "status": "deleted",
+  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+**说明：** 同时清除该会话的所有对话历史。
+
+---
+
+### 6.4 获取对话历史
+
+```
+GET /agent/sessions/{session_id}/history?limit=50
+X-Service-Key: <key>
+```
+
+**查询参数：**
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `limit` | int | 否 | 返回条数，默认 50 |
+
+**响应：**
+```json
+{
+  "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "messages": [
+    {"role": "user", "content": "什么是Python列表？"},
+    {"role": "assistant", "content": "Python列表是..."}
+  ],
+  "count": 2
+}
+```
+
+---
+
+### 6.5 列出用户会话
+
+```
+GET /agent/users/{user_id}/sessions?limit=20
+X-Service-Key: <key>
+```
+
+**响应：**
+```json
+{
+  "user_id": "123",
+  "sessions": [
+    {
+      "session_id": "a1b2c3d4-...",
+      "user_id": "123",
+      "course_id": 1,
+      "created_at": "2026-06-11T10:30:00",
+      "last_active": "2026-06-11T11:45:00",
+      "message_count": 12
+    }
+  ],
+  "count": 1
+}
+```
+
+---
+
+### 6.6 使用会话的对话示例
+
+**第一步：创建会话**
+```json
+POST /agent/sessions
+{"user_id": "123", "course_id": 1}
+→ {"session_id": "abc-123", "status": "created"}
+```
+
+**第二步：带 session_id 对话**
+```json
+POST /agent/chat
+{"message": "什么是Python列表？", "session_id": "abc-123"}
+→ {"response": "Python列表是...", "session_id": "abc-123", "status": "success"}
+```
+
+**第三步：继续对话（自动携带历史）**
+```json
+POST /agent/chat
+{"message": "它和元组有什么区别？", "session_id": "abc-123"}
+→ {"response": "Python列表和元组的主要区别...", "session_id": "abc-123", "status": "success"}
+```
+
+**说明：** 携带 `session_id` 后，系统会自动从 Redis 加载最近 10 条对话历史作为上下文，无需手动传递 `history`。
+
+---
+
+## 7. Java AgentServiceClient 方法映射
 
 | Java 方法 | HTTP 接口 | 说明 |
 |-----------|----------|------|
@@ -547,6 +705,12 @@ X-Service-Key: <key>
 | `getStatus()` | `GET /agent/status` | 获取 Agent 运行状态 |
 | `chat(message)` | `POST /agent/chat` | `{"message": message}` |
 | `chatWithContext(message, context)` | `POST /agent/chat/context` | `{"message": message, "context": context}` |
+| `chatWithSession(message, sessionId)` | `POST /agent/chat` | `{"message": message, "session_id": sessionId}` |
+| `createSession(userId, courseId)` | `POST /agent/sessions` | 创建会话 |
+| `getSession(sessionId)` | `GET /agent/sessions/{sessionId}` | 获取会话信息 |
+| `deleteSession(sessionId)` | `DELETE /agent/sessions/{sessionId}` | 删除会话 |
+| `getConversationHistory(sessionId, limit)` | `GET /agent/sessions/{sessionId}/history` | 获取对话历史 |
+| `listUserSessions(userId, limit)` | `GET /agent/users/{userId}/sessions` | 列出用户会话 |
 | `ingestKnowledge(knowledgeId, courseId, content, fileType)` | `POST /agent/knowledge/ingest-text` | 文本入库 |
 | `getKnowledgeStatus(knowledgeId)` | `GET /agent/knowledge/status` | 查知识库状态 |
 | `generateLearningPath(studentProfile, courseId, goal)` | `POST /agent/plan` | 生成学习路径 |
@@ -652,3 +816,33 @@ private HttpHeaders createHeaders() {
 | `EMBEDDING_API_KEY` | — | Embedding API Key（可选，不配则降级为 TF-IDF） |
 | `EMBEDDING_BASE_URL` | — | Embedding API 地址 |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding 模型 |
+| `REDIS_HOST` | `localhost` | Redis 主机 |
+| `REDIS_PORT` | `6379` | Redis 端口 |
+| `REDIS_PASSWORD` | — | Redis 密码（可选） |
+| `REDIS_DB` | `0` | Redis 数据库编号 |
+
+---
+
+## 9. Redis 记忆系统说明
+
+### 记忆功能
+
+| 功能 | 说明 | TTL |
+|------|------|-----|
+| 对话历史 | 每个会话的消息存储在 Redis List 中 | 7 天 |
+| 用户画像缓存 | 分析结果缓存，避免重复调用 LLM | 24 小时 |
+| RAG 检索缓存 | 相同查询的检索结果缓存 | 1 小时 |
+| 会话元数据 | 会话创建时间、用户ID、消息计数等 | 7 天 |
+
+### 使用流程
+
+1. **创建会话** → 获得 `session_id`
+2. **对话时携带 `session_id`** → 自动加载历史、保存新消息
+3. **查询历史** → 可随时查看会话内的所有消息
+4. **删除会话** → 同时清除所有关联数据
+
+### 缓存策略
+
+- **对话历史**：自动保存，无需手动管理
+- **用户画像**：首次分析后缓存，后续请求直接返回缓存（可传 `force_refresh` 强制刷新）
+- **RAG 结果**：相同 query + knowledge_ids 组合会缓存 1 小时

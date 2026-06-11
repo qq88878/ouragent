@@ -1,0 +1,80 @@
+# ============================================================
+# Agent Service - Docker Compose
+# 一键启动: docker-compose up -d
+# ============================================================
+
+version: '3.8'
+
+services:
+  # --- Agent Service ---
+  agent-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agent-service
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # 应用配置
+      - APP_ENV=production
+      - DEBUG=false
+      - LOG_LEVEL=INFO
+
+      # LLM 配置
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
+      - LLM_MODEL=${LLM_MODEL:-gpt-3.5-turbo}
+
+      # Embedding 配置
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+
+      # Redis 配置
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+
+      # 安全配置
+      - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
+      - AGENT_SERVICE_KEY=${AGENT_SERVICE_KEY:-change-this-in-production}
+    volumes:
+      - agent-data:/app/data
+      - agent-logs:/app/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - agent-network
+
+  # --- Redis ---
+  redis:
+    image: redis:7-alpine
+    container_name: agent-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agent-network
+
+volumes:
+  agent-data:
+    driver: local
+  agent-logs:
+    driver: local
+  redis-data:
+    driver: local
+
+networks:
+  agent-network:
+    driver: bridge

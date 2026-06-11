@@ -3,14 +3,17 @@
 """
 
 import asyncio
+import logging
 from sqlalchemy import text
 
 from .database import engine, init_db
 
+logger = logging.getLogger(__name__)
+
 
 async def init_database():
     """初始化数据库"""
-    print("🗄️  正在初始化数据库...")
+    logger.info("正在初始化数据库...")
 
     # 创建所有表
     await init_db()
@@ -28,7 +31,7 @@ async def init_database():
             CREATE INDEX IF NOT EXISTS idx_user_role ON user(role);
         """))
 
-    print("✅ 数据库初始化完成")
+    logger.info("数据库初始化完成")
 
 
 if __name__ == "__main__":

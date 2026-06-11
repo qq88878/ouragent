@@ -1,17 +1,24 @@
-.PHONY: help install dev test lint format clean docs run demo
+.PHONY: help install dev test lint format clean docs run demo docker docker-up docker-down docker-logs
 
 # 默认目标
 help:
 	@echo "Available commands:"
-	@echo "  install     - Install dependencies"
-	@echo "  dev         - Install development dependencies"
-	@echo "  test        - Run tests"
-	@echo "  lint        - Run linter"
-	@echo "  format      - Format code"
-	@echo "  clean       - Clean temporary files"
-	@echo "  docs        - Generate documentation"
-	@echo "  run         - Run the application"
-	@echo "  demo        - Run demo mode"
+	@echo "  install       - Install dependencies"
+	@echo "  dev           - Install development dependencies"
+	@echo "  test          - Run tests"
+	@echo "  lint          - Run linter"
+	@echo "  format        - Format code"
+	@echo "  clean         - Clean temporary files"
+	@echo "  docs          - Generate documentation"
+	@echo "  run           - Run the application"
+	@echo "  demo          - Run demo mode"
+	@echo ""
+	@echo "Docker commands:"
+	@echo "  docker        - Build Docker image"
+	@echo "  docker-up     - Start services with docker-compose"
+	@echo "  docker-down   - Stop services"
+	@echo "  docker-logs   - View service logs"
+	@echo "  docker-restart - Restart services"
 
 # 安装依赖
 install:
@@ -106,3 +113,27 @@ stats:
 	@echo ""
 	@echo "Test coverage:"
 	pytest --cov=src --cov-report=term-missing | tail -20
+
+# Docker 命令
+docker:
+	docker build -t agent-service .
+
+docker-up:
+	docker-compose up -d
+
+docker-down:
+	docker-compose down
+
+docker-logs:
+	docker-compose logs -f agent-service
+
+docker-restart:
+	docker-compose restart agent-service
+
+docker-build:
+	docker-compose build --no-cache
+
+# 创建 .env 文件
+env:
+	cp config/.env.example config/.env
+	@echo "Created config/.env from template. Please edit it with your settings."

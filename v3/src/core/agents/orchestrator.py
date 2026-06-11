@@ -5,6 +5,10 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
+from ..memory.redis_client import get_redis, RedisClient
+from ..memory.session_manager import SessionManager
+from ..memory.conversation_memory import ConversationMemory
+from ..memory.profile_cache import ProfileCache, RAGCache
 from ..rag.rag_pipeline import RAGPipeline
 from ..tools.base import ToolRegistry
 from ..tools.retrieval import RetrievalTool
@@ -35,6 +39,12 @@ class Orchestrator:
         self.llm = llm
         self.rag = rag_pipeline
 
+        # Redis 记忆组件（懒初始化）
+        self._redis_client: Optional[RedisClient] = None
+        self._session_manager: Optional[SessionManager] = None
+        self._profile_cache: Optional[ProfileCache] = None
+        self._rag_cache: Optional[RAGCache] = None
+
         # 注册工具
         self.tools = ToolRegistry()
         self.tools.register(RetrievalTool(rag_pipeline))
@@ -53,42 +63,85 @@ class Orchestrator:
 
         logger.info("Orchestrator 初始化完成: 4 agents, %d tools", len(self.tools.list_tools()))
 
+    async def _ensure_redis(self) -> RedisClient:
+        """懒初始化 Redis 连接"""
+        if self._redis_client is None:
+            redis_conn = await get_redis()
+            self._redis_client = RedisClient(redis_conn)
+            self._session_manager = SessionManager(self._redis_client)
+            self._profile_cache = ProfileCache(self._redis_client)
+            self._rag_cache = RAGCache(self._redis_client)
+            logger.info("Redis 记忆系统初始化完成")
+        return self._redis_client
+
+    @property
+    def session_manager(self) -> SessionManager:
+        return self._session_manager
+
+    @property
+    def profile_cache(self) -> ProfileCache:
+        return self._profile_cache
+
     # ==================== 核心对话入口 ====================
 
     async def chat(
         self,
         message: str,
         context: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
     ) -> str:
         """
         RAG 增强对话 — 系统主入口
 
         流程:
         1. 从 context 提取 knowledge_ids 和 student_profile
-        2. 用 RAG 检索相关知识
-        3. 构造个性化 system prompt
-        4. 调用 LLM 生成回答
+        2. 如果有 session_id，从 Redis 加载对话历史
+        3. 用 RAG 检索相关知识（带缓存）
+        4. 构造个性化 system prompt
+        5. 调用 LLM 生成回答
+        6. 保存消息到 Redis
 
         Args:
             message: 用户消息
-            context: {"knowledge_ids": [1,2], "student_profile": {...}, "history": [...]}
+            context: {"knowledge_ids": [1,2], "student_profile": {...}}
+            session_id: 会话ID（用于记忆对话历史）
         """
         context = context or {}
         knowledge_ids = context.get("knowledge_ids")
         student_profile = context.get("student_profile")
-        history = context.get("history")
 
-        # RAG 检索（失败时降级为纯 LLM 对话）
-        try:
-            retrieved = await self.rag.retrieve(
-                query=message,
-                top_k=5,
-                knowledge_ids=knowledge_ids,
-            )
-            knowledge_context = "\n\n---\n\n".join(r["content"] for r in retrieved) if retrieved else ""
-        except Exception as e:
-            logger.warning("RAG 检索失败，降级为纯 LLM 对话: %s", e)
-            knowledge_context = ""
+        # 初始化 Redis（如果需要）
+        await self._ensure_redis()
+
+        # 获取对话历史（优先从 Redis）
+        history = context.get("history")
+        if session_id and self._session_manager:
+            conv = ConversationMemory(self._redis_client, session_id)
+            history = await conv.get_recent_context_for_llm(max_messages=10)
+            await self._session_manager.touch_session(session_id)
+
+        # RAG 检索（带缓存）
+        knowledge_context = ""
+        if self._rag_cache:
+            cached_results = await self._rag_cache.get_results(message, knowledge_ids)
+            if cached_results:
+                knowledge_context = "\n\n---\n\n".join(r["content"] for r in cached_results)
+                logger.debug("RAG 缓存命中")
+
+        if not knowledge_context:
+            try:
+                retrieved = await self.rag.retrieve(
+                    query=message,
+                    top_k=5,
+                    knowledge_ids=knowledge_ids,
+                )
+                if retrieved:
+                    knowledge_context = "\n\n---\n\n".join(r["content"] for r in retrieved)
+                    # 缓存结果
+                    if self._rag_cache:
+                        await self._rag_cache.set_results(message, retrieved, knowledge_ids)
+            except Exception as e:
+                logger.warning("RAG 检索失败，降级为纯 LLM 对话: %s", e)
 
         # 构造个性化 prompt
         system_prompt = self._build_chat_system_prompt(student_profile, knowledge_context)
@@ -99,7 +152,15 @@ class Orchestrator:
         messages.append({"role": "user", "content": message})
 
         try:
-            return await self.llm.chat(messages)
+            response = await self.llm.chat(messages)
+
+            # 保存消息到 Redis
+            if session_id and self._session_manager:
+                conv = ConversationMemory(self._redis_client, session_id)
+                await conv.add_message("user", message)
+                await conv.add_message("assistant", response)
+
+            return response
         except Exception as e:
             logger.error("对话失败: %s", e)
             return f"抱歉，处理您的问题时出现错误: {e}"
@@ -140,12 +201,42 @@ class Orchestrator:
 
     async def analyze_profile(
         self,
+        user_id: str,
         chat_history: List[Dict[str, str]],
         study_records: List[Dict[str, Any]],
         current_profile: Optional[Dict[str, Any]] = None,
+        course_id: Optional[int] = None,
+        force_refresh: bool = False,
     ) -> Dict[str, Any]:
-        """分析学生画像"""
-        return await self.profile_agent.analyze(chat_history, study_records, current_profile)
+        """
+        分析学生画像（带缓存）
+
+        Args:
+            user_id: 用户ID
+            chat_history: 聊天记录
+            study_records: 学习记录
+            current_profile: 现有画像（增量更新）
+            course_id: 课程ID
+            force_refresh: 强制刷新缓存
+        """
+        # 初始化 Redis
+        await self._ensure_redis()
+
+        # 检查缓存
+        if not force_refresh and self._profile_cache:
+            cached = await self._profile_cache.get_profile(user_id, course_id)
+            if cached:
+                logger.debug("画像缓存命中: user=%s", user_id)
+                return cached
+
+        # 调用 Agent 分析
+        profile = await self.profile_agent.analyze(chat_history, study_records, current_profile)
+
+        # 缓存结果
+        if self._profile_cache and profile:
+            await self._profile_cache.set_profile(user_id, profile, course_id)
+
+        return profile
 
     async def generate_learning_path(
         self,
@@ -228,4 +319,50 @@ class Orchestrator:
             "tools": self.tools.list_tools(),
             "rag": self.rag.stats(),
             "llm": type(self.llm).__name__ if self.llm else "None",
+            "memory": {
+                "redis_connected": self._redis_client is not None,
+                "session_manager": self._session_manager is not None,
+                "profile_cache": self._profile_cache is not None,
+                "rag_cache": self._rag_cache is not None,
+            },
         }
+
+    # ==================== 会话管理 ====================
+
+    async def create_session(
+        self,
+        user_id: str,
+        course_id: Optional[int] = None,
+    ) -> str:
+        """创建新会话"""
+        await self._ensure_redis()
+        return await self._session_manager.create_session(user_id, course_id)
+
+    async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """获取会话信息"""
+        await self._ensure_redis()
+        return await self._session_manager.get_session(session_id)
+
+    async def delete_session(self, session_id: str) -> bool:
+        """删除会话"""
+        await self._ensure_redis()
+        return await self._session_manager.delete_session(session_id)
+
+    async def get_conversation_history(
+        self,
+        session_id: str,
+        limit: int = 50,
+    ) -> List[Dict[str, str]]:
+        """获取对话历史"""
+        await self._ensure_redis()
+        conv = ConversationMemory(self._redis_client, session_id)
+        return await conv.get_history(limit=limit)
+
+    async def list_user_sessions(
+        self,
+        user_id: str,
+        limit: int = 20,
+    ) -> list[Dict[str, Any]]:
+        """列出用户的会话"""
+        await self._ensure_redis()
+        return await self._session_manager.list_user_sessions(user_id, limit)

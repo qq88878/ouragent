@@ -22,46 +22,78 @@ Agent 微服务 API - 供 Java 后端调用
 
 import sys
 import io
+import logging
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 from contextlib import asynccontextmanager
 from typing import Any, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, field_validator
+from typing import Literal
 
 from config.settings import settings, DATA_DIR
 from src.auth.security import get_current_user
 from src.core.llm import create_llm_provider
 from src.core.rag import RAGPipeline, VectorStore, create_embedding_provider
 from src.core.agents import Orchestrator
+from src.core.exceptions import AgentException, ValidationError, NotFoundError, ServiceUnavailableError
+from src.middleware.rate_limit import RateLimitMiddleware
+
+logger = logging.getLogger(__name__)
 
 
 # ==================== 数据模型 ====================
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=10000, description="用户消息")
     context: Optional[Dict[str, Any]] = None
+    session_id: Optional[str] = Field(None, pattern=r"^[a-f0-9\-]{36}$", description="会话ID（UUID格式）")
+
+    @field_validator("message")
+    @classmethod
+    def validate_message(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("消息不能为空")
+        return v
 
 
 class ChatResponse(BaseModel):
     response: str
+    session_id: Optional[str] = None
     status: str = "success"
 
 
 class ChatWithContextRequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=10000)
     context: Dict[str, Any] = {}
+    session_id: Optional[str] = Field(None, pattern=r"^[a-f0-9\-]{36}$")
+
+
+class CreateSessionRequest(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=100)
+    course_id: Optional[int] = Field(None, gt=0)
+
+
+class SessionResponse(BaseModel):
+    session_id: str
+    user_id: str
+    course_id: Optional[int] = None
+    created_at: str
+    last_active: str
+    message_count: int
 
 
 class KnowledgeIngestRequest(BaseModel):
-    knowledge_id: int
-    course_id: int
-    content: str
-    file_type: str = "txt"
+    knowledge_id: int = Field(..., gt=0)
+    course_id: int = Field(..., gt=0)
+    content: str = Field(..., min_length=1)
+    file_type: Literal["txt", "md", "pdf", "docx"] = "txt"
 
 
 class KnowledgeIngestResponse(BaseModel):
@@ -71,37 +103,37 @@ class KnowledgeIngestResponse(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
-    user_id: str
-    course_id: Optional[int] = None
-    chat_history: List[Dict[str, str]] = []
-    study_records: List[Dict[str, Any]] = []
+    user_id: str = Field(..., min_length=1, max_length=100)
+    course_id: Optional[int] = Field(None, gt=0)
+    chat_history: List[Dict[str, str]] = Field(default_factory=list, max_length=100)
+    study_records: List[Dict[str, Any]] = Field(default_factory=list, max_length=100)
     current_profile: Optional[Dict[str, Any]] = None
 
 
 class PlanRequest(BaseModel):
     student_profile: Dict[str, Any]
-    course_title: str
-    course_knowledge: List[Dict[str, Any]] = []
-    goal: str = "掌握课程核心知识"
+    course_title: str = Field(..., min_length=1, max_length=200)
+    course_knowledge: List[Dict[str, Any]] = Field(default_factory=list, max_length=500)
+    goal: str = Field(default="掌握课程核心知识", max_length=500)
 
 
 class GenerateRequest(BaseModel):
-    type: str  # "question" | "mindmap" | "summary"
-    topic: str
+    type: Literal["question", "mindmap", "summary"]
+    topic: str = Field(..., min_length=1, max_length=200)
     knowledge_ids: Optional[List[int]] = None
-    difficulty: str = "medium"
-    count: int = 5
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
+    count: int = Field(default=5, ge=1, le=20)
 
 
 class EvaluateRequest(BaseModel):
-    question: str
-    student_answer: str
-    reference_answer: str = ""
-    knowledge_context: str = ""
+    question: str = Field(..., min_length=1, max_length=5000)
+    student_answer: str = Field(..., min_length=1, max_length=5000)
+    reference_answer: str = Field(default="", max_length=5000)
+    knowledge_context: str = Field(default="", max_length=10000)
 
 
 class ToolRequest(BaseModel):
-    tool_name: str
+    tool_name: str = Field(..., min_length=1, max_length=50)
     parameters: Dict[str, Any] = {}
 
 
@@ -118,14 +150,14 @@ rag_pipeline: Optional[RAGPipeline] = None
 async def lifespan(app: FastAPI):
     global orchestrator, rag_pipeline
 
-    print("Agent Service 启动中...")
+    logger.info("Agent Service 启动中...")
 
     # 初始化 LLM
     try:
         llm = create_llm_provider()
-        print(f"LLM 初始化完成: {type(llm).__name__}")
+        logger.info("LLM 初始化完成: %s", type(llm).__name__)
     except Exception as e:
-        print(f"LLM 初始化失败，将以 Echo 模式运行: {e}")
+        logger.warning("LLM 初始化失败，将以 Echo 模式运行: %s", e)
         llm = None
 
     # TODO: Embedding 当前降级为本地 TF-IDF（MIMO 不支持 /embeddings 端点）
@@ -153,14 +185,14 @@ async def lifespan(app: FastAPI):
 
     # 初始化 Orchestrator（多 Agent 编排器）
     orchestrator = Orchestrator(llm=llm, rag_pipeline=rag_pipeline)
-    print("Agent Service 启动完成")
+    logger.info("Agent Service 启动完成")
 
     yield
 
     # 关闭时保存向量数据
-    print("Agent Service 关闭中...")
+    logger.info("Agent Service 关闭中...")
     vector_store.save(str(DATA_DIR / "vector_store.json"))
-    print("Agent Service 已关闭")
+    logger.info("Agent Service 已关闭")
 
 
 app = FastAPI(
@@ -177,6 +209,44 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 限流中间件
+if settings.APP_ENV != "development":
+    app.add_middleware(RateLimitMiddleware)
+
+
+# ==================== 异常处理器 ====================
+
+
+@app.exception_handler(AgentException)
+async def agent_exception_handler(request: Request, exc: AgentException):
+    """处理自定义业务异常"""
+    logger.warning("业务异常: %s - %s", exc.code, exc.message)
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "details": exc.details,
+            }
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """处理未捕获的系统异常"""
+    logger.error("系统异常: %s", exc, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": {
+                "code": "INTERNAL_ERROR",
+                "message": "服务内部错误，请稍后重试",
+            }
+        },
+    )
 
 
 # ==================== 基础接口 ====================
@@ -204,18 +274,22 @@ async def get_agent_status():
 @app.post("/agent/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, _: dict = Depends(get_current_user)):
     """
-    RAG 增强对话
+    RAG 增强对话（支持会话记忆）
 
     Java 调用:
       POST /agent/chat
-      {"message": "什么是Python列表？", "context": {"knowledge_ids": [1, 2]}}
+      {"message": "什么是Python列表？", "context": {"knowledge_ids": [1, 2]}, "session_id": "xxx"}
     """
     if not orchestrator:
         raise HTTPException(status_code=503, detail="Agent 未初始化")
 
     try:
-        response = await orchestrator.chat(request.message, request.context)
-        return ChatResponse(response=response)
+        response = await orchestrator.chat(
+            request.message,
+            request.context,
+            session_id=request.session_id,
+        )
+        return ChatResponse(response=response, session_id=request.session_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -228,15 +302,18 @@ async def chat_with_context(request: ChatWithContextRequest, _: dict = Depends(g
     context 可包含:
       - knowledge_ids: 知识库 ID 列表
       - student_profile: 学生画像
-      - session_id: 会话 ID
-      - history: 对话历史
+      - history: 对话历史（如果提供 session_id，优先使用 Redis 中的历史）
     """
     if not orchestrator:
         raise HTTPException(status_code=503, detail="Agent 未初始化")
 
     try:
-        response = await orchestrator.chat(request.message, request.context)
-        return ChatResponse(response=response)
+        response = await orchestrator.chat(
+            request.message,
+            request.context,
+            session_id=request.session_id,
+        )
+        return ChatResponse(response=response, session_id=request.session_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -317,18 +394,21 @@ async def get_knowledge_status(_: dict = Depends(get_current_user)):
 @app.post("/agent/analyze")
 async def analyze_profile(request: AnalyzeRequest, _: dict = Depends(get_current_user)):
     """
-    学生画像分析（Java AgentServiceClient 无直接对应，供高级调用）
+    学生画像分析（带缓存）
 
-    分析学生学习历史，返回学习风格、薄弱点等结构化画像
+    分析学生学习历史，返回学习风格、薄弱点等结构化画像。
+    结果会缓存到 Redis，相同 user_id + course_id 的请求会返回缓存结果。
     """
     if not orchestrator:
         raise HTTPException(status_code=503, detail="Agent 未初始化")
 
     try:
         result = await orchestrator.analyze_profile(
+            user_id=request.user_id,
             chat_history=request.chat_history,
             study_records=request.study_records,
             current_profile=request.current_profile,
+            course_id=request.course_id,
         )
         return result
     except Exception as e:
@@ -427,5 +507,107 @@ async def call_tool(request: ToolRequest, _: dict = Depends(get_current_user)):
         return {"result": result, "tool_name": request.tool_name, "status": "success"}
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 会话管理接口 ====================
+
+
+@app.post("/agent/sessions")
+async def create_session(
+    request: CreateSessionRequest,
+    _: dict = Depends(get_current_user),
+):
+    """
+    创建新会话
+
+    Java 调用:
+      POST /agent/sessions
+      {"user_id": "123", "course_id": 1}
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    try:
+        session_id = await orchestrator.create_session(
+            user_id=request.user_id,
+            course_id=request.course_id,
+        )
+        return {"session_id": session_id, "status": "created"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/agent/sessions/{session_id}")
+async def get_session(
+    session_id: str,
+    _: dict = Depends(get_current_user),
+):
+    """获取会话信息"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    session = await orchestrator.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return session
+
+
+@app.delete("/agent/sessions/{session_id}")
+async def delete_session(
+    session_id: str,
+    _: dict = Depends(get_current_user),
+):
+    """删除会话（同时清除对话历史）"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    deleted = await orchestrator.delete_session(session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="会话不存在")
+    return {"status": "deleted", "session_id": session_id}
+
+
+@app.get("/agent/sessions/{session_id}/history")
+async def get_conversation_history(
+    session_id: str,
+    limit: int = 50,
+    _: dict = Depends(get_current_user),
+):
+    """
+    获取对话历史
+
+    Java 调用:
+      GET /agent/sessions/{session_id}/history?limit=50
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    try:
+        history = await orchestrator.get_conversation_history(session_id, limit)
+        return {"session_id": session_id, "messages": history, "count": len(history)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/agent/users/{user_id}/sessions")
+async def list_user_sessions(
+    user_id: str,
+    limit: int = 20,
+    _: dict = Depends(get_current_user),
+):
+    """
+    列出用户的所有会话
+
+    Java 调用:
+      GET /agent/users/{user_id}/sessions?limit=20
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    try:
+        sessions = await orchestrator.list_user_sessions(user_id, limit)
+        return {"user_id": user_id, "sessions": sessions, "count": len(sessions)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
