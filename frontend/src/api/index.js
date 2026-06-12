@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const http = axios.create({
     baseURL: '/api',
-    timeout: 10000,
+    timeout: 30000,
     headers: { 'Content-Type': 'application/json' },
 });
 
@@ -14,7 +14,13 @@ http.interceptors.request.use((config) => {
 
 http.interceptors.response.use(
     (response) => response.data,
-    (error) => Promise.reject(error)
+    (error) => {
+        if (error.response?.status === 401) {
+            localStorage.removeItem('accessToken');
+            window.location.href = '/login';
+        }
+        return Promise.reject(error);
+    }
 );
 
 export const authApi = {
@@ -33,6 +39,65 @@ export const userApi = {
     getUserById(id) { return http.get(`/users/${id}`); },
     updateStatus(id, status) { return http.put(`/users/${id}/status`, null, { params: { status } }); },
     deleteUser(id) { return http.delete(`/users/${id}`); },
+};
+
+export const courseApi = {
+    list(params) { return http.get('/courses', { params }); },
+    getById(id) { return http.get(`/courses/${id}`); },
+    create(data) { return http.post('/courses', data); },
+    update(id, data) { return http.put(`/courses/${id}`, data); },
+    delete(id) { return http.delete(`/courses/${id}`); },
+    enroll(id) { return http.post(`/courses/${id}/enroll`); },
+};
+
+export const chatApi = {
+    createSession(courseId) { return http.post('/chat/sessions', null, { params: { courseId } }); },
+    listSessions() { return http.get('/chat/sessions'); },
+    getMessages(sessionId, page = 1, size = 20) {
+        return http.get(`/chat/sessions/${sessionId}/messages`, { params: { page, size } });
+    },
+    sendMessage(sessionId, message) {
+        return http.post(`/chat/sessions/${sessionId}/messages`, { message });
+    },
+    deleteSession(sessionId) { return http.delete(`/chat/sessions/${sessionId}`); },
+};
+
+export const learningApi = {
+    generatePath(data) { return http.post('/learning/paths/generate', data); },
+    listPaths() { return http.get('/learning/paths/'); },
+    getPathById(id) { return http.get(`/learning/paths/${id}`); },
+    updateStepStatus(pathId, stepId, status) {
+        return http.put(`/learning/paths/${pathId}/steps/${stepId}`, null, { params: { status } });
+    },
+    deletePath(id) { return http.delete(`/learning/paths/${id}`); },
+    getProfile() { return http.get('/profile/'); },
+    updateProfile(data) { return http.put('/profile/', data); },
+    getRadarData() { return http.get('/profile/radar'); },
+    recordStudy(data) { return http.post('/study/records/', data); },
+    listRecords(page = 1, size = 10) { return http.get('/study/records/', { params: { page, size } }); },
+    getStudyStats() { return http.get('/study/records/stats'); },
+};
+
+export const knowledgeApi = {
+    upload(file, courseId, name, description) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('courseId', courseId);
+        if (name) formData.append('name', name);
+        if (description) formData.append('description', description);
+        return http.post('/knowledge/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+    },
+    list(courseId) { return http.get('/knowledge', { params: { courseId } }); },
+    getById(id) { return http.get(`/knowledge/${id}`); },
+    delete(id) { return http.delete(`/knowledge/${id}`); },
+    reprocess(id) { return http.post(`/knowledge/${id}/reprocess`); },
+};
+
+export const adminApi = {
+    getDashboard() { return http.get('/admin/dashboard'); },
+    getSystemHealth() { return http.get('/admin/system/health'); },
 };
 
 export default http;

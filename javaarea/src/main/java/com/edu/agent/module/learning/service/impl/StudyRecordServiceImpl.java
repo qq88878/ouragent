@@ -1,37 +1,99 @@
 package com.edu.agent.module.learning.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.edu.agent.module.course.entity.Course;
+import com.edu.agent.module.course.mapper.CourseMapper;
 import com.edu.agent.module.learning.dto.StudyRecordDTO;
 import com.edu.agent.module.learning.entity.StudyRecord;
 import com.edu.agent.module.learning.mapper.StudyRecordMapper;
 import com.edu.agent.module.learning.service.StudyRecordService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class StudyRecordServiceImpl
         extends ServiceImpl<StudyRecordMapper, StudyRecord>
         implements StudyRecordService {
 
+    private final CourseMapper courseMapper;
+
     @Override
+    @Transactional
     public void recordStudy(Long userId, StudyRecordDTO dto) {
-        // TODO phase 4 - map DTO to entity, set userId, insert into DB
-        throw new UnsupportedOperationException("Not implemented yet - TODO phase 4");
+        StudyRecord record = new StudyRecord();
+        record.setUserId(userId);
+        record.setCourseId(dto.getCourseId());
+        record.setSessionId(dto.getSessionId());
+        record.setDuration(dto.getDuration());
+        record.setInteractionCount(dto.getInteractionCount());
+        record.setSummary(dto.getSummary());
+        save(record);
+
+        log.info("学习记录保存成功: userId={}, courseId={}", userId, dto.getCourseId());
     }
 
     @Override
     public IPage<StudyRecordDTO> listRecords(Long userId, int page, int size) {
-        // TODO phase 4 - build Page, query by userId, map to DTO page
-        throw new UnsupportedOperationException("Not implemented yet - TODO phase 4");
+        LambdaQueryWrapper<StudyRecord> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(StudyRecord::getUserId, userId)
+                .orderByDesc(StudyRecord::getCreateTime);
+
+        Page<StudyRecord> pageParam = new Page<>(page, size);
+        Page<StudyRecord> result = page(pageParam, wrapper);
+        return result.convert(this::toDTO);
     }
 
     @Override
     public Map<String, Object> getStudyStats(Long userId) {
-        // TODO phase 4 - aggregate study stats: total duration, avg score, record count, etc.
-        throw new UnsupportedOperationException("Not implemented yet - TODO phase 4");
+        LambdaQueryWrapper<StudyRecord> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(StudyRecord::getUserId, userId);
+        java.util.List<StudyRecord> records = list(wrapper);
+
+        int totalDuration = records.stream()
+                .mapToInt(r -> r.getDuration() != null ? r.getDuration() : 0)
+                .sum();
+        int totalInteractions = records.stream()
+                .mapToInt(r -> r.getInteractionCount() != null ? r.getInteractionCount() : 0)
+                .sum();
+        long courseCount = records.stream()
+                .map(StudyRecord::getCourseId)
+                .distinct()
+                .count();
+
+        Map<String, Object> stats = new HashMap<>();
+        stats.put("totalDuration", totalDuration);
+        stats.put("totalDurationHours", Math.round(totalDuration / 3600.0 * 10) / 10.0);
+        stats.put("totalInteractions", totalInteractions);
+        stats.put("totalRecords", records.size());
+        stats.put("courseCount", courseCount);
+        return stats;
+    }
+
+    private StudyRecordDTO toDTO(StudyRecord record) {
+        StudyRecordDTO dto = new StudyRecordDTO();
+        dto.setId(record.getId());
+        dto.setCourseId(record.getCourseId());
+        dto.setSessionId(record.getSessionId());
+        dto.setDuration(record.getDuration());
+        dto.setInteractionCount(record.getInteractionCount());
+        dto.setSummary(record.getSummary());
+        dto.setCreateTime(record.getCreateTime());
+
+        Course course = courseMapper.selectById(record.getCourseId());
+        if (course != null) {
+            dto.setCourseName(course.getTitle());
+        }
+
+        return dto;
     }
 }

@@ -1,5 +1,5 @@
-CREATE DATABASE edu;
-USE edu;
+CREATE DATABASE IF NOT EXISTS edu_agent;
+USE edu_agent;
 
 -- ============================================================
 -- edu-agent Database Schema
@@ -57,6 +57,21 @@ CREATE TABLE IF NOT EXISTS `course` (
     PRIMARY KEY (`id`),
     INDEX `idx_teacher_id` (`teacher_id`),
     INDEX `idx_category` (`category`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------
+-- 2.1 course_enrollment (student-course relationship)
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `course_enrollment` (
+    `id`             BIGINT   NOT NULL AUTO_INCREMENT,
+    `course_id`      BIGINT   NOT NULL,
+    `user_id`        BIGINT   NOT NULL,
+    `create_time`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `update_time`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted`        TINYINT  NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_course_user` (`course_id`, `user_id`),
+    INDEX `idx_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------

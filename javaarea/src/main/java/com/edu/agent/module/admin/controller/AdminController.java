@@ -18,13 +18,11 @@ public class AdminController {
 
     @GetMapping("/dashboard")
     public Result<DashboardStatsDTO> getDashboardStats() {
-        // TODO phase 4 - call adminService.getDashboardStats()
-        throw new UnsupportedOperationException("Not implemented yet - TODO phase 4");
+        return Result.success(adminService.getDashboardStats());
     }
 
     @GetMapping("/system/health")
     public Result<SystemConfigDTO> getSystemHealth() {
-        // TODO phase 4 - call adminService.getSystemHealth()
-        throw new UnsupportedOperationException("Not implemented yet - TODO phase 4");
+        return Result.success(adminService.getSystemHealth());
     }
 }

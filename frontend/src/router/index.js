@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 
 const routes = [
-  { path: '/', redirect: '/login' },
+  { path: '/', redirect: '/dashboard' },
   {
     path: '/login',
     name: 'Login',
@@ -21,9 +21,45 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/chat',
+    name: 'Chat',
+    component: () => import('@/views/ChatView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/chat/:sessionId',
+    name: 'ChatSession',
+    component: () => import('@/views/ChatView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/courses',
+    name: 'Courses',
+    component: () => import('@/views/CourseView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/learning',
+    name: 'Learning',
+    component: () => import('@/views/LearningView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/knowledge',
+    name: 'Knowledge',
+    component: () => import('@/views/KnowledgeView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/profile',
     name: 'UserProfile',
     component: () => import('@/views/UserProfileView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/admin',
+    name: 'Admin',
+    component: () => import('@/views/AdminView.vue'),
     meta: { requiresAuth: true },
   },
   {

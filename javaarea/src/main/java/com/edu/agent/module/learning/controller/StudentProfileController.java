@@ -3,7 +3,9 @@ package com.edu.agent.module.learning.controller;
 import com.edu.agent.common.result.Result;
 import com.edu.agent.module.learning.entity.StudentProfile;
 import com.edu.agent.module.learning.service.StudentProfileService;
+import com.edu.agent.security.LoginUser;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -17,19 +19,20 @@ public class StudentProfileController {
 
     @GetMapping("/")
     public Result<StudentProfile> getProfile() {
-        // TODO phase 4 - get current userId from SecurityContext, call studentProfileService.getProfile()
-        throw new UnsupportedOperationException("Not implemented yet - TODO phase 4");
+        LoginUser loginUser = (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        return Result.success(studentProfileService.getProfile(loginUser.getUser().getId()));
     }
 
     @PutMapping("/")
     public Result<Void> updateProfile(@RequestBody StudentProfile profile) {
-        // TODO phase 4 - get current userId from SecurityContext, call studentProfileService.updateProfile()
-        throw new UnsupportedOperationException("Not implemented yet - TODO phase 4");
+        LoginUser loginUser = (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        studentProfileService.updateProfile(loginUser.getUser().getId(), profile);
+        return Result.success();
     }
 
     @GetMapping("/radar")
     public Result<Map<String, Object>> getRadarData() {
-        // TODO phase 4 - get current userId from SecurityContext, call studentProfileService.getRadarData()
-        throw new UnsupportedOperationException("Not implemented yet - TODO phase 4");
+        LoginUser loginUser = (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        return Result.success(studentProfileService.getRadarData(loginUser.getUser().getId()));
     }
 }
