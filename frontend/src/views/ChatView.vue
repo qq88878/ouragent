@@ -145,40 +145,62 @@ async function sendMessage() {
     content: text,
   });
 
-  const assistantMsg = {
+  const idx = messages.value.length;
+  messages.value.push({
     id: Date.now() + 1,
     role: 'ASSISTANT',
     content: '',
     streaming: true,
-  };
-  messages.value.push(assistantMsg);
+  });
   await nextTick();
   scrollToBottom();
 
-  try {
-    for await (const chunk of chatApi.sendMessageStream(currentSessionId.value, text)) {
-      if (chunk.error) {
-        assistantMsg.content = chunk.error;
-        break;
+  const buffer = [];
+  let streamDone = false;
+  let hasError = '';
+
+  // 消费 SSE 流，写入 buffer
+  const consume = (async () => {
+    try {
+      for await (const chunk of chatApi.sendMessageStream(currentSessionId.value, text)) {
+        if (chunk.error) { hasError = chunk.error; break; }
+        if (chunk.content) buffer.push(chunk.content);
+        if (chunk.done) break;
       }
-      if (chunk.content) {
-        assistantMsg.content += chunk.content;
-        await nextTick();
+    } catch {
+      if (!buffer.length && !hasError) hasError = '网络错误，请稍后重试。';
+    } finally {
+      streamDone = true;
+    }
+  })();
+
+  // 渲染循环：每 30ms 从 buffer 读取内容更新 UI
+  const render = new Promise(resolve => {
+    const timer = setInterval(() => {
+      if (hasError) {
+        messages.value[idx].content = hasError;
+        clearInterval(timer);
+        resolve();
+        return;
+      }
+      if (buffer.length) {
+        messages.value[idx].content += buffer.splice(0).join('');
         scrollToBottom();
       }
-      if (chunk.done) break;
-    }
-  } catch {
-    if (!assistantMsg.content) {
-      assistantMsg.content = '网络错误，请稍后重试。';
-    }
-  } finally {
-    assistantMsg.streaming = false;
-    sending.value = false;
-    await loadSessions();
-    await nextTick();
-    scrollToBottom();
-  }
+      if (streamDone && buffer.length === 0) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, 30);
+  });
+
+  await Promise.all([consume, render]);
+
+  messages.value[idx].streaming = false;
+  sending.value = false;
+  await loadSessions();
+  await nextTick();
+  scrollToBottom();
 }
 
 async function deleteSession(id) {
