@@ -36,7 +36,7 @@ class VectorStore:
     生产环境可替换为 Milvus/FAISS，接口不变。
     """
 
-    def __init__(self, dimension: int = 768, auto_save: bool = True):
+    def __init__(self, dimension: int = 384, auto_save: bool = True):
         self.dimension = dimension
         self.auto_save = auto_save
         self._documents: List[Document] = []

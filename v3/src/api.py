@@ -161,21 +161,29 @@ async def lifespan(app: FastAPI):
         logger.warning("LLM 初始化失败，将以 Echo 模式运行: %s", e)
         llm = None
 
-    # TODO: Embedding 当前降级为本地 TF-IDF（MIMO 不支持 /embeddings 端点）
-    #       后续接入星火/其他有 Embedding API 的服务后，改为 provider="openai"
-    #       只需在 .env 中配置 EMBEDDING_API_KEY / EMBEDDING_BASE_URL / EMBEDDING_MODEL
+    # 初始化 Embedding Provider
+    # 优先使用配置的 Embedding API，否则降级为本地 TF-IDF
     has_embedding_api = (
         settings.EMBEDDING_API_KEY
         and settings.EMBEDDING_BASE_URL
         and "mimo" not in (settings.EMBEDDING_BASE_URL or "").lower()
     )
-    embedding_provider = create_embedding_provider(
-        provider="openai" if has_embedding_api else "local",
-        api_key=settings.embedding_api_key,
-        base_url=settings.embedding_base_url,
-        model=settings.EMBEDDING_MODEL,
-    )
-    vector_store = VectorStore(dimension=768)
+
+    if has_embedding_api:
+        logger.info("使用 Embedding API: %s / %s", settings.EMBEDDING_BASE_URL, settings.EMBEDDING_MODEL)
+        embedding_provider = create_embedding_provider(
+            provider="openai",
+            api_key=settings.embedding_api_key,
+            base_url=settings.embedding_base_url,
+            model=settings.EMBEDDING_MODEL,
+        )
+    else:
+        logger.info("未配置 Embedding API，使用本地 TF-IDF 嵌入")
+        embedding_provider = create_embedding_provider(provider="local")
+
+    # 动态获取向量维度（API 嵌入返回后更新，本地默认 384）
+    embedding_dim = getattr(embedding_provider, '_dimension', 384)
+    vector_store = VectorStore(dimension=embedding_dim)
     rag_pipeline = RAGPipeline(
         vector_store=vector_store,
         embedding_provider=embedding_provider,
