@@ -40,12 +40,7 @@
         <div class="messages-area" ref="messagesArea">
           <div v-for="msg in messages" :key="msg.id" class="message-row" :class="msg.role.toLowerCase()">
             <div class="message-bubble">
-              <div class="message-content">{{ msg.content }}</div>
-            </div>
-          </div>
-          <div v-if="sending" class="message-row assistant">
-            <div class="message-bubble">
-              <div class="message-content typing">思考中...</div>
+              <div class="message-content">{{ msg.content }}<span v-if="msg.streaming" class="cursor">|</span></div>
             </div>
           </div>
         </div>
@@ -149,33 +144,38 @@ async function sendMessage() {
     role: 'USER',
     content: text,
   });
+
+  const assistantMsg = {
+    id: Date.now() + 1,
+    role: 'ASSISTANT',
+    content: '',
+    streaming: true,
+  };
+  messages.value.push(assistantMsg);
   await nextTick();
   scrollToBottom();
 
   try {
-    const res = await chatApi.sendMessage(currentSessionId.value, text);
-    if (res.code === 200) {
-      messages.value.push({
-        id: res.data.messageId,
-        role: 'ASSISTANT',
-        content: res.data.response,
-      });
-      await loadSessions();
-    } else {
-      messages.value.push({
-        id: Date.now() + 1,
-        role: 'ASSISTANT',
-        content: '抱歉，获取回复失败，请重试。',
-      });
+    for await (const chunk of chatApi.sendMessageStream(currentSessionId.value, text)) {
+      if (chunk.error) {
+        assistantMsg.content = chunk.error;
+        break;
+      }
+      if (chunk.content) {
+        assistantMsg.content += chunk.content;
+        await nextTick();
+        scrollToBottom();
+      }
+      if (chunk.done) break;
     }
   } catch {
-    messages.value.push({
-      id: Date.now() + 1,
-      role: 'ASSISTANT',
-      content: '网络错误，请稍后重试。',
-    });
+    if (!assistantMsg.content) {
+      assistantMsg.content = '网络错误，请稍后重试。';
+    }
   } finally {
+    assistantMsg.streaming = false;
     sending.value = false;
+    await loadSessions();
     await nextTick();
     scrollToBottom();
   }
@@ -248,6 +248,8 @@ function formatTime(time) {
 .message-row.assistant .message-bubble { background: #f4f4f5; color: #303133; border-radius: 12px 12px 12px 0; }
 .message-content { padding: 10px 16px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 .typing { color: #909399; }
+.cursor { animation: blink 0.8s infinite; color: #409eff; }
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
 
 .input-area { padding: 16px; border-top: 1px solid #ebeef5; display: flex; gap: 12px; align-items: flex-end; }
 .input-area .el-input { flex: 1; }

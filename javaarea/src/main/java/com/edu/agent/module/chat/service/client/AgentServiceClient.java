@@ -13,6 +13,9 @@ import org.springframework.core.io.FileSystemResource;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -156,5 +159,58 @@ public class AgentServiceClient {
                 agentServiceUrl + "/agent/evaluate", request, Map.class);
 
         return response.getBody() != null ? response.getBody() : new HashMap<>();
+    }
+
+    // ===== Streaming =====
+
+    /**
+     * 流式对话 — 读取 Python SSE 流，逐行转发给 SseEmitter
+     * 注意：此方法会阻塞调用线程，应在独立线程中调用
+     */
+    public void streamChatWithContext(String message, Map<String, Object> context,
+                                      org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter,
+                                      StringBuilder accumulator) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("message", message);
+        body.put("context", context);
+
+        HttpHeaders headers = createHeaders();
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+
+        restTemplate.execute(
+                agentServiceUrl + "/agent/chat/context/stream",
+                org.springframework.http.HttpMethod.POST,
+                restTemplate.httpEntityCallback(request),
+                (org.springframework.web.client.ResponseExtractor<Void>) response -> {
+                    try (BufferedReader reader = new BufferedReader(
+                            new InputStreamReader(response.getBody(), StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            if (line.startsWith("data: ")) {
+                                String data = line.substring(6);
+                                try {
+                                    Map<String, Object> parsed = new com.fasterxml.jackson.databind.ObjectMapper()
+                                            .readValue(data, Map.class);
+                                    Object content = parsed.get("content");
+                                    if (content != null) {
+                                        accumulator.append(content.toString());
+                                    }
+                                } catch (Exception ignored) {
+                                }
+                                emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter
+                                        .event().data(data));
+                            }
+                        }
+                        emitter.complete();
+                    } catch (Exception e) {
+                        log.error("SSE stream read error", e);
+                        try {
+                            emitter.completeWithError(e);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    return null;
+                }
+        );
     }
 }

@@ -22,6 +22,7 @@ Agent 微服务 API - 供 Java 后端调用
 
 import sys
 import io
+import json
 import logging
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
@@ -31,7 +32,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from typing import Literal
 
@@ -316,6 +317,54 @@ async def chat_with_context(request: ChatWithContextRequest, _: dict = Depends(g
         return ChatResponse(response=response, session_id=request.session_id)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==================== 流式对话接口 ====================
+
+
+SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
+
+
+@app.post("/agent/chat/stream")
+async def chat_stream(request: ChatRequest, _: dict = Depends(get_current_user)):
+    """流式对话（SSE）— 前端 fetch ReadableStream 消费"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    async def event_generator():
+        try:
+            async for chunk in orchestrator.stream_chat(
+                request.message, request.context, session_id=request.session_id,
+            ):
+                yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
+
+
+@app.post("/agent/chat/context/stream")
+async def chat_with_context_stream(request: ChatWithContextRequest, _: dict = Depends(get_current_user)):
+    """带上下文的流式对话（SSE）— Java AgentServiceClient 调用"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    async def event_generator():
+        try:
+            async for chunk in orchestrator.stream_chat(
+                request.message, request.context, session_id=request.session_id,
+            ):
+                yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'done': True})}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 # ==================== 知识库接口 ====================

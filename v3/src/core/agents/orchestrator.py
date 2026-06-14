@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, AsyncIterator
 
 from ..memory.redis_client import get_redis, RedisClient
 from ..memory.session_manager import SessionManager
@@ -171,6 +171,67 @@ class Orchestrator:
         except Exception as e:
             logger.error("对话失败: %s", e)
             return f"抱歉，处理您的问题时出现错误: {e}"
+
+    async def stream_chat(
+        self,
+        message: str,
+        context: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
+    ) -> AsyncIterator[str]:
+        """
+        流式 RAG 增强对话 — 镜像 chat() 逻辑，逐块 yield
+        """
+        context = context or {}
+        knowledge_ids = context.get("knowledge_ids")
+        student_profile = context.get("student_profile")
+
+        await self._ensure_redis()
+
+        history = context.get("history")
+        if session_id and self._session_manager:
+            conv = ConversationMemory(self._redis_client, session_id)
+            history = await conv.get_recent_context_for_llm(max_messages=10)
+            await self._session_manager.touch_session(session_id)
+
+        knowledge_context = ""
+        if self._rag_cache:
+            cached_results = await self._rag_cache.get_results(message, knowledge_ids)
+            if cached_results:
+                knowledge_context = "\n\n---\n\n".join(r["content"] for r in cached_results)
+
+        if not knowledge_context:
+            try:
+                retrieved = await self.rag.retrieve(query=message, top_k=5, knowledge_ids=knowledge_ids)
+                if retrieved:
+                    knowledge_context = "\n\n---\n\n".join(r["content"] for r in retrieved)
+                    if self._rag_cache:
+                        await self._rag_cache.set_results(message, retrieved, knowledge_ids)
+            except Exception as e:
+                logger.warning("RAG 检索失败，降级为纯 LLM 对话: %s", e)
+
+        system_prompt = self._build_chat_system_prompt(student_profile, knowledge_context)
+        messages = [{"role": "system", "content": system_prompt}]
+        if history:
+            messages.extend(history[-10:])
+        messages.append({"role": "user", "content": message})
+
+        full_response = []
+        try:
+            async for chunk in self.llm.stream(messages):
+                full_response.append(chunk)
+                yield chunk
+        except Exception as e:
+            logger.error("流式对话失败: %s", e)
+            yield f"\n\n抱歉，处理时出现错误: {e}"
+        finally:
+            response_text = "".join(full_response)
+            if session_id and self._session_manager and response_text:
+                try:
+                    conv = ConversationMemory(self._redis_client, session_id)
+                    await conv.add_message("user", message)
+                    await conv.add_message("assistant", response_text)
+                except Exception as e:
+                    logger.warning("保存流式对话历史失败: %s", e)
 
     def _build_chat_system_prompt(
         self,

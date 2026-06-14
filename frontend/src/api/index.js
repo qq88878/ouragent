@@ -59,6 +59,38 @@ export const chatApi = {
     sendMessage(sessionId, message) {
         return http.post(`/chat/sessions/${sessionId}/messages`, { message });
     },
+    async *sendMessageStream(sessionId, message) {
+        const token = localStorage.getItem('accessToken');
+        const response = await fetch(`/api/chat/sessions/${sessionId}/messages/stream`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ message }),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop();
+            for (const line of lines) {
+                if (line.startsWith('data:')) {
+                    const data = line.slice(line.charAt(5) === ' ' ? 6 : 5).trim();
+                    if (data) {
+                        try {
+                            yield JSON.parse(data);
+                        } catch { /* skip malformed */ }
+                    }
+                }
+            }
+        }
+    },
     deleteSession(sessionId) { return http.delete(`/chat/sessions/${sessionId}`); },
 };
 
