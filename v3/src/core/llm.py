@@ -7,7 +7,7 @@ import httpx
 import json
 import asyncio
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, AsyncIterator
 
 from config.settings import settings
 
@@ -27,6 +27,13 @@ class LLMProvider(ABC):
             LLM 回复文本
         """
         pass
+
+    async def stream(self, messages: List[Dict[str, str]], **kwargs) -> AsyncIterator[str]:
+        """
+        流式对话，默认回退到 chat() 一次性返回
+        子类可覆盖以支持真正的流式输出
+        """
+        yield await self.chat(messages, **kwargs)
 
 
 class SparkProvider(LLMProvider):
@@ -71,6 +78,42 @@ class SparkProvider(LLMProvider):
 
             return data["choices"][0]["message"]["content"]
 
+    async def stream(self, messages: List[Dict[str, str]], **kwargs) -> AsyncIterator[str]:
+        """星火流式输出"""
+        if not self.api_key:
+            raise ValueError("SPARK_API_KEY 未配置")
+
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": kwargs.get("max_tokens", 2048),
+            "temperature": kwargs.get("temperature", 0.7),
+            "stream": True,
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream("POST", f"{self.base_url}/chat/completions",
+                                     json=payload, headers=headers) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]
+                    if data.strip() == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        delta = chunk["choices"][0].get("delta", {})
+                        content = delta.get("content")
+                        if content:
+                            yield content
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        continue
+
 
 class OpenAIProvider(LLMProvider):
     """
@@ -110,6 +153,42 @@ class OpenAIProvider(LLMProvider):
             data = response.json()
 
             return data["choices"][0]["message"]["content"]
+
+    async def stream(self, messages: List[Dict[str, str]], **kwargs) -> AsyncIterator[str]:
+        """OpenAI 兼容流式输出"""
+        if not self.api_key:
+            raise ValueError("LLM_API_KEY 未配置")
+
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "max_tokens": kwargs.get("max_tokens", 2048),
+            "temperature": kwargs.get("temperature", 0.7),
+            "stream": True,
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+        }
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream("POST", f"{self.base_url}/chat/completions",
+                                     json=payload, headers=headers) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]
+                    if data.strip() == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        delta = chunk["choices"][0].get("delta", {})
+                        content = delta.get("content")
+                        if content:
+                            yield content
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        continue
 
 
 def create_llm_provider(provider: Optional[str] = None) -> LLMProvider:

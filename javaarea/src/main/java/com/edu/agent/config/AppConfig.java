@@ -4,19 +4,40 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.http.converter.StringHttpMessageConverter;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.filter.CharacterEncodingFilter;
+
+import java.nio.charset.StandardCharsets;
 
 @Configuration
 public class AppConfig {
 
-    @Value("${agent.service.timeout:10000}")
+    @Value("${agent.service.timeout:120000}")
     private int agentTimeout;
+
+    @Bean
+    public CharacterEncodingFilter characterEncodingFilter() {
+        CharacterEncodingFilter filter = new CharacterEncodingFilter();
+        filter.setEncoding("UTF-8");
+        filter.setForceEncoding(true);
+        return filter;
+    }
 
     @Bean
     public RestTemplate restTemplate() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         factory.setConnectTimeout(5000);
         factory.setReadTimeout(agentTimeout);
-        return new RestTemplate(factory);
+        RestTemplate restTemplate = new RestTemplate(factory);
+        restTemplate.getMessageConverters().removeIf(c -> c instanceof StringHttpMessageConverter);
+        restTemplate.getMessageConverters().add(0, new StringHttpMessageConverter(StandardCharsets.UTF_8));
+        for (var converter : restTemplate.getMessageConverters()) {
+            if (converter instanceof MappingJackson2HttpMessageConverter jc) {
+                jc.setDefaultCharset(StandardCharsets.UTF_8);
+            }
+        }
+        return restTemplate;
     }
 }

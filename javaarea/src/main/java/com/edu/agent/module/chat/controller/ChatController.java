@@ -10,8 +10,10 @@ import com.edu.agent.module.chat.service.ChatService;
 import com.edu.agent.security.LoginUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
@@ -53,5 +55,12 @@ public class ChatController {
         LoginUser loginUser = (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         chatService.deleteSession(id, loginUser.getUser().getId());
         return Result.success();
+    }
+
+    @PostMapping(value = "/sessions/{id}/messages/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter sendMessageStream(@PathVariable Long id,
+                                        @Valid @RequestBody ChatRequest request) {
+        LoginUser loginUser = (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        return chatService.sendMessageStream(id, loginUser.getUser().getId(), request);
     }
 }

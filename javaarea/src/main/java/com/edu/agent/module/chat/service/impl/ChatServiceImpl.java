@@ -21,8 +21,11 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -33,6 +36,7 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
     private final AgentServiceClient agentServiceClient;
     private final ChatMessageMapper messageMapper;
     private final KnowledgeMapper knowledgeMapper;
+    private final ExecutorService streamExecutor = Executors.newCachedThreadPool();
 
     @Override
     @Transactional
@@ -112,19 +116,7 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
         messageMapper.insert(userMessage);
 
         // Build context
-        Map<String, Object> context = new HashMap<>();
-        if (session.getCourseId() != null) {
-            LambdaQueryWrapper<KnowledgeBase> kbWrapper = new LambdaQueryWrapper<>();
-            kbWrapper.eq(KnowledgeBase::getCourseId, session.getCourseId())
-                    .eq(KnowledgeBase::getStatus, 1); // indexed only
-            List<KnowledgeBase> knowledgeList = knowledgeMapper.selectList(kbWrapper);
-            List<Long> knowledgeIds = knowledgeList.stream()
-                    .map(KnowledgeBase::getId)
-                    .collect(Collectors.toList());
-            if (!knowledgeIds.isEmpty()) {
-                context.put("knowledge_ids", knowledgeIds);
-            }
-        }
+        Map<String, Object> context = buildContext(session);
 
         // Call agent service
         String agentResponse;
@@ -157,6 +149,83 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
         response.setMessageId(assistantMessage.getId());
         response.setAgentId("orchestrator");
         return response;
+    }
+
+    @Override
+    public SseEmitter sendMessageStream(Long sessionId, Long userId, ChatRequest request) {
+        ChatSession session = getById(sessionId);
+        if (session == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "会话不存在");
+        }
+        if (!session.getUserId().equals(userId)) {
+            throw new BizException(ResultCode.FORBIDDEN, "无权访问此会话");
+        }
+
+        // Save user message synchronously
+        ChatMessage userMessage = new ChatMessage();
+        userMessage.setSessionId(sessionId);
+        userMessage.setRole("USER");
+        userMessage.setContent(request.getMessage());
+        messageMapper.insert(userMessage);
+
+        // Build context
+        Map<String, Object> context = buildContext(session);
+
+        // Update session title if first message
+        if ("新对话".equals(session.getTitle())) {
+            String title = request.getMessage().length() > 50
+                    ? request.getMessage().substring(0, 50) + "..."
+                    : request.getMessage();
+            session.setTitle(title);
+            updateById(session);
+        }
+
+        SseEmitter emitter = new SseEmitter(120_000L); // 2 min timeout
+        StringBuilder accumulator = new StringBuilder();
+
+        streamExecutor.submit(() -> {
+            try {
+                agentServiceClient.streamChatWithContext(request.getMessage(), context, emitter, accumulator);
+            } catch (Exception e) {
+                log.error("流式对话失败", e);
+                try {
+                    emitter.send(SseEmitter.event().data("{\"error\":\"AI 服务暂时不可用\"}"));
+                    emitter.complete();
+                } catch (Exception ignored) {}
+            } finally {
+                // Persist full response to DB
+                String fullResponse = accumulator.toString();
+                if (!fullResponse.isEmpty()) {
+                    ChatMessage assistantMessage = new ChatMessage();
+                    assistantMessage.setSessionId(sessionId);
+                    assistantMessage.setRole("ASSISTANT");
+                    assistantMessage.setContent(fullResponse);
+                    messageMapper.insert(assistantMessage);
+                }
+            }
+        });
+
+        emitter.onTimeout(() -> log.warn("SSE 超时: sessionId={}", sessionId));
+        emitter.onError(e -> log.warn("SSE 错误: sessionId={}", sessionId, e));
+
+        return emitter;
+    }
+
+    private Map<String, Object> buildContext(ChatSession session) {
+        Map<String, Object> context = new HashMap<>();
+        if (session.getCourseId() != null) {
+            LambdaQueryWrapper<KnowledgeBase> kbWrapper = new LambdaQueryWrapper<>();
+            kbWrapper.eq(KnowledgeBase::getCourseId, session.getCourseId())
+                    .eq(KnowledgeBase::getStatus, 1);
+            List<KnowledgeBase> knowledgeList = knowledgeMapper.selectList(kbWrapper);
+            List<Long> knowledgeIds = knowledgeList.stream()
+                    .map(KnowledgeBase::getId)
+                    .collect(Collectors.toList());
+            if (!knowledgeIds.isEmpty()) {
+                context.put("knowledge_ids", knowledgeIds);
+            }
+        }
+        return context;
     }
 
     @Override

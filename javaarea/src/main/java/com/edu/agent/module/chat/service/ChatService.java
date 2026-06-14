@@ -5,6 +5,7 @@ import com.edu.agent.module.chat.dto.ChatResponse;
 import com.edu.agent.module.chat.dto.ChatSessionDTO;
 import com.edu.agent.module.chat.entity.ChatMessage;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
@@ -17,6 +18,8 @@ public interface ChatService {
     IPage<ChatMessage> getSessionMessages(Long sessionId, int page, int size);
 
     ChatResponse sendMessage(Long sessionId, Long userId, ChatRequest request);
+
+    SseEmitter sendMessageStream(Long sessionId, Long userId, ChatRequest request);
 
     void deleteSession(Long sessionId, Long userId);
 }
