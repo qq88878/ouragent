@@ -98,9 +98,11 @@ public class AdminServiceImpl implements AdminService {
 
         // Redis status
         try {
-            redisTemplate.getConnectionFactory().getConnection().ping();
-            health.setRedisStatus("healthy");
+            redisTemplate.opsForValue().set("__health__", "ok");
+            String val = redisTemplate.opsForValue().get("__health__");
+            health.setRedisStatus("ok".equals(val) ? "healthy" : "unhealthy");
         } catch (Exception e) {
+            log.warn("Redis health check failed: {}", e.getMessage());
             health.setRedisStatus("unhealthy");
         }
 

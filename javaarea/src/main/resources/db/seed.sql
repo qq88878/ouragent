@@ -4,7 +4,7 @@
 -- Run after schema.sql
 -- ============================================================
 
-USE edu;
+USE edu_agent;
 
 -- Admin account: admin / 123456
 INSERT IGNORE INTO `user` (`username`, `password`, `nickname`, `email`, `role`, `status`, `email_verified`)
