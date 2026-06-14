@@ -91,12 +91,12 @@ services:
       - AGENT_SERVICE_KEY=${AGENT_SERVICE_KEY:-internal-agent-key-2024}
       - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
       - LLM_PROVIDER=${LLM_PROVIDER:-openai}
-      - LLM_API_KEY=${LLM_API_KEY}
-      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
-      - LLM_MODEL=${LLM_MODEL:-gpt-3.5-turbo}
-      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
-      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+      - LLM_API_KEY=${LLM_API_KEY:-tp-c4ksz64wen9n5g0pbqjw34nfghupg0suks538m24snl8d61u}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://token-plan-cn.xiaomimimo.com/v1}
+      - LLM_MODEL=${LLM_MODEL:-mimo-v2.5-pro}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-sk-glrxajaobfyfrjrxawleeumwdcixvomrkoqkbabcxjrfahmo}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-https://api.siliconflow.cn/v1}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-large-zh-v1.5}
     volumes:
       - agent-uploads:/app/uploads
       - agent-logs:/app/logs
