@@ -24,7 +24,7 @@ export const useAuthStore = defineStore('auth', () => {
     function clearAuth() {
         token.value = '';
         refreshToken.value = '';
-        user.value = null;
+        user.value = null; localStorage.removeItem("currentUser");
         emailVerified.value = true;
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
@@ -46,8 +46,7 @@ export const useAuthStore = defineStore('auth', () => {
     async function fetchUser() {
         try {
             const res = await authApi.me();
-            if (res.code === 200) {
-                user.value = res.data;
+            if (res.code === 200) { user.value = res.data; localStorage.setItem("currentUser", JSON.stringify(res.data));
                 if (res.data.emailVerified === 1) {
                     emailVerified.value = true;
                     localStorage.setItem('emailVerified', '1');

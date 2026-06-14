@@ -6,6 +6,7 @@ import com.edu.agent.module.learning.dto.StudyRecordDTO;
 import com.edu.agent.module.learning.service.StudyRecordService;
 import com.edu.agent.security.LoginUser;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -14,6 +15,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/study/records")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('STUDENT')")
 public class StudyRecordController {
 
     private final StudyRecordService studyRecordService;

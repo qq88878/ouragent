@@ -9,4 +9,6 @@ public class CourseQueryDTO {
     private String keyword;
     private Integer page = 1;
     private Integer size = 10;
+
+    private Long teacherId;
 }

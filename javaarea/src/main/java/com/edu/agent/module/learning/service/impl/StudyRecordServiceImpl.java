@@ -5,7 +5,9 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.edu.agent.module.course.entity.Course;
+import com.edu.agent.module.course.entity.CourseEnrollment;
 import com.edu.agent.module.course.mapper.CourseMapper;
+import com.edu.agent.module.course.mapper.CourseEnrollmentMapper;
 import com.edu.agent.module.learning.dto.StudyRecordDTO;
 import com.edu.agent.module.learning.entity.StudyRecord;
 import com.edu.agent.module.learning.mapper.StudyRecordMapper;
@@ -26,6 +28,7 @@ public class StudyRecordServiceImpl
         implements StudyRecordService {
 
     private final CourseMapper courseMapper;
+    private final CourseEnrollmentMapper enrollmentMapper;
 
     @Override
     @Transactional
@@ -77,10 +80,11 @@ public class StudyRecordServiceImpl
         int totalInteractions = records.stream()
                 .mapToInt(r -> r.getInteractionCount() != null ? r.getInteractionCount() : 0)
                 .sum();
-        long courseCount = records.stream()
-                .map(StudyRecord::getCourseId)
-                .distinct()
-                .count();
+
+        Long courseCount = enrollmentMapper.selectCount(
+                new LambdaQueryWrapper<CourseEnrollment>()
+                        .eq(CourseEnrollment::getUserId, userId)
+        );
 
         Map<String, Object> stats = new HashMap<>();
         stats.put("totalDuration", totalDuration);

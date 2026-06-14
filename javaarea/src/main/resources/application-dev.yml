@@ -35,7 +35,7 @@ logging:
 
 file:
   upload:
-    path: ./uploads
+    path: C:/Users/23705/IdeaProjects/ouragent/javaarea/uploads
     allowed-types: pdf,docx,md,txt
 
 app:

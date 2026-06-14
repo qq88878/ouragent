@@ -21,7 +21,6 @@ public class MyBatisPlusConfig {
      */
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
-        // TODO: Create interceptor, add PaginationInnerInterceptor with MySqlDialect
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
         interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.MYSQL));
         return interceptor;
@@ -36,14 +35,12 @@ public class MyBatisPlusConfig {
 
             @Override
             public void insertFill(MetaObject metaObject) {
-                // TODO: Auto-fill createTime and updateTime with LocalDateTime.now() on insert
                 this.strictInsertFill(metaObject, "createTime", LocalDateTime.class, LocalDateTime.now());
                 this.strictInsertFill(metaObject, "updateTime", LocalDateTime.class, LocalDateTime.now());
             }
 
             @Override
             public void updateFill(MetaObject metaObject) {
-                // TODO: Auto-fill updateTime with LocalDateTime.now() on update
                 this.strictUpdateFill(metaObject, "updateTime", LocalDateTime.class, LocalDateTime.now());
             }
         };

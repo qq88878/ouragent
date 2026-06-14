@@ -14,6 +14,10 @@ public interface KnowledgeService {
 
     List<KnowledgeDTO> listByCourse(Long courseId);
 
+    List<KnowledgeDTO> listAll();
+
+    void assignToCourse(Long knowledgeId, Long courseId);
+
     void deleteKnowledge(Long id);
 
     void reprocessKnowledge(Long id);

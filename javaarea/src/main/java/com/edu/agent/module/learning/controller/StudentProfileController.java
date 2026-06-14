@@ -5,6 +5,7 @@ import com.edu.agent.module.learning.entity.StudentProfile;
 import com.edu.agent.module.learning.service.StudentProfileService;
 import com.edu.agent.security.LoginUser;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
@@ -13,6 +14,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/profile")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('STUDENT')")
 public class StudentProfileController {
 
     private final StudentProfileService studentProfileService;

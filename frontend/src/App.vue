@@ -24,7 +24,7 @@
           <el-icon><Reading /></el-icon>
           <span>课程中心</span>
         </el-menu-item>
-        <el-menu-item index="/learning">
+        <el-menu-item v-if="isStudent" index="/learning">
           <el-icon><TrendCharts /></el-icon>
           <span>学习路径</span>
         </el-menu-item>
@@ -40,12 +40,17 @@
           <el-icon><Setting /></el-icon>
           <span>管理后台</span>
         </el-menu-item>
+        <el-menu-item v-if="isAdmin" index="/admin/users">
+          <el-icon><Avatar /></el-icon>
+          <span>用户管理</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-container>
       <el-header class="app-header">
         <span class="page-title">{{ pageTitle }}</span>
         <div class="header-right">
+          <el-tag :type="roleTagType" size="small" style="margin-right: 8px;">{{ roleLabel }}</el-tag>
           <span class="user-info">{{ userDisplay }}</span>
           <el-button text @click="handleLogout">退出</el-button>
         </div>
@@ -63,17 +68,36 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import {
   HomeFilled, ChatDotRound, Reading, TrendCharts,
-  Document, User, Setting,
+  Document, User, Setting, Avatar,
 } from '@element-plus/icons-vue';
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
-const currentUser = ref(null);
+
 
 const isAuthPage = computed(() => ['/login', '/register'].includes(route.path));
-const isAdmin = computed(() => currentUser.value?.role === 'ADMIN' || currentUser.value?.role === 'TEACHER');
-const userDisplay = computed(() => currentUser.value?.nickname || currentUser.value?.username || '');
+const isAdmin = computed(() => authStore.user?.role === 'ADMIN');
+const isTeacherOrAdmin = computed(() => authStore.user?.role === 'TEACHER' || authStore.user?.role === 'ADMIN');
+const isStudent = computed(() => authStore.user?.role === 'STUDENT');
+const userDisplay = computed(() => authStore.user?.nickname || authStore.user?.username || '');
+
+const roleLabel = computed(() => {
+  switch (authStore.user?.role) {
+    case 'ADMIN': return '管理员';
+    case 'TEACHER': return '教师';
+    case 'STUDENT': return '学生';
+    default: return '';
+  }
+});
+const roleTagType = computed(() => {
+  switch (authStore.user?.role) {
+    case 'ADMIN': return 'danger';
+    case 'TEACHER': return 'warning';
+    case 'STUDENT': return 'success';
+    default: return 'info';
+  }
+});
 
 const pageTitles = {
   '/dashboard': '首页',
@@ -96,7 +120,7 @@ onMounted(async () => {
   const token = localStorage.getItem('accessToken');
   if (token) {
     const res = await authStore.fetchUser();
-    if (res?.code === 200) currentUser.value = res.data;
+    if (res?.code === 200) { /* user stored in authStore */ }
   }
 });
 

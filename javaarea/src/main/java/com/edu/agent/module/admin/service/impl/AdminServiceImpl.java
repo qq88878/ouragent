@@ -9,6 +9,7 @@ import com.edu.agent.module.chat.mapper.ChatMessageMapper;
 import com.edu.agent.module.chat.service.client.AgentServiceClient;
 import com.edu.agent.module.course.mapper.CourseMapper;
 import com.edu.agent.module.knowledge.mapper.KnowledgeMapper;
+import com.edu.agent.module.learning.mapper.LearningPathMapper;
 import com.edu.agent.module.user.entity.User;
 import com.edu.agent.module.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +32,7 @@ public class AdminServiceImpl implements AdminService {
     private final ChatMessageMapper chatMessageMapper;
     private final KnowledgeMapper knowledgeMapper;
     private final AgentServiceClient agentServiceClient;
+    private final LearningPathMapper learningPathMapper;
     private final StringRedisTemplate redisTemplate;
 
     @Override
@@ -71,6 +73,9 @@ public class AdminServiceImpl implements AdminService {
         // Total knowledge items
         long totalKnowledge = knowledgeMapper.selectCount(null);
         stats.setTotalKnowledgeItems((int) totalKnowledge);
+
+        long totalPaths = learningPathMapper.selectCount(null);
+        stats.setTotalPaths((int) totalPaths);
 
         return stats;
     }

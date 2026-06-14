@@ -6,6 +6,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 @Slf4j
 @RestControllerAdvice("com.edu.agent")
@@ -22,6 +25,24 @@ public class GlobalExceptionHandler {
         String message = e.getBindingResult().getAllErrors().get(0).getDefaultMessage();
         log.warn("Validation Exception: {}", message);
         return Result.fail(ResultCode.BAD_REQUEST.getCode(), message);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public Result<Void> handleMaxUploadSize(MaxUploadSizeExceededException e) {
+        log.warn("Upload size exceeded: {}", e.getMessage());
+        return Result.fail(ResultCode.BAD_REQUEST.getCode(), "File size exceeds limit (max 50MB)");
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public Result<Void> handleMissingPart(MissingServletRequestPartException e) {
+        log.warn("Missing request part: {}", e.getMessage());
+        return Result.fail(ResultCode.BAD_REQUEST.getCode(), "Missing upload file part");
+    }
+
+    @ExceptionHandler(MultipartException.class)
+    public Result<Void> handleMultipartException(MultipartException e) {
+        log.error("Multipart Exception: {}", e.getMessage(), e);
+        return Result.fail(ResultCode.BAD_REQUEST.getCode(), "Invalid file upload request format");
     }
 
     @ExceptionHandler(Exception.class)

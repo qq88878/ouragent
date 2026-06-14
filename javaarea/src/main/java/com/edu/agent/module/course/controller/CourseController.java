@@ -5,11 +5,13 @@ import com.edu.agent.common.result.Result;
 import com.edu.agent.module.course.dto.CourseDTO;
 import com.edu.agent.module.course.dto.CourseQueryDTO;
 import com.edu.agent.module.course.service.CourseService;
-import com.edu.agent.module.user.entity.User;
 import com.edu.agent.security.LoginUser;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/courses")
@@ -19,6 +21,7 @@ public class CourseController {
     private final CourseService courseService;
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public Result<Long> create(@RequestBody CourseDTO courseDTO) {
         Long courseId = courseService.createCourse(courseDTO);
         return Result.success(courseId);
@@ -35,12 +38,14 @@ public class CourseController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public Result<Void> update(@PathVariable Long id, @RequestBody CourseDTO courseDTO) {
         courseService.updateCourse(id, courseDTO);
         return Result.success();
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public Result<Void> delete(@PathVariable Long id) {
         courseService.deleteCourse(id);
         return Result.success();
@@ -51,5 +56,12 @@ public class CourseController {
         LoginUser loginUser = (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         courseService.enrollCourse(id, loginUser.getUser().getId());
         return Result.success();
+    }
+
+    @GetMapping("/enrolled")
+    @PreAuthorize("hasRole('STUDENT')")
+    public Result<List<Long>> getEnrolled() {
+        LoginUser loginUser = (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        return Result.success(courseService.getEnrolledCourseIds(loginUser.getUser().getId()));
     }
 }

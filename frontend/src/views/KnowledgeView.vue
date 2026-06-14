@@ -2,49 +2,39 @@
   <div class="knowledge-page">
     <div class="page-header">
       <h3>知识库管理</h3>
-      <el-button type="primary" @click="showUploadDialog = true">上传文件</el-button>
+      <el-button v-if="isTeacherOrAdmin" type="primary" @click="openUploadDialog">上传文件</el-button>
     </div>
 
-    <div style="margin-bottom: 16px;">
-      <el-select v-model="selectedCourseId" placeholder="选择课程筛选" clearable @change="loadKnowledge">
-        <el-option v-for="c in courses" :key="c.id" :label="c.title" :value="c.id" />
-      </el-select>
-    </div>
-
-    <el-empty v-if="!selectedCourseId" description="请先在上方选择课程" />
-    <el-table v-else :data="knowledgeList" v-loading="loading" stripe>
+    <el-table :data="knowledgeList" v-loading="loading" stripe>
       <template #empty>
-        <el-empty v-if="!loading" description="该课程暂无知识库文件" />
+        <el-empty v-if="!loading" description="暂无知识库文件" />
       </template>
       <el-table-column prop="name" label="文件名" min-width="200" />
+      <el-table-column label="所属课程" width="160">
+        <template #default="{ row }">{{ row.courseName || '-' }}</template>
+      </el-table-column>
       <el-table-column prop="fileType" label="类型" width="80">
         <template #default="{ row }">
           <el-tag size="small">{{ row.fileType }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="大小" width="100">
-        <template #default="{ row }">{{ formatSize(row.size) }}</template>
-      </el-table-column>
-      <el-table-column label="状态" width="100">
-        <template #default="{ row }">
-          <el-tag :type="statusType(row.status)" size="small">{{ statusText(row.status) }}</el-tag>
-        </template>
+        <template #default="{ row }">{{ formatSize(row.fileSize) }}</template>
       </el-table-column>
       <el-table-column prop="createTime" label="上传时间" width="170">
         <template #default="{ row }">{{ new Date(row.createTime).toLocaleString('zh-CN') }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="160" fixed="right">
+      <el-table-column v-if="isTeacherOrAdmin" label="操作" width="160" fixed="right">
         <template #default="{ row }">
-          <el-button text type="primary" size="small" @click="reprocess(row.id)">重新处理</el-button>
           <el-button text type="danger" size="small" @click="remove(row.id)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
 
-    <el-dialog v-model="showUploadDialog" title="上传知识库文件" width="500px">
+    <el-dialog v-if="isTeacherOrAdmin" v-model="showUploadDialog" title="上传知识库文件" width="500px">
       <el-form label-width="80px">
-        <el-form-item label="课程" required>
-          <el-select v-model="uploadForm.courseId" placeholder="选择课程" style="width: 100%;">
+        <el-form-item label="课程">
+          <el-select v-model="uploadForm.courseId" placeholder="可不选，上传到公共库" clearable style="width: 100%;">
             <el-option v-for="c in courses" :key="c.id" :label="c.title" :value="c.id" />
           </el-select>
         </el-form-item>
@@ -74,20 +64,26 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { knowledgeApi, courseApi } from '@/api';
 import { ElMessage, ElMessageBox } from 'element-plus';
+import { useAuthStore } from '@/stores/auth';
 
 const knowledgeList = ref([]);
 const courses = ref([]);
 const loading = ref(false);
 const uploading = ref(false);
 const showUploadDialog = ref(false);
-const selectedCourseId = ref(null);
 const uploadForm = ref({ courseId: null, file: null, name: '' });
+const authStore = useAuthStore();
+const isTeacherOrAdmin = computed(() => {
+  const role = authStore.user?.role;
+  return role === 'TEACHER' || role === 'ADMIN';
+});
 
 onMounted(async () => {
   await loadCourses();
+  await loadKnowledge();
 });
 
 async function loadCourses() {
@@ -95,23 +91,14 @@ async function loadCourses() {
     const res = await courseApi.list({ page: 1, size: 100 });
     if (res.code === 200) {
       courses.value = res.data?.records || [];
-      // Auto-select first course if available
-      if (courses.value.length > 0 && !selectedCourseId.value) {
-        selectedCourseId.value = courses.value[0].id;
-      }
-      await loadKnowledge();
     }
   } catch { /* ignore */ }
 }
 
 async function loadKnowledge() {
-  if (!selectedCourseId.value) {
-    knowledgeList.value = [];
-    return;
-  }
   loading.value = true;
   try {
-    const res = await knowledgeApi.list(selectedCourseId.value);
+    const res = await knowledgeApi.listAll();
     if (res.code === 200) knowledgeList.value = res.data || [];
   } catch { /* ignore */ }
   finally { loading.value = false; }
@@ -121,14 +108,20 @@ function handleFileChange(file) {
   uploadForm.value.file = file.raw;
 }
 
+function openUploadDialog() {
+  uploadForm.value.courseId = null;
+  uploadForm.value.file = null;
+  uploadForm.value.name = '';
+  showUploadDialog.value = true;
+}
+
 async function doUpload() {
-  if (!uploadForm.value.courseId) { ElMessage.warning('请选择课程'); return; }
   if (!uploadForm.value.file) { ElMessage.warning('请选择文件'); return; }
   uploading.value = true;
   try {
     const res = await knowledgeApi.upload(
       uploadForm.value.file,
-      uploadForm.value.courseId,
+      uploadForm.value.courseId || null,
       uploadForm.value.name,
     );
     if (res.code === 200) {
@@ -140,16 +133,6 @@ async function doUpload() {
   } catch {
     ElMessage.error('上传失败');
   } finally { uploading.value = false; }
-}
-
-async function reprocess(id) {
-  try {
-    await knowledgeApi.reprocess(id);
-    ElMessage.success('已触发重新处理');
-    await loadKnowledge();
-  } catch {
-    ElMessage.error('操作失败');
-  }
 }
 
 async function remove(id) {
@@ -167,8 +150,6 @@ function formatSize(bytes) {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return (bytes / 1024 / 1024).toFixed(1) + ' MB';
 }
-function statusText(s) { return ['待处理', '已索引', '处理失败'][s] || '未知'; }
-function statusType(s) { return ['warning', 'success', 'danger'][s] || 'info'; }
 </script>
 
 <style scoped>

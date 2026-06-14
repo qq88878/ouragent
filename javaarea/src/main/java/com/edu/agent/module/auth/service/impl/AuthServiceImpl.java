@@ -4,6 +4,7 @@ import com.edu.agent.common.exception.BizException;
 import com.edu.agent.common.result.ResultCode;
 import com.edu.agent.common.service.EmailService;
 import com.edu.agent.module.auth.dto.LoginRequest;
+import com.edu.agent.module.auth.dto.RefreshRequest;
 import com.edu.agent.module.auth.dto.RegisterRequest;
 import com.edu.agent.module.auth.dto.TokenResponse;
 import com.edu.agent.module.auth.service.AuthService;
@@ -92,6 +93,61 @@ public class AuthServiceImpl implements AuthService {
         String refreshToken = jwtProvider.generateRefreshToken(user);
 
         return new TokenResponse(accessToken, refreshToken, user.getEmailVerified());
+    }
+
+    @Override
+    public TokenResponse refresh(RefreshRequest request) {
+        String refreshToken = request.getRefreshToken();
+
+        // Check blacklist
+        String blacklistKey = "blacklist:" + refreshToken;
+        try {
+        if (Boolean.TRUE.equals(redisTemplate.hasKey(blacklistKey))) {
+            throw new BizException(ResultCode.UNAUTHORIZED, "Refresh Token已失效，请重新登录");
+        }
+        } catch (Exception e) {
+            log.debug("Redis unavailable during refresh, skipping blacklist check: {}", e.getMessage());
+        }
+
+        // Validate refresh token
+        if (jwtProvider.isTokenExpired(refreshToken)) {
+            throw new BizException(ResultCode.UNAUTHORIZED, "Refresh Token已过期，请重新登录");
+        }
+
+        String username;
+        try {
+            username = jwtProvider.getUsernameFromToken(refreshToken);
+        } catch (Exception e) {
+            throw new BizException(ResultCode.UNAUTHORIZED, "Refresh Token无效");
+        }
+
+        User user = userMapper.selectByUsername(username);
+        if (user == null) {
+            throw new BizException(ResultCode.UNAUTHORIZED, "用户不存在");
+        }
+
+        if (user.getStatus() != null && user.getStatus() == 0) {
+            throw new BizException(ResultCode.FORBIDDEN, "账号已被禁用");
+        }
+
+        // Blacklist old refresh token to prevent reuse
+        try {
+            Claims claims = jwtProvider.getClaimsFromToken(refreshToken);
+            long expiration = claims.getExpiration().getTime();
+            long ttl = expiration - System.currentTimeMillis();
+            if (ttl > 0) {
+                redisTemplate.opsForValue().set(blacklistKey, "1", ttl, TimeUnit.MILLISECONDS);
+            }
+        } catch (Exception e) {
+            log.debug("Failed to blacklist old refresh token: {}", e.getMessage());
+        }
+
+        // Issue new tokens
+        String newAccessToken = jwtProvider.generateAccessToken(user);
+        String newRefreshToken = jwtProvider.generateRefreshToken(user);
+
+        log.info("Token刷新成功: username={}", username);
+        return new TokenResponse(newAccessToken, newRefreshToken, user.getEmailVerified());
     }
 
     @Override

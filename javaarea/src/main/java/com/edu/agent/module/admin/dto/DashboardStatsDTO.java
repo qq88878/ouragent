@@ -18,4 +18,6 @@ public class DashboardStatsDTO {
     private Integer activeStudentsToday;
 
     private Integer totalKnowledgeItems;
+    
+    private Integer totalPaths;
 }

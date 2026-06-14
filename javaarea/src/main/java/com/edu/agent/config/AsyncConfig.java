@@ -19,15 +19,7 @@ public class AsyncConfig {
      * core=5, max=10, queue=25, thread name prefix="Agent-"
      */
     @Bean(name = "agentExecutor")
-    public Executor agentExecutor() {
-        // TODO: Configure ThreadPoolTaskExecutor
-        //   setCorePoolSize(5)
-        //   setMaxPoolSize(10)
-        //   setQueueCapacity(25)
-        //   setThreadNamePrefix("Agent-")
-        //   setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy())
-        //   initialize and return
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+    public Executor agentExecutor() {        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         executor.setCorePoolSize(5);
         executor.setMaxPoolSize(10);
         executor.setQueueCapacity(25);

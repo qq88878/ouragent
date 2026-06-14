@@ -1,6 +1,7 @@
 package com.edu.agent.module.knowledge.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.edu.agent.common.config.FileUploadConfig;
 import com.edu.agent.common.exception.BizException;
@@ -44,9 +45,14 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
             throw new BizException(ResultCode.FORBIDDEN, "只有教师可以上传知识库文件");
         }
 
-        Course course = courseMapper.selectById(dto.getCourseId());
-        if (course == null) {
-            throw new BizException(ResultCode.NOT_FOUND, "课程不存在");
+        if (dto.getCourseId() != null) {
+            Course course = courseMapper.selectById(dto.getCourseId());
+            if (course == null) {
+                throw new BizException(ResultCode.NOT_FOUND, "课程不存在");
+            }
+            if (!course.getTeacherId().equals(loginUser.getUser().getId()) && !"ADMIN".equals(loginUser.getUser().getRole())) {
+                throw new BizException(ResultCode.FORBIDDEN, "只能给自己创建的课程上传辅材");
+            }
         }
 
         String originalFilename = file.getOriginalFilename();
@@ -73,19 +79,10 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         knowledge.setFilePath("/knowledge/" + storedFilename);
         knowledge.setFileType(fileType);
         knowledge.setFileSize(file.getSize());
-        knowledge.setStatus(0); // pending
+        knowledge.setStatus(1); // available
         save(knowledge);
 
-        // Trigger async vectorization via Python Agent
-        try {
-            String result = agentServiceClient.ingestKnowledge(
-                    knowledge.getId(), dto.getCourseId(),
-                    uploadDir + "/" + storedFilename, fileType);
-            knowledge.setStatus("indexed".equals(result) ? 1 : 2);
-        } catch (Exception e) {
-            log.warn("调用 Agent 向量化失败，状态保持 pending: {}", e.getMessage());
-            knowledge.setStatus(2); // failed
-        }
+        // TODO: async vectorization via Python Agent (deferred)
         updateById(knowledge);
 
         log.info("知识库文件上传成功: id={}, name={}, status={}", knowledge.getId(), knowledge.getName(), knowledge.getStatus());
@@ -106,7 +103,9 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         LambdaQueryWrapper<KnowledgeBase> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(KnowledgeBase::getCourseId, courseId)
                 .orderByDesc(KnowledgeBase::getCreateTime);
-        return list(wrapper).stream().map(this::toDTO).toList();
+        List<KnowledgeDTO> result = list(wrapper).stream().map(this::toDTO).toList();
+        enrichCourseNames(result);
+        return result;
     }
 
     @Override
@@ -146,6 +145,59 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         updateById(knowledge);
 
         log.info("知识库文件重新处理: id={}", id);
+    }
+
+    
+    @Override
+    public List<KnowledgeDTO> listAll() {
+        LambdaQueryWrapper<KnowledgeBase> wrapper = new LambdaQueryWrapper<>();
+        wrapper.orderByDesc(KnowledgeBase::getCreateTime);
+        List<KnowledgeDTO> result = list(wrapper).stream().map(this::toDTO).toList();
+        enrichCourseNames(result);
+        return result;
+    }
+    @Override
+    @Transactional
+    public void assignToCourse(Long knowledgeId, Long courseId) {
+        KnowledgeBase knowledge = getById(knowledgeId);
+        if (knowledge == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "知识库文件不存在");
+        }
+
+        LoginUser loginUser = getCurrentLoginUser();
+
+        if (courseId != null) {
+            Course targetCourse = courseMapper.selectById(courseId);
+            if (targetCourse == null) {
+                throw new BizException(ResultCode.NOT_FOUND, "目标课程不存在");
+            }
+            if (!targetCourse.getTeacherId().equals(loginUser.getUser().getId()) && !"ADMIN".equals(loginUser.getUser().getRole())) {
+                throw new BizException(ResultCode.FORBIDDEN, "只能给自己创建的课程关联辅材");
+            }
+        }
+
+        // Use raw SQL SET to bypass MyBatis-Plus NOT_NULL field strategy
+        LambdaUpdateWrapper<KnowledgeBase> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.eq(KnowledgeBase::getId, knowledgeId);
+        if (courseId == null) {
+            wrapper.setSql("course_id = NULL");
+        } else {
+            wrapper.set(KnowledgeBase::getCourseId, courseId);
+        }
+        update(wrapper);
+        log.info("知识库文件关联更新: knowledgeId={}, courseId={}", knowledgeId, courseId);
+    }
+
+    private void enrichCourseNames(List<KnowledgeDTO> list) {
+        if (list == null || list.isEmpty()) return;
+        for (KnowledgeDTO dto : list) {
+            if (dto.getCourseId() != null) {
+                Course course = courseMapper.selectById(dto.getCourseId());
+                if (course != null) {
+                    dto.setCourseName(course.getTitle());
+                }
+            }
+        }
     }
 
     private KnowledgeDTO toDTO(KnowledgeBase knowledge) {

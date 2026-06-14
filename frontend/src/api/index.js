@@ -3,7 +3,6 @@ import axios from 'axios';
 const http = axios.create({
     baseURL: '/api',
     timeout: 30000,
-    headers: { 'Content-Type': 'application/json' },
 });
 
 http.interceptors.request.use((config) => {
@@ -48,6 +47,7 @@ export const courseApi = {
     update(id, data) { return http.put(`/courses/${id}`, data); },
     delete(id) { return http.delete(`/courses/${id}`); },
     enroll(id) { return http.post(`/courses/${id}/enroll`); },
+    getEnrolled() { return http.get('/courses/enrolled'); },
 };
 
 export const chatApi = {
@@ -82,15 +82,15 @@ export const knowledgeApi = {
     upload(file, courseId, name, description) {
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('courseId', courseId);
+        if (courseId != null) formData.append('courseId', courseId);
         if (name) formData.append('name', name);
         if (description) formData.append('description', description);
-        return http.post('/knowledge/upload', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        return http.post('/knowledge/upload', formData);
     },
     list(courseId) { return http.get('/knowledge', { params: { courseId } }); },
+    listAll() { return http.get('/knowledge/all'); },
     getById(id) { return http.get(`/knowledge/${id}`); },
+    assignToCourse(id, courseId) { return http.put(`/knowledge/${id}/assign`, null, { params: { courseId } }); },
     delete(id) { return http.delete(`/knowledge/${id}`); },
     reprocess(id) { return http.post(`/knowledge/${id}/reprocess`); },
 };

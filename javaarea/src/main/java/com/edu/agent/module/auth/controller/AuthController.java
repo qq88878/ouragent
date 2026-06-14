@@ -3,6 +3,7 @@ package com.edu.agent.module.auth.controller;
 import com.edu.agent.common.exception.BizException;
 import com.edu.agent.common.result.Result;
 import com.edu.agent.module.auth.dto.LoginRequest;
+import com.edu.agent.module.auth.dto.RefreshRequest;
 import com.edu.agent.module.auth.dto.RegisterRequest;
 import com.edu.agent.module.auth.dto.TokenResponse;
 import com.edu.agent.module.auth.service.AuthService;
@@ -43,6 +44,19 @@ public class AuthController {
             return Result.fail(e.getResultCode().getCode(), e.getMessage());
         } catch (Exception e) {
             log.error("Login error", e);
+            return Result.fail(500, e.getMessage());
+        }
+    }
+
+    @PostMapping("/refresh")
+    public Result<TokenResponse> refresh(@Valid @RequestBody RefreshRequest request) {
+        try {
+            TokenResponse tokenResponse = authService.refresh(request);
+            return Result.success(tokenResponse);
+        } catch (BizException e) {
+            return Result.fail(e.getResultCode().getCode(), e.getMessage());
+        } catch (Exception e) {
+            log.error("Refresh error", e);
             return Result.fail(500, e.getMessage());
         }
     }

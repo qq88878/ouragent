@@ -23,6 +23,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -130,6 +133,9 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
                     .or()
                     .like(Course::getDescription, queryDTO.getKeyword()));
         }
+        if (queryDTO.getTeacherId() != null) {
+            wrapper.eq(Course::getTeacherId, queryDTO.getTeacherId());
+        }
         wrapper.orderByDesc(Course::getCreateTime);
 
         Page<Course> pageParam = new Page<>(queryDTO.getPage(), queryDTO.getSize());
@@ -161,6 +167,15 @@ public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> impleme
         enrollmentMapper.insert(enrollment);
 
         log.info("课程注册成功: courseId={}, userId={}", courseId, userId);
+    }
+
+    @Override
+    public List<Long> getEnrolledCourseIds(Long userId) {
+        LambdaQueryWrapper<CourseEnrollment> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(CourseEnrollment::getUserId, userId);
+        return enrollmentMapper.selectList(wrapper).stream()
+                .map(CourseEnrollment::getCourseId)
+                .collect(Collectors.toList());
     }
 
     private CourseDTO toDTO(Course course) {
