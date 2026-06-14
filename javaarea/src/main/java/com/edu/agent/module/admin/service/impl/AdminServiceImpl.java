@@ -9,9 +9,11 @@ import com.edu.agent.module.chat.mapper.ChatMessageMapper;
 import com.edu.agent.module.chat.service.client.AgentServiceClient;
 import com.edu.agent.module.course.mapper.CourseMapper;
 import com.edu.agent.module.knowledge.mapper.KnowledgeMapper;
+import com.edu.agent.module.user.entity.User;
 import com.edu.agent.module.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -29,6 +31,7 @@ public class AdminServiceImpl implements AdminService {
     private final ChatMessageMapper chatMessageMapper;
     private final KnowledgeMapper knowledgeMapper;
     private final AgentServiceClient agentServiceClient;
+    private final StringRedisTemplate redisTemplate;
 
     @Override
     public DashboardStatsDTO getDashboardStats() {
@@ -39,13 +42,13 @@ public class AdminServiceImpl implements AdminService {
         stats.setTotalUsers((int) totalUsers);
 
         // Teachers and students
-        LambdaQueryWrapper<com.edu.agent.module.user.entity.User> teacherWrapper = new LambdaQueryWrapper<>();
-        teacherWrapper.eq(com.edu.agent.module.user.entity.User::getRole, "TEACHER");
+        LambdaQueryWrapper<User> teacherWrapper = new LambdaQueryWrapper<>();
+        teacherWrapper.eq(User::getRole, "TEACHER");
         long totalTeachers = userMapper.selectCount(teacherWrapper);
         stats.setTotalTeachers((int) totalTeachers);
 
-        LambdaQueryWrapper<com.edu.agent.module.user.entity.User> studentWrapper = new LambdaQueryWrapper<>();
-        studentWrapper.eq(com.edu.agent.module.user.entity.User::getRole, "STUDENT");
+        LambdaQueryWrapper<User> studentWrapper = new LambdaQueryWrapper<>();
+        studentWrapper.eq(User::getRole, "STUDENT");
         long totalStudents = userMapper.selectCount(studentWrapper);
         stats.setTotalStudents((int) totalStudents);
 
@@ -93,8 +96,13 @@ public class AdminServiceImpl implements AdminService {
             health.setDbStatus("unhealthy");
         }
 
-        // Redis status (simplified)
-        health.setRedisStatus("healthy");
+        // Redis status
+        try {
+            redisTemplate.getConnectionFactory().getConnection().ping();
+            health.setRedisStatus("healthy");
+        } catch (Exception e) {
+            health.setRedisStatus("unhealthy");
+        }
 
         // Uptime
         health.setUptime("Running");

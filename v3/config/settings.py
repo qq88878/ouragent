@@ -4,10 +4,11 @@
 """
 
 from pydantic_settings import BaseSettings
-from pydantic import Field, validator
+from pydantic import Field, field_validator
 from typing import List, Optional
 from pathlib import Path
 import os
+import warnings
 
 
 class Settings(BaseSettings):
@@ -89,11 +90,10 @@ class Settings(BaseSettings):
     AGENT_DEFAULT_MEMORY_SIZE: int = Field(default=100, description="Agent默认记忆大小")
     AGENT_MAX_MEMORY_SIZE: int = Field(default=1000, description="Agent最大记忆大小")
 
-    @validator("SECRET_KEY")
-    def validate_secret_key(cls, v):
-        """验证密钥安全性"""
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
         if v == "your-secret-key-change-in-production":
-            import warnings
             warnings.warn("⚠️  警告: 使用默认 SECRET_KEY，生产环境必须修改！")
         return v
 
@@ -131,10 +131,11 @@ class Settings(BaseSettings):
         """获取 CORS 源列表"""
         return [origin.strip() for origin in self.CORS_ORIGINS.split(",")]
 
-    class Config:
-        env_file = str(Path(__file__).parent / ".env")
-        env_file_encoding = "utf-8"
-        case_sensitive = True
+    model_config = {
+        "env_file": str(Path(__file__).parent / ".env"),
+        "env_file_encoding": "utf-8",
+        "case_sensitive": True,
+    }
 
 
 # 全局配置实例

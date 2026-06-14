@@ -4,6 +4,8 @@
 # 注意：torch 很大（~2GB），构建时间 10-30 分钟
 # ============================================================
 
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 # LangChain & LangGraph
 langchain>=0.2.0
 langgraph>=0.1.0

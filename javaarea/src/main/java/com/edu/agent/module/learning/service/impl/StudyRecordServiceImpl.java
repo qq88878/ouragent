@@ -15,8 +15,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -50,14 +50,26 @@ public class StudyRecordServiceImpl
 
         Page<StudyRecord> pageParam = new Page<>(page, size);
         Page<StudyRecord> result = page(pageParam, wrapper);
-        return result.convert(this::toDTO);
+
+        // Batch fetch courses to avoid N+1 queries
+        Set<Long> courseIds = result.getRecords().stream()
+                .map(StudyRecord::getCourseId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, String> courseNameMap = new HashMap<>();
+        if (!courseIds.isEmpty()) {
+            courseMapper.selectBatchIds(courseIds).forEach(
+                    course -> courseNameMap.put(course.getId(), course.getTitle()));
+        }
+
+        return result.convert(record -> toDTO(record, courseNameMap));
     }
 
     @Override
     public Map<String, Object> getStudyStats(Long userId) {
         LambdaQueryWrapper<StudyRecord> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(StudyRecord::getUserId, userId);
-        java.util.List<StudyRecord> records = list(wrapper);
+        List<StudyRecord> records = list(wrapper);
 
         int totalDuration = records.stream()
                 .mapToInt(r -> r.getDuration() != null ? r.getDuration() : 0)
@@ -79,7 +91,7 @@ public class StudyRecordServiceImpl
         return stats;
     }
 
-    private StudyRecordDTO toDTO(StudyRecord record) {
+    private StudyRecordDTO toDTO(StudyRecord record, Map<Long, String> courseNameMap) {
         StudyRecordDTO dto = new StudyRecordDTO();
         dto.setId(record.getId());
         dto.setCourseId(record.getCourseId());
@@ -88,12 +100,7 @@ public class StudyRecordServiceImpl
         dto.setInteractionCount(record.getInteractionCount());
         dto.setSummary(record.getSummary());
         dto.setCreateTime(record.getCreateTime());
-
-        Course course = courseMapper.selectById(record.getCourseId());
-        if (course != null) {
-            dto.setCourseName(course.getTitle());
-        }
-
+        dto.setCourseName(courseNameMap.get(record.getCourseId()));
         return dto;
     }
 }

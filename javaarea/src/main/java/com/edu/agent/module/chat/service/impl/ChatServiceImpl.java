@@ -54,15 +54,27 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
                 .orderByDesc(ChatSession::getUpdateTime);
         List<ChatSession> sessions = list(wrapper);
 
+        if (sessions.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        // Batch fetch last messages to avoid N+1 queries
+        List<Long> sessionIds = sessions.stream()
+                .map(ChatSession::getId)
+                .collect(Collectors.toList());
+        LambdaQueryWrapper<ChatMessage> msgWrapper = new LambdaQueryWrapper<>();
+        msgWrapper.in(ChatMessage::getSessionId, sessionIds)
+                .orderByDesc(ChatMessage::getCreateTime);
+        List<ChatMessage> allMessages = messageMapper.selectList(msgWrapper);
+
+        // Group by sessionId, keep the latest message per session
+        Map<Long, ChatMessage> lastMessageMap = new HashMap<>();
+        for (ChatMessage msg : allMessages) {
+            lastMessageMap.putIfAbsent(msg.getSessionId(), msg);
+        }
+
         return sessions.stream()
-                .map(session -> {
-                    LambdaQueryWrapper<ChatMessage> msgWrapper = new LambdaQueryWrapper<>();
-                    msgWrapper.eq(ChatMessage::getSessionId, session.getId())
-                            .orderByDesc(ChatMessage::getCreateTime)
-                            .last("LIMIT 1");
-                    ChatMessage lastMessage = messageMapper.selectOne(msgWrapper);
-                    return toSessionDTO(session, lastMessage);
-                })
+                .map(session -> toSessionDTO(session, lastMessageMap.get(session.getId())))
                 .collect(Collectors.toList());
     }
 

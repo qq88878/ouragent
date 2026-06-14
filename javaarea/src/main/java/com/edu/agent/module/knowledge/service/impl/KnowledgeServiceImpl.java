@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.edu.agent.common.config.FileUploadConfig;
 import com.edu.agent.common.exception.BizException;
 import com.edu.agent.common.result.ResultCode;
+import com.edu.agent.module.chat.service.client.AgentServiceClient;
 import com.edu.agent.module.course.entity.Course;
 import com.edu.agent.module.course.mapper.CourseMapper;
 import com.edu.agent.module.knowledge.dto.KnowledgeDTO;
@@ -33,6 +34,7 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
 
     private final FileUploadConfig fileUploadConfig;
     private final CourseMapper courseMapper;
+    private final AgentServiceClient agentServiceClient;
 
     @Override
     @Transactional
@@ -74,7 +76,19 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         knowledge.setStatus(0); // pending
         save(knowledge);
 
-        log.info("知识库文件上传成功: id={}, name={}", knowledge.getId(), knowledge.getName());
+        // Trigger async vectorization via Python Agent
+        try {
+            String result = agentServiceClient.ingestKnowledge(
+                    knowledge.getId(), dto.getCourseId(),
+                    uploadDir + "/" + storedFilename, fileType);
+            knowledge.setStatus("indexed".equals(result) ? 1 : 2);
+        } catch (Exception e) {
+            log.warn("调用 Agent 向量化失败，状态保持 pending: {}", e.getMessage());
+            knowledge.setStatus(2); // failed
+        }
+        updateById(knowledge);
+
+        log.info("知识库文件上传成功: id={}, name={}, status={}", knowledge.getId(), knowledge.getName(), knowledge.getStatus());
         return toDTO(knowledge);
     }
 

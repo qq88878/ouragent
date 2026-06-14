@@ -4,7 +4,7 @@
 # ============================================================
 
 # --- 基础镜像 ---
-FROM python:3.11-slim as base
+FROM python:3.11-slim AS base
 
 # 设置环境变量
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -19,18 +19,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # --- 依赖安装阶段 ---
-FROM base as deps
+FROM base AS deps
 
 WORKDIR /app
 
 # 先复制依赖文件
-COPY requirements.txt requirements-core.txt requirements-ml.txt ./
+COPY requirements.txt ./
 
 # 安装 Python 依赖
 RUN pip install --no-cache-dir -r requirements.txt
 
 # --- 运行阶段 ---
-FROM base as runtime
+FROM base AS runtime
 
 WORKDIR /app
 

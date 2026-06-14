@@ -27,9 +27,8 @@ public class SecurityConfig {
         http.csrf(AbstractHttpConfigurer::disable)
                 .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/register", "/auth/login").permitAll()
-                        .requestMatchers("/agent/health", "/health").permitAll()
-                        .requestMatchers("/index.html", "/register.html").permitAll()
+                        .requestMatchers("/auth/register", "/auth/login", "/auth/send-verify-code", "/auth/verify-email").permitAll()
+                        .requestMatchers("/index.html", "/assets/**").permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .anyRequest().authenticated()
                 )

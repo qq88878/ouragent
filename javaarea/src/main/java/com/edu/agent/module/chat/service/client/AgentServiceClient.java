@@ -9,6 +9,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -72,21 +76,29 @@ public class AgentServiceClient {
 
     // ===== Phase 2: Knowledge =====
 
-    public String ingestKnowledge(Long knowledgeId, Long courseId, String content, String fileType) {
-        Map<String, Object> body = new HashMap<>();
-        body.put("knowledge_id", knowledgeId);
-        body.put("course_id", courseId);
-        body.put("content", content);
-        body.put("file_type", fileType);
+    public String ingestKnowledge(Long knowledgeId, Long courseId, String filePath, String fileType) {
+        try {
+            HttpHeaders headers = createHeaders();
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
 
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, createHeaders());
-        ResponseEntity<Map> response = restTemplate.postForEntity(
-                agentServiceUrl + "/agent/knowledge/ingest-text", request, Map.class);
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            body.add("file", new FileSystemResource(filePath));
+            body.add("knowledge_id", knowledgeId.toString());
+            body.add("course_id", courseId.toString());
 
-        if (response.getBody() != null) {
-            return (String) response.getBody().get("status");
+            HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    agentServiceUrl + "/agent/knowledge/ingest", request, Map.class);
+
+            if (response.getBody() != null) {
+                Object status = response.getBody().get("status");
+                return status != null ? status.toString() : "failed";
+            }
+            return "failed";
+        } catch (Exception e) {
+            log.error("调用 Agent 知识入库失败: knowledgeId={}", knowledgeId, e);
+            return "failed";
         }
-        return "failed";
     }
 
     @SuppressWarnings("unchecked")
