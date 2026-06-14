@@ -36,15 +36,15 @@ services:
       - "9001:9000"
     environment:
       - SPRING_PROFILES_ACTIVE=prod
-      - JAVA_OPTS=-Xms256m -Xmx512m -Djava.net.preferIPv4Stack=true
+      - JAVA_OPTS=${JAVA_OPTS:--Xms256m -Xmx512m -Djava.net.preferIPv4Stack=true}
       - DB_HOST=mysql
       - DB_USER=root
-      - DB_PASSWORD=zbq060423...
+      - DB_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - REDIS_HOST=redis
       - REDIS_PASSWORD=
       - AGENT_SERVICE_URL=http://agent-service:8000
-      - AGENT_SERVICE_KEY=internal-agent-key-2024
-      - AGENT_TIMEOUT=10000
+      - AGENT_SERVICE_KEY=${AGENT_SERVICE_KEY:-internal-agent-key-2024}
+      - AGENT_TIMEOUT=${AGENT_TIMEOUT:-10000}
     depends_on:
       mysql:
         condition: service_healthy
@@ -71,23 +71,30 @@ services:
     ports:
       - "8001:8000"
     environment:
-      - APP_ENV=production
-      - DEBUG=false
-      - LOG_LEVEL=INFO
+      - APP_ENV=${APP_ENV:-production}
+      - DEBUG=${DEBUG:-false}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - PORT=8000
       - DB_HOST=mysql
       - DB_PORT=3306
-      - DB_NAME=edu_agent
+      - DB_NAME=${DB_NAME:-edu_agent}
       - DB_USER=root
-      - DB_PASSWORD=zbq060423...
-      - DB_POOL_SIZE=10
-      - DB_MAX_OVERFLOW=20
+      - DB_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-10}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-20}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
-      - SECRET_KEY=your-secret-key-change-in-production
-      - AGENT_SERVICE_KEY=internal-agent-key-2024
+      - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
+      - AGENT_SERVICE_KEY=${AGENT_SERVICE_KEY:-internal-agent-key-2024}
       - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
+      - LLM_MODEL=${LLM_MODEL:-gpt-3.5-turbo}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
     volumes:
       - agent-uploads:/app/uploads
       - agent-logs:/app/logs
@@ -111,8 +118,8 @@ services:
     image: mysql:8.0
     container_name: edu-mysql
     environment:
-      MYSQL_ROOT_PASSWORD: zbq060423...
-      MYSQL_DATABASE: edu_agent
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-edu_agent}
     ports:
       - "3308:3306"
     volumes:
@@ -120,7 +127,7 @@ services:
       - ./javaarea/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./v3/config/mysql-init.sql:/docker-entrypoint-initdb.d/02-agent.sql:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-pzbq060423..."]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       start_period: 30s
