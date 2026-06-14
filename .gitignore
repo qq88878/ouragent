@@ -69,3 +69,8 @@ docker-compose.override.yml
 
 # K8s secrets (contains sensitive data)
 k8s/secrets.yaml
+
+# Uploads & data
+uploads/
+data/
+*.sqlite3
