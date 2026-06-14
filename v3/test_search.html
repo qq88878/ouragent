@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>向量库检索测试</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        .search-box {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        .input-group {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 14px 20px;
+            font-size: 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        input[type="text"]:focus {
+            border-color: #667eea;
+        }
+        button {
+            padding: 14px 28px;
+            font-size: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .stats {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-around;
+        }
+        .stat-item {
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+        .results {
+            margin-top: 20px;
+        }
+        .result-item {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border-left: 4px solid #667eea;
+            transition: transform 0.2s;
+        }
+        .result-item:hover {
+            transform: translateX(4px);
+        }
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .result-score {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .result-source {
+            font-size: 12px;
+            color: #888;
+        }
+        .result-content {
+            font-size: 14px;
+            line-height: 1.6;
+            color: #333;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .error {
+            background: #fee;
+            color: #c00;
+            padding: 16px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .suggestions {
+            margin-top: 20px;
+        }
+        .suggestions h3 {
+            color: #333;
+            margin-bottom: 12px;
+        }
+        .suggestion-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .tag {
+            background: #e8eaf6;
+            color: #3f51b5;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s, transform 0.2s;
+        }
+        .tag:hover {
+            background: #c5cae9;
+            transform: translateY(-2px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 向量库检索测试</h1>
+
+        <div class="search-box">
+            <div class="input-group">
+                <input type="text" id="queryInput" placeholder="输入查询内容，如：Python 列表怎么用？" />
+                <button id="searchBtn" onclick="search()">检索</button>
+            </div>
+
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="docCount">-</div>
+                    <div class="stat-label">文档块数</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="embeddingType">-</div>
+                    <div class="stat-label">嵌入方式</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="resultCount">-</div>
+                    <div class="stat-label">返回结果</div>
+                </div>
+            </div>
+
+            <div class="suggestions">
+                <h3>💡 试试这些查询：</h3>
+                <div class="suggestion-tags">
+                    <span class="tag" onclick="setQuery('Python 列表怎么用？')">Python 列表</span>
+                    <span class="tag" onclick="setQuery('什么是机器学习？')">机器学习</span>
+                    <span class="tag" onclick="setQuery('神经网络原理')">神经网络</span>
+                    <span class="tag" onclick="setQuery('Web 开发框架')">Web 开发</span>
+                    <span class="tag" onclick="setQuery('线性代数')">线性代数</span>
+                    <span class="tag" onclick="setQuery('概率论基础')">概率论</span>
+                    <span class="tag" onclick="setQuery('数据结构')">数据结构</span>
+                    <span class="tag" onclick="setQuery('深度学习')">深度学习</span>
+                </div>
+            </div>
+
+            <div id="results" class="results"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+
+        // 加载统计信息
+        async function loadStats() {
+            try {
+                const resp = await fetch(`${API_BASE}/api/stats`);
+                const data = await resp.json();
+                document.getElementById('docCount').textContent = data.total_chunks || 0;
+                document.getElementById('embeddingType').textContent = (data.embedding_provider || '').replace('Provider', '');
+            } catch (e) {
+                console.error('加载统计失败:', e);
+            }
+        }
+
+        // 设置查询内容
+        function setQuery(text) {
+            document.getElementById('queryInput').value = text;
+            search();
+        }
+
+        // 执行检索
+        async function search() {
+            const query = document.getElementById('queryInput').value.trim();
+            if (!query) return;
+
+            const btn = document.getElementById('searchBtn');
+            const resultsDiv = document.getElementById('results');
+
+            btn.disabled = true;
+            btn.textContent = '检索中...';
+            resultsDiv.innerHTML = '<div class="loading">正在检索...</div>';
+
+            try {
+                const resp = await fetch(`${API_BASE}/api/search?q=${encodeURIComponent(query)}&top_k=5`);
+                const data = await resp.json();
+
+                if (data.error) {
+                    resultsDiv.innerHTML = `<div class="error">错误: ${data.error}</div>`;
+                    return;
+                }
+
+                const results = data.results || [];
+                document.getElementById('resultCount').textContent = results.length;
+
+                if (results.length === 0) {
+                    resultsDiv.innerHTML = '<div class="loading">未找到相关结果</div>';
+                    return;
+                }
+
+                resultsDiv.innerHTML = results.map((r, i) => `
+                    <div class="result-item">
+                        <div class="result-header">
+                            <span class="result-score">相关度: ${(r.score * 100).toFixed(1)}%</span>
+                            <span class="result-source">${r.source || '未知来源'}</span>
+                        </div>
+                        <div class="result-content">${escapeHtml(r.content)}</div>
+                    </div>
+                `).join('');
+
+            } catch (e) {
+                resultsDiv.innerHTML = `<div class="error">请求失败: ${e.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '检索';
+            }
+        }
+
+        // HTML 转义
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 回车触发检索
+        document.getElementById('queryInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') search();
+        });
+
+        // 页面加载时获取统计
+        loadStats();
+    </script>
+</body>
+</html>

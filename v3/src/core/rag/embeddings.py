@@ -42,33 +42,58 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
         if not texts:
             return []
 
+        # 限制文本长度和清理特殊字符
+        max_chars = 1000
+        cleaned_texts = []
+        for t in texts:
+            # 移除控制字符，保留正常文本
+            cleaned = ''.join(c for c in t if c.isprintable() or c in '\n\r\t')
+            cleaned_texts.append(cleaned[:max_chars])
+
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
         }
-        payload = {
-            "model": self.model,
-            "input": texts,
-        }
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
-                f"{self.base_url}/embeddings",
-                json=payload,
-                headers=headers,
-            )
-            resp.raise_for_status()
-            data = resp.json()
+        # 分批处理（每批最多 5 条，避免请求过大）
+        batch_size = 5
+        all_embeddings = []
 
-        embeddings = []
-        for item in sorted(data["data"], key=lambda x: x["index"]):
-            vec = np.array(item["embedding"], dtype=np.float32)
-            embeddings.append(vec)
+        for i in range(0, len(cleaned_texts), batch_size):
+            batch = cleaned_texts[i:i + batch_size]
+            # 过滤空文本
+            batch = [t for t in batch if t.strip()]
+            if not batch:
+                continue
 
-        if embeddings:
-            self._dimension = len(embeddings[0])
+            payload = {
+                "model": self.model,
+                "input": batch,
+            }
 
-        return embeddings
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    resp = await client.post(
+                        f"{self.base_url}/embeddings",
+                        json=payload,
+                        headers=headers,
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+
+                for item in sorted(data["data"], key=lambda x: x["index"]):
+                    vec = np.array(item["embedding"], dtype=np.float32)
+                    all_embeddings.append(vec)
+            except Exception as e:
+                logger.warning("Embedding API 调用失败: %s", e)
+                # 返回零向量作为降级
+                for _ in batch:
+                    all_embeddings.append(np.zeros(1024, dtype=np.float32))
+
+        if all_embeddings:
+            self._dimension = len(all_embeddings[0])
+
+        return all_embeddings
 
     def dimension(self) -> int:
         return self._dimension

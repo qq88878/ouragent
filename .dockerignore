@@ -30,7 +30,6 @@ v3/true/
 .env
 .env.*
 !.env.example
-v3/config/.env
 
 # Claude Code
 .claude/
