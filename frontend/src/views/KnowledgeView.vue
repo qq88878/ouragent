@@ -11,7 +11,11 @@
       </el-select>
     </div>
 
-    <el-table :data="knowledgeList" v-loading="loading" stripe>
+    <el-empty v-if="!selectedCourseId" description="请先在上方选择课程" />
+    <el-table v-else :data="knowledgeList" v-loading="loading" stripe>
+      <template #empty>
+        <el-empty v-if="!loading" description="该课程暂无知识库文件" />
+      </template>
       <el-table-column prop="name" label="文件名" min-width="200" />
       <el-table-column prop="fileType" label="类型" width="80">
         <template #default="{ row }">
@@ -84,13 +88,19 @@ const uploadForm = ref({ courseId: null, file: null, name: '' });
 
 onMounted(async () => {
   await loadCourses();
-  await loadKnowledge();
 });
 
 async function loadCourses() {
   try {
     const res = await courseApi.list({ page: 1, size: 100 });
-    if (res.code === 200) courses.value = res.data?.records || [];
+    if (res.code === 200) {
+      courses.value = res.data?.records || [];
+      // Auto-select first course if available
+      if (courses.value.length > 0 && !selectedCourseId.value) {
+        selectedCourseId.value = courses.value[0].id;
+      }
+      await loadKnowledge();
+    }
   } catch { /* ignore */ }
 }
 
