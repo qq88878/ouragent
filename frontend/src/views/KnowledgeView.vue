@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="knowledge-page">
     <div class="page-header">
       <h3>知识库管理</h3>
@@ -17,6 +17,14 @@
         </el-button>
         <el-button v-if="isTeacherOrAdmin" type="primary" @click="openUploadDialog">上传文件</el-button>
       </div>
+    </div>
+
+    <div class="search-bar" style="margin-bottom: 16px;">
+      <el-input v-model="searchKeyword" placeholder="按文件名搜索..." clearable style="width: 320px;" @keyup.enter="doSearch" @clear="doSearch">
+        <template #append>
+          <el-button @click="doSearch" :loading="loading">搜索</el-button>
+        </template>
+      </el-input>
     </div>
 
     <el-table :data="knowledgeList" v-loading="loading" stripe @selection-change="handleSelectionChange">
@@ -60,17 +68,19 @@
       <el-table-column prop="createTime" label="上传时间" width="170">
         <template #default="{ row }">{{ new Date(row.createTime).toLocaleString('zh-CN') }}</template>
       </el-table-column>
-      <el-table-column v-if="isTeacherOrAdmin" label="操作" width="200" fixed="right">
+      <el-table-column label="操作" width="240" fixed="right">
         <template #default="{ row }">
+          <el-button text type="primary" size="small" @click="viewContent(row.id)">查看内容</el-button>
           <template v-if="isAdmin && row.approvalStatus === 'PENDING'">
             <el-button text type="success" size="small" @click="openApproveDialog(row.id, true)">通过</el-button>
             <el-button text type="warning" size="small" @click="openApproveDialog(row.id, false)">拒绝</el-button>
           </template>
-          <el-button text type="danger" size="small" @click="remove(row.id)">删除</el-button>
+          <el-button v-if="isTeacherOrAdmin" text type="danger" size="small" @click="remove(row.id)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
 
+    <!-- Upload Dialog -->
     <el-dialog v-if="isTeacherOrAdmin" v-model="showUploadDialog" title="上传知识库文件" width="500px">
       <el-form label-width="80px">
         <el-form-item label="课程">
@@ -91,8 +101,11 @@
             </template>
           </el-upload>
         </el-form-item>
-        <el-form-item label="名称">
-          <el-input v-model="uploadForm.name" placeholder="留空则使用文件名" />
+        <el-form-item label="文件名">
+          <el-input v-model="uploadForm.name" placeholder="可选，不填则使用原始文件名" />
+        </el-form-item>
+        <el-form-item label="描述">
+          <el-input v-model="uploadForm.description" type="textarea" :rows="2" placeholder="可选" />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -101,38 +114,40 @@
       </template>
     </el-dialog>
 
-    <!-- 单个审核对话框 -->
-    <el-dialog v-model="showApproveDialog" :title="approveForm.approved ? '通过审核' : '拒绝审核'" width="400px">
+    <!-- Content Preview Dialog -->
+    <el-dialog v-model="showContentDialog" :title="'查看内容: ' + contentName" width="800px" top="3vh">
+      <div v-loading="contentLoading" style="max-height: 70vh; overflow-y: auto;">
+        <pre v-if="!contentLoading && contentText" class="content-preview">{{ contentText }}</pre>
+        <el-empty v-if="!contentLoading && !contentText" description="无法加载内容" />
+      </div>
+      <template #footer>
+        <el-button @click="showContentDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Approve Dialog -->
+    <el-dialog v-if="isAdmin" v-model="showApproveDialog" :title="`${approveForm.approved ? '通过' : '拒绝'}知识库文件`" width="400px">
       <el-form label-width="80px">
         <el-form-item label="备注">
-          <el-input v-model="approveForm.remark" type="textarea" :rows="3"
-            :placeholder="approveForm.approved ? '可选，填写通过原因' : '建议填写拒绝原因，方便教师修改'" />
+          <el-input v-model="approveForm.remark" type="textarea" :rows="2" placeholder="可选" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showApproveDialog = false">取消</el-button>
-        <el-button :type="approveForm.approved ? 'success' : 'warning'" @click="doApprove">
-          {{ approveForm.approved ? '通过' : '拒绝' }}
-        </el-button>
+        <el-button :type="approveForm.approved ? 'success' : 'warning'" @click="doApprove">确认</el-button>
       </template>
     </el-dialog>
 
-    <!-- 批量审核对话框 -->
-    <el-dialog v-model="showBatchApproveDialog" :title="batchApproveForm.approved ? '批量通过' : '批量拒绝'" width="400px">
+    <!-- Batch Approve Dialog -->
+    <el-dialog v-if="isAdmin" v-model="showBatchApproveDialog" :title="`批量${batchApproveForm.approved ? '通过' : '拒绝'}`" width="400px">
       <el-form label-width="80px">
-        <el-form-item label="文件数">
-          <span>{{ selectedIds.length }} 个文件</span>
-        </el-form-item>
         <el-form-item label="备注">
-          <el-input v-model="batchApproveForm.remark" type="textarea" :rows="3"
-            :placeholder="batchApproveForm.approved ? '可选，填写通过原因' : '建议填写拒绝原因'" />
+          <el-input v-model="batchApproveForm.remark" type="textarea" :rows="2" placeholder="可选" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showBatchApproveDialog = false">取消</el-button>
-        <el-button :type="batchApproveForm.approved ? 'success' : 'warning'" @click="doBatchApprove">
-          {{ batchApproveForm.approved ? '批量通过' : '批量拒绝' }}
-        </el-button>
+        <el-button :type="batchApproveForm.approved ? 'success' : 'warning'" @click="doBatchApprove">确认</el-button>
       </template>
     </el-dialog>
   </div>
@@ -140,20 +155,27 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { knowledgeApi, courseApi } from '@/api';
-import { ElMessage, ElMessageBox } from 'element-plus';
 import { useAuthStore } from '@/stores/auth';
+import { ElMessage, ElMessageBox } from 'element-plus';
 
+const router = useRouter();
 const knowledgeList = ref([]);
 const courses = ref([]);
 const loading = ref(false);
 const uploading = ref(false);
 const showUploadDialog = ref(false);
+const showContentDialog = ref(false);
 const showApproveDialog = ref(false);
 const showBatchApproveDialog = ref(false);
 const approvalFilter = ref('');
+const searchKeyword = ref('');
 const selectedIds = ref([]);
-const uploadForm = ref({ courseId: null, file: null, name: '' });
+const contentText = ref('');
+const contentName = ref('');
+const contentLoading = ref(false);
+const uploadForm = ref({ courseId: null, file: null, name: '', description: '' });
 const approveForm = ref({ id: null, approved: true, remark: '' });
 const batchApproveForm = ref({ approved: true, remark: '' });
 const authStore = useAuthStore();
@@ -183,7 +205,6 @@ async function loadKnowledge() {
     let res;
     if (isAdmin.value && approvalFilter.value) {
       res = await knowledgeApi.listPending();
-      // Filter by approval status since listPending only returns PENDING
       if (res.code === 200) {
         knowledgeList.value = (res.data || []).filter(item => item.approvalStatus === approvalFilter.value);
       }
@@ -195,6 +216,38 @@ async function loadKnowledge() {
   finally { loading.value = false; }
 }
 
+async function doSearch() {
+  loading.value = true;
+  approvalFilter.value = '';
+  try {
+    if (searchKeyword.value.trim()) {
+      const res = await knowledgeApi.search(searchKeyword.value.trim());
+      if (res.code === 200) knowledgeList.value = res.data || [];
+    } else {
+      await loadKnowledge();
+    }
+  } catch { /* ignore */ }
+  finally { loading.value = false; }
+}
+
+async function viewContent(id) {
+  contentLoading.value = true;
+  contentText.value = '';
+  contentName.value = '';
+  showContentDialog.value = true;
+  try {
+    const res = await knowledgeApi.getContent(id);
+    if (res.code === 200) {
+      contentText.value = res.data.content || '';
+      contentName.value = res.data.name || '';
+    }
+  } catch {
+    ElMessage.error('加载内容失败');
+  } finally {
+    contentLoading.value = false;
+  }
+}
+
 function handleFileChange(file) {
   uploadForm.value.file = file.raw;
 }
@@ -203,6 +256,7 @@ function openUploadDialog() {
   uploadForm.value.courseId = null;
   uploadForm.value.file = null;
   uploadForm.value.name = '';
+  uploadForm.value.description = '';
   showUploadDialog.value = true;
 }
 
@@ -214,11 +268,12 @@ async function doUpload() {
       uploadForm.value.file,
       uploadForm.value.courseId || null,
       uploadForm.value.name,
+      uploadForm.value.description,
     );
     if (res.code === 200) {
       ElMessage.success('上传成功');
       showUploadDialog.value = false;
-      uploadForm.value = { courseId: null, file: null, name: '' };
+      uploadForm.value = { courseId: null, file: null, name: '', description: '' };
       await loadKnowledge();
     }
   } catch {
@@ -313,7 +368,16 @@ function formatSize(bytes) {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.text-muted {
-  color: #c0c4cc;
+.text-muted { color: #c0c4cc; }
+.content-preview {
+  background: #f5f7fa;
+  padding: 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 60vh;
+  overflow-y: auto;
 }
 </style>

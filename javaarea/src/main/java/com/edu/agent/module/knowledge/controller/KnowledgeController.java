@@ -12,6 +12,9 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import java.util.List;
 
 @Slf4j
@@ -43,6 +46,11 @@ public class KnowledgeController {
         return Result.success(knowledgeService.listAll());
     }
 
+    @GetMapping("/search")
+    public Result<List<KnowledgeDTO>> search(@RequestParam String keyword) {
+        return Result.success(knowledgeService.searchByName(keyword));
+    }
+
     @GetMapping
     public Result<List<KnowledgeDTO>> list(@RequestParam(required = false) Long courseId) {
         return Result.success(knowledgeService.listByCourse(courseId));
@@ -51,6 +59,18 @@ public class KnowledgeController {
     @GetMapping("/{id}")
     public Result<KnowledgeDTO> getById(@PathVariable Long id) {
         return Result.success(knowledgeService.getKnowledgeById(id));
+    }
+
+    @GetMapping("/{id}/content")
+    public Result<Map<String, Object>> getContent(@PathVariable Long id) {
+        KnowledgeDTO dto = knowledgeService.getKnowledgeById(id);
+        String content = knowledgeService.getContent(id);
+        Map<String, Object> result = new HashMap<>();
+        result.put("id", dto.getId());
+        result.put("name", dto.getName());
+        result.put("fileType", dto.getFileType());
+        result.put("content", content);
+        return Result.success(result);
     }
 
     @PutMapping("/{id}/assign")

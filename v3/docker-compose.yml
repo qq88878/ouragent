@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # Agent Service - Docker Compose
 # 一键启动: docker-compose up -d
 # ============================================================
@@ -13,22 +13,13 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    env_file:
+      - config/.env
     environment:
       # 应用配置
       - APP_ENV=production
       - DEBUG=false
       - LOG_LEVEL=INFO
-
-      # LLM 配置
-      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
-      - LLM_API_KEY=${LLM_API_KEY}
-      - LLM_BASE_URL=${LLM_BASE_URL:-https://api.openai.com/v1}
-      - LLM_MODEL=${LLM_MODEL:-gpt-3.5-turbo}
-
-      # Embedding 配置
-      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY}
-      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
 
       # Redis 配置
       - REDIS_HOST=redis

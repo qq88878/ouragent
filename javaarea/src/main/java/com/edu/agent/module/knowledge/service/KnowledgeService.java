@@ -17,6 +17,10 @@ public interface KnowledgeService {
 
     List<KnowledgeDTO> listAll();
 
+    List<KnowledgeDTO> searchByName(String keyword);
+
+    String getContent(Long id);
+
     List<KnowledgeDTO> listByApprovalStatus(String approvalStatus);
 
     void approveKnowledge(Long id, boolean approved, String remark);
