@@ -72,4 +72,17 @@ public class KnowledgeController {
         knowledgeService.reprocessKnowledge(id);
         return Result.success();
     }
+
+    @GetMapping("/pending")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<List<KnowledgeDTO>> listPending() {
+        return Result.success(knowledgeService.listByApprovalStatus("PENDING"));
+    }
+
+    @PostMapping("/{id}/approve")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<Void> approve(@PathVariable Long id, @RequestParam boolean approved) {
+        knowledgeService.approveKnowledge(id, approved);
+        return Result.success();
+    }
 }

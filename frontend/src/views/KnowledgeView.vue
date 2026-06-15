@@ -2,7 +2,15 @@
   <div class="knowledge-page">
     <div class="page-header">
       <h3>知识库管理</h3>
-      <el-button v-if="isTeacherOrAdmin" type="primary" @click="openUploadDialog">上传文件</el-button>
+      <div>
+        <el-radio-group v-if="isAdmin" v-model="approvalFilter" @change="loadKnowledge" style="margin-right: 16px;">
+          <el-radio-button value="">全部</el-radio-button>
+          <el-radio-button value="PENDING">待审核</el-radio-button>
+          <el-radio-button value="APPROVED">已通过</el-radio-button>
+          <el-radio-button value="REJECTED">已拒绝</el-radio-button>
+        </el-radio-group>
+        <el-button v-if="isTeacherOrAdmin" type="primary" @click="openUploadDialog">上传文件</el-button>
+      </div>
     </div>
 
     <el-table :data="knowledgeList" v-loading="loading" stripe>
@@ -10,6 +18,9 @@
         <el-empty v-if="!loading" description="暂无知识库文件" />
       </template>
       <el-table-column prop="name" label="文件名" min-width="200" />
+      <el-table-column v-if="isAdmin" label="上传者" width="120">
+        <template #default="{ row }">{{ row.uploadedByName || '-' }}</template>
+      </el-table-column>
       <el-table-column label="所属课程" width="160">
         <template #default="{ row }">{{ row.courseName || '-' }}</template>
       </el-table-column>
@@ -21,11 +32,22 @@
       <el-table-column label="大小" width="100">
         <template #default="{ row }">{{ formatSize(row.fileSize) }}</template>
       </el-table-column>
+      <el-table-column v-if="isAdmin" label="审核状态" width="100">
+        <template #default="{ row }">
+          <el-tag :type="getApprovalTagType(row.approvalStatus)" size="small">
+            {{ getApprovalLabel(row.approvalStatus) }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="createTime" label="上传时间" width="170">
         <template #default="{ row }">{{ new Date(row.createTime).toLocaleString('zh-CN') }}</template>
       </el-table-column>
-      <el-table-column v-if="isTeacherOrAdmin" label="操作" width="160" fixed="right">
+      <el-table-column v-if="isTeacherOrAdmin" label="操作" width="200" fixed="right">
         <template #default="{ row }">
+          <template v-if="isAdmin && row.approvalStatus === 'PENDING'">
+            <el-button text type="success" size="small" @click="approve(row.id, true)">通过</el-button>
+            <el-button text type="warning" size="small" @click="approve(row.id, false)">拒绝</el-button>
+          </template>
           <el-button text type="danger" size="small" @click="remove(row.id)">删除</el-button>
         </template>
       </el-table-column>
@@ -74,8 +96,10 @@ const courses = ref([]);
 const loading = ref(false);
 const uploading = ref(false);
 const showUploadDialog = ref(false);
+const approvalFilter = ref('');
 const uploadForm = ref({ courseId: null, file: null, name: '' });
 const authStore = useAuthStore();
+const isAdmin = computed(() => authStore.user?.role === 'ADMIN');
 const isTeacherOrAdmin = computed(() => {
   const role = authStore.user?.role;
   return role === 'TEACHER' || role === 'ADMIN';
@@ -98,8 +122,17 @@ async function loadCourses() {
 async function loadKnowledge() {
   loading.value = true;
   try {
-    const res = await knowledgeApi.listAll();
-    if (res.code === 200) knowledgeList.value = res.data || [];
+    let res;
+    if (isAdmin.value && approvalFilter.value) {
+      res = await knowledgeApi.listPending();
+      // Filter by approval status since listPending only returns PENDING
+      if (res.code === 200) {
+        knowledgeList.value = (res.data || []).filter(item => item.approvalStatus === approvalFilter.value);
+      }
+    } else {
+      res = await knowledgeApi.listAll();
+      if (res.code === 200) knowledgeList.value = res.data || [];
+    }
   } catch { /* ignore */ }
   finally { loading.value = false; }
 }
@@ -142,6 +175,34 @@ async function remove(id) {
     await loadKnowledge();
     ElMessage.success('已删除');
   } catch { /* cancel */ }
+}
+
+async function approve(id, approved) {
+  try {
+    const action = approved ? '通过' : '拒绝';
+    await ElMessageBox.confirm(`确定${action}此知识库文件？`, '提示', { type: 'warning' });
+    await knowledgeApi.approve(id, approved);
+    await loadKnowledge();
+    ElMessage.success(`已${action}`);
+  } catch { /* cancel */ }
+}
+
+function getApprovalTagType(status) {
+  switch (status) {
+    case 'APPROVED': return 'success';
+    case 'REJECTED': return 'danger';
+    case 'PENDING': return 'warning';
+    default: return 'info';
+  }
+}
+
+function getApprovalLabel(status) {
+  switch (status) {
+    case 'APPROVED': return '已通过';
+    case 'REJECTED': return '已拒绝';
+    case 'PENDING': return '待审核';
+    default: return status;
+  }
 }
 
 function formatSize(bytes) {

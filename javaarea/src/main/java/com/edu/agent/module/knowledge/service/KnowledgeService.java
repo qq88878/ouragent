@@ -16,6 +16,10 @@ public interface KnowledgeService {
 
     List<KnowledgeDTO> listAll();
 
+    List<KnowledgeDTO> listByApprovalStatus(String approvalStatus);
+
+    void approveKnowledge(Long id, boolean approved);
+
     void assignToCourse(Long knowledgeId, Long courseId);
 
     void deleteKnowledge(Long id);

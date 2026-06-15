@@ -10,10 +10,12 @@ import lombok.EqualsAndHashCode;
 @TableName("knowledge_base")
 public class KnowledgeBase extends BaseEntity {
     private Long courseId;
+    private Long uploadedBy;
     private String name;
     private String description;
     private String filePath;
     private String fileType;
     private Long fileSize;
     private Integer status;  // 0=pending, 1=indexed, 2=failed
+    private String approvalStatus;  // PENDING/APPROVED/REJECTED
 }

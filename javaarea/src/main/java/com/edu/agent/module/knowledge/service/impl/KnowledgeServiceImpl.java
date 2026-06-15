@@ -9,6 +9,8 @@ import com.edu.agent.common.result.ResultCode;
 import com.edu.agent.module.chat.service.client.AgentServiceClient;
 import com.edu.agent.module.course.entity.Course;
 import com.edu.agent.module.course.mapper.CourseMapper;
+import com.edu.agent.module.user.entity.User;
+import com.edu.agent.module.user.mapper.UserMapper;
 import com.edu.agent.module.knowledge.dto.KnowledgeDTO;
 import com.edu.agent.module.knowledge.dto.KnowledgeUploadDTO;
 import com.edu.agent.module.knowledge.entity.KnowledgeBase;
@@ -35,6 +37,7 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
 
     private final FileUploadConfig fileUploadConfig;
     private final CourseMapper courseMapper;
+    private final UserMapper userMapper;
     private final AgentServiceClient agentServiceClient;
 
     @Override
@@ -74,12 +77,15 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
 
         KnowledgeBase knowledge = new KnowledgeBase();
         knowledge.setCourseId(dto.getCourseId());
+        knowledge.setUploadedBy(loginUser.getUser().getId());
         knowledge.setName(StringUtils.hasText(dto.getName()) ? dto.getName() : originalFilename);
         knowledge.setDescription(dto.getDescription());
         knowledge.setFilePath("/knowledge/" + storedFilename);
         knowledge.setFileType(fileType);
         knowledge.setFileSize(file.getSize());
-        knowledge.setStatus(1); // available
+        knowledge.setStatus(0); // pending vectorization
+        // Teachers need admin approval, admins auto-approved
+        knowledge.setApprovalStatus("ADMIN".equals(loginUser.getUser().getRole()) ? "APPROVED" : "PENDING");
         save(knowledge);
 
         // TODO: async vectorization via Python Agent (deferred)
@@ -100,9 +106,22 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
 
     @Override
     public List<KnowledgeDTO> listByCourse(Long courseId) {
+        LoginUser loginUser = getCurrentLoginUser();
+        String role = loginUser.getUser().getRole();
+        Long userId = loginUser.getUser().getId();
+
         LambdaQueryWrapper<KnowledgeBase> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(KnowledgeBase::getCourseId, courseId)
-                .orderByDesc(KnowledgeBase::getCreateTime);
+        wrapper.eq(KnowledgeBase::getCourseId, courseId);
+
+        // Filter by role
+        if ("STUDENT".equals(role)) {
+            wrapper.eq(KnowledgeBase::getApprovalStatus, "APPROVED");
+        } else if ("TEACHER".equals(role)) {
+            wrapper.eq(KnowledgeBase::getUploadedBy, userId);
+        }
+        // ADMIN sees all
+
+        wrapper.orderByDesc(KnowledgeBase::getCreateTime);
         List<KnowledgeDTO> result = list(wrapper).stream().map(this::toDTO).toList();
         enrichCourseNames(result);
         return result;
@@ -147,14 +166,60 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         log.info("知识库文件重新处理: id={}", id);
     }
 
-    
+
     @Override
     public List<KnowledgeDTO> listAll() {
+        LoginUser loginUser = getCurrentLoginUser();
+        String role = loginUser.getUser().getRole();
+        Long userId = loginUser.getUser().getId();
+
         LambdaQueryWrapper<KnowledgeBase> wrapper = new LambdaQueryWrapper<>();
+
+        // Filter by role
+        if ("STUDENT".equals(role)) {
+            wrapper.eq(KnowledgeBase::getApprovalStatus, "APPROVED");
+        } else if ("TEACHER".equals(role)) {
+            wrapper.eq(KnowledgeBase::getUploadedBy, userId);
+        }
+        // ADMIN sees all
+
         wrapper.orderByDesc(KnowledgeBase::getCreateTime);
         List<KnowledgeDTO> result = list(wrapper).stream().map(this::toDTO).toList();
         enrichCourseNames(result);
         return result;
+    }
+
+    @Override
+    public List<KnowledgeDTO> listByApprovalStatus(String approvalStatus) {
+        LoginUser loginUser = getCurrentLoginUser();
+        if (!"ADMIN".equals(loginUser.getUser().getRole())) {
+            throw new BizException(ResultCode.FORBIDDEN, "只有管理员可以按审核状态查询");
+        }
+
+        LambdaQueryWrapper<KnowledgeBase> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(KnowledgeBase::getApprovalStatus, approvalStatus)
+                .orderByDesc(KnowledgeBase::getCreateTime);
+        List<KnowledgeDTO> result = list(wrapper).stream().map(this::toDTO).toList();
+        enrichCourseNames(result);
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public void approveKnowledge(Long id, boolean approved) {
+        LoginUser loginUser = getCurrentLoginUser();
+        if (!"ADMIN".equals(loginUser.getUser().getRole())) {
+            throw new BizException(ResultCode.FORBIDDEN, "只有管理员可以审核知识库文件");
+        }
+
+        KnowledgeBase knowledge = getById(id);
+        if (knowledge == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "知识库文件不存在");
+        }
+
+        knowledge.setApprovalStatus(approved ? "APPROVED" : "REJECTED");
+        updateById(knowledge);
+        log.info("知识库文件审核: id={}, approved={}", id, approved);
     }
     @Override
     @Transactional
@@ -204,13 +269,23 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         KnowledgeDTO dto = new KnowledgeDTO();
         dto.setId(knowledge.getId());
         dto.setCourseId(knowledge.getCourseId());
+        dto.setUploadedBy(knowledge.getUploadedBy());
         dto.setName(knowledge.getName());
         dto.setDescription(knowledge.getDescription());
         dto.setFilePath(knowledge.getFilePath());
         dto.setFileType(knowledge.getFileType());
         dto.setFileSize(knowledge.getFileSize());
         dto.setStatus(knowledge.getStatus());
+        dto.setApprovalStatus(knowledge.getApprovalStatus());
         dto.setCreateTime(knowledge.getCreateTime());
+
+        // Get uploader name
+        if (knowledge.getUploadedBy() != null) {
+            var uploader = userMapper.selectById(knowledge.getUploadedBy());
+            if (uploader != null) {
+                dto.setUploadedByName(uploader.getNickname() != null ? uploader.getNickname() : uploader.getUsername());
+            }
+        }
         return dto;
     }
 

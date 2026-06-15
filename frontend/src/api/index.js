@@ -121,10 +121,12 @@ export const knowledgeApi = {
     },
     list(courseId) { return http.get('/knowledge', { params: { courseId } }); },
     listAll() { return http.get('/knowledge/all'); },
+    listPending() { return http.get('/knowledge/pending'); },
     getById(id) { return http.get(`/knowledge/${id}`); },
     assignToCourse(id, courseId) { return http.put(`/knowledge/${id}/assign`, null, { params: { courseId } }); },
     delete(id) { return http.delete(`/knowledge/${id}`); },
     reprocess(id) { return http.post(`/knowledge/${id}/reprocess`); },
+    approve(id, approved) { return http.post(`/knowledge/${id}/approve`, null, { params: { approved } }); },
 };
 
 export const adminApi = {
