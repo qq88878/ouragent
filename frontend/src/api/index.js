@@ -126,7 +126,8 @@ export const knowledgeApi = {
     assignToCourse(id, courseId) { return http.put(`/knowledge/${id}/assign`, null, { params: { courseId } }); },
     delete(id) { return http.delete(`/knowledge/${id}`); },
     reprocess(id) { return http.post(`/knowledge/${id}/reprocess`); },
-    approve(id, approved) { return http.post(`/knowledge/${id}/approve`, null, { params: { approved } }); },
+    approve(id, approved, remark) { return http.post(`/knowledge/${id}/approve`, null, { params: { approved, remark } }); },
+    batchApprove(ids, approved, remark) { return http.post('/knowledge/batch-approve', { ids, approved, remark }); },
 };
 
 export const adminApi = {

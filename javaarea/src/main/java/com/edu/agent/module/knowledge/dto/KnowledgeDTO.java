@@ -20,5 +20,6 @@ public class KnowledgeDTO {
     private Long fileSize;
     private Integer status;
     private String approvalStatus;
+    private String approvalRemark;
     private LocalDateTime createTime;
 }

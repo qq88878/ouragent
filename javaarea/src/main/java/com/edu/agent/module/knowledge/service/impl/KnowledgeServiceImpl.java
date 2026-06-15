@@ -11,6 +11,7 @@ import com.edu.agent.module.course.entity.Course;
 import com.edu.agent.module.course.mapper.CourseMapper;
 import com.edu.agent.module.user.entity.User;
 import com.edu.agent.module.user.mapper.UserMapper;
+import com.edu.agent.module.knowledge.dto.BatchApproveDTO;
 import com.edu.agent.module.knowledge.dto.KnowledgeDTO;
 import com.edu.agent.module.knowledge.dto.KnowledgeUploadDTO;
 import com.edu.agent.module.knowledge.entity.KnowledgeBase;
@@ -206,7 +207,7 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
 
     @Override
     @Transactional
-    public void approveKnowledge(Long id, boolean approved) {
+    public void approveKnowledge(Long id, boolean approved, String remark) {
         LoginUser loginUser = getCurrentLoginUser();
         if (!"ADMIN".equals(loginUser.getUser().getRole())) {
             throw new BizException(ResultCode.FORBIDDEN, "只有管理员可以审核知识库文件");
@@ -218,8 +219,34 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         }
 
         knowledge.setApprovalStatus(approved ? "APPROVED" : "REJECTED");
+        knowledge.setApprovalRemark(remark);
         updateById(knowledge);
-        log.info("知识库文件审核: id={}, approved={}", id, approved);
+        log.info("知识库文件审核: id={}, approved={}, remark={}", id, approved, remark);
+    }
+
+    @Override
+    @Transactional
+    public void batchApprove(BatchApproveDTO dto) {
+        LoginUser loginUser = getCurrentLoginUser();
+        if (!"ADMIN".equals(loginUser.getUser().getRole())) {
+            throw new BizException(ResultCode.FORBIDDEN, "只有管理员可以审核知识库文件");
+        }
+
+        if (dto.getIds() == null || dto.getIds().isEmpty()) {
+            throw new BizException(ResultCode.BAD_REQUEST, "请选择要审核的文件");
+        }
+
+        for (Long id : dto.getIds()) {
+            KnowledgeBase knowledge = getById(id);
+            if (knowledge == null) {
+                log.warn("知识库文件不存在，跳过: id={}", id);
+                continue;
+            }
+            knowledge.setApprovalStatus(dto.isApproved() ? "APPROVED" : "REJECTED");
+            knowledge.setApprovalRemark(dto.getRemark());
+            updateById(knowledge);
+        }
+        log.info("批量审核完成: ids={}, approved={}", dto.getIds(), dto.isApproved());
     }
     @Override
     @Transactional
@@ -277,6 +304,7 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         dto.setFileSize(knowledge.getFileSize());
         dto.setStatus(knowledge.getStatus());
         dto.setApprovalStatus(knowledge.getApprovalStatus());
+        dto.setApprovalRemark(knowledge.getApprovalRemark());
         dto.setCreateTime(knowledge.getCreateTime());
 
         // Get uploader name

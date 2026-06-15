@@ -18,4 +18,5 @@ public class KnowledgeBase extends BaseEntity {
     private Long fileSize;
     private Integer status;  // 0=pending, 1=indexed, 2=failed
     private String approvalStatus;  // PENDING/APPROVED/REJECTED
+    private String approvalRemark;
 }

@@ -9,14 +9,21 @@
           <el-radio-button value="APPROVED">已通过</el-radio-button>
           <el-radio-button value="REJECTED">已拒绝</el-radio-button>
         </el-radio-group>
+        <el-button v-if="isAdmin && selectedIds.length > 0" type="success" @click="openBatchApproveDialog(true)" style="margin-right: 8px;">
+          批量通过 ({{ selectedIds.length }})
+        </el-button>
+        <el-button v-if="isAdmin && selectedIds.length > 0" type="warning" @click="openBatchApproveDialog(false)" style="margin-right: 8px;">
+          批量拒绝 ({{ selectedIds.length }})
+        </el-button>
         <el-button v-if="isTeacherOrAdmin" type="primary" @click="openUploadDialog">上传文件</el-button>
       </div>
     </div>
 
-    <el-table :data="knowledgeList" v-loading="loading" stripe>
+    <el-table :data="knowledgeList" v-loading="loading" stripe @selection-change="handleSelectionChange">
       <template #empty>
         <el-empty v-if="!loading" description="暂无知识库文件" />
       </template>
+      <el-table-column v-if="isAdmin" type="selection" width="55" />
       <el-table-column prop="name" label="文件名" min-width="200" />
       <el-table-column v-if="isAdmin" label="上传者" width="120">
         <template #default="{ row }">{{ row.uploadedByName || '-' }}</template>
@@ -34,9 +41,20 @@
       </el-table-column>
       <el-table-column v-if="isAdmin" label="审核状态" width="100">
         <template #default="{ row }">
-          <el-tag :type="getApprovalTagType(row.approvalStatus)" size="small">
+          <el-tooltip v-if="row.approvalRemark" :content="row.approvalRemark" placement="top">
+            <el-tag :type="getApprovalTagType(row.approvalStatus)" size="small">
+              {{ getApprovalLabel(row.approvalStatus) }}
+            </el-tag>
+          </el-tooltip>
+          <el-tag v-else :type="getApprovalTagType(row.approvalStatus)" size="small">
             {{ getApprovalLabel(row.approvalStatus) }}
           </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column v-if="isAdmin" label="审核备注" width="150">
+        <template #default="{ row }">
+          <span v-if="row.approvalRemark" class="remark-text">{{ row.approvalRemark }}</span>
+          <span v-else class="text-muted">-</span>
         </template>
       </el-table-column>
       <el-table-column prop="createTime" label="上传时间" width="170">
@@ -45,8 +63,8 @@
       <el-table-column v-if="isTeacherOrAdmin" label="操作" width="200" fixed="right">
         <template #default="{ row }">
           <template v-if="isAdmin && row.approvalStatus === 'PENDING'">
-            <el-button text type="success" size="small" @click="approve(row.id, true)">通过</el-button>
-            <el-button text type="warning" size="small" @click="approve(row.id, false)">拒绝</el-button>
+            <el-button text type="success" size="small" @click="openApproveDialog(row.id, true)">通过</el-button>
+            <el-button text type="warning" size="small" @click="openApproveDialog(row.id, false)">拒绝</el-button>
           </template>
           <el-button text type="danger" size="small" @click="remove(row.id)">删除</el-button>
         </template>
@@ -82,6 +100,41 @@
         <el-button type="primary" :loading="uploading" @click="doUpload">上传</el-button>
       </template>
     </el-dialog>
+
+    <!-- 单个审核对话框 -->
+    <el-dialog v-model="showApproveDialog" :title="approveForm.approved ? '通过审核' : '拒绝审核'" width="400px">
+      <el-form label-width="80px">
+        <el-form-item label="备注">
+          <el-input v-model="approveForm.remark" type="textarea" :rows="3"
+            :placeholder="approveForm.approved ? '可选，填写通过原因' : '建议填写拒绝原因，方便教师修改'" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showApproveDialog = false">取消</el-button>
+        <el-button :type="approveForm.approved ? 'success' : 'warning'" @click="doApprove">
+          {{ approveForm.approved ? '通过' : '拒绝' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 批量审核对话框 -->
+    <el-dialog v-model="showBatchApproveDialog" :title="batchApproveForm.approved ? '批量通过' : '批量拒绝'" width="400px">
+      <el-form label-width="80px">
+        <el-form-item label="文件数">
+          <span>{{ selectedIds.length }} 个文件</span>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="batchApproveForm.remark" type="textarea" :rows="3"
+            :placeholder="batchApproveForm.approved ? '可选，填写通过原因' : '建议填写拒绝原因'" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showBatchApproveDialog = false">取消</el-button>
+        <el-button :type="batchApproveForm.approved ? 'success' : 'warning'" @click="doBatchApprove">
+          {{ batchApproveForm.approved ? '批量通过' : '批量拒绝' }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -96,8 +149,13 @@ const courses = ref([]);
 const loading = ref(false);
 const uploading = ref(false);
 const showUploadDialog = ref(false);
+const showApproveDialog = ref(false);
+const showBatchApproveDialog = ref(false);
 const approvalFilter = ref('');
+const selectedIds = ref([]);
 const uploadForm = ref({ courseId: null, file: null, name: '' });
+const approveForm = ref({ id: null, approved: true, remark: '' });
+const batchApproveForm = ref({ approved: true, remark: '' });
 const authStore = useAuthStore();
 const isAdmin = computed(() => authStore.user?.role === 'ADMIN');
 const isTeacherOrAdmin = computed(() => {
@@ -177,14 +235,45 @@ async function remove(id) {
   } catch { /* cancel */ }
 }
 
-async function approve(id, approved) {
+function handleSelectionChange(selection) {
+  selectedIds.value = selection.map(item => item.id);
+}
+
+function openApproveDialog(id, approved) {
+  approveForm.value = { id, approved, remark: '' };
+  showApproveDialog.value = true;
+}
+
+function openBatchApproveDialog(approved) {
+  batchApproveForm.value = { approved, remark: '' };
+  showBatchApproveDialog.value = true;
+}
+
+async function doApprove() {
   try {
+    const { id, approved, remark } = approveForm.value;
     const action = approved ? '通过' : '拒绝';
-    await ElMessageBox.confirm(`确定${action}此知识库文件？`, '提示', { type: 'warning' });
-    await knowledgeApi.approve(id, approved);
+    await knowledgeApi.approve(id, approved, remark);
+    showApproveDialog.value = false;
     await loadKnowledge();
     ElMessage.success(`已${action}`);
-  } catch { /* cancel */ }
+  } catch {
+    ElMessage.error('操作失败');
+  }
+}
+
+async function doBatchApprove() {
+  try {
+    const { approved, remark } = batchApproveForm.value;
+    const action = approved ? '通过' : '拒绝';
+    await knowledgeApi.batchApprove(selectedIds.value, approved, remark);
+    showBatchApproveDialog.value = false;
+    selectedIds.value = [];
+    await loadKnowledge();
+    ElMessage.success(`已批量${action}`);
+  } catch {
+    ElMessage.error('操作失败');
+  }
 }
 
 function getApprovalTagType(status) {
@@ -214,6 +303,17 @@ function formatSize(bytes) {
 </script>
 
 <style scoped>
-.knowledge-page { max-width: 1100px; }
+.knowledge-page { max-width: 1200px; }
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.remark-text {
+  font-size: 12px;
+  color: #909399;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.text-muted {
+  color: #c0c4cc;
+}
 </style>

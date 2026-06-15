@@ -1,6 +1,7 @@
 package com.edu.agent.module.knowledge.controller;
 
 import com.edu.agent.common.result.Result;
+import com.edu.agent.module.knowledge.dto.BatchApproveDTO;
 import com.edu.agent.module.knowledge.dto.KnowledgeDTO;
 import com.edu.agent.module.knowledge.dto.KnowledgeUploadDTO;
 import com.edu.agent.module.knowledge.service.KnowledgeService;
@@ -81,8 +82,17 @@ public class KnowledgeController {
 
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasRole('ADMIN')")
-    public Result<Void> approve(@PathVariable Long id, @RequestParam boolean approved) {
-        knowledgeService.approveKnowledge(id, approved);
+    public Result<Void> approve(@PathVariable Long id,
+                                @RequestParam boolean approved,
+                                @RequestParam(required = false) String remark) {
+        knowledgeService.approveKnowledge(id, approved, remark);
+        return Result.success();
+    }
+
+    @PostMapping("/batch-approve")
+    @PreAuthorize("hasRole('ADMIN')")
+    public Result<Void> batchApprove(@RequestBody BatchApproveDTO dto) {
+        knowledgeService.batchApprove(dto);
         return Result.success();
     }
 }

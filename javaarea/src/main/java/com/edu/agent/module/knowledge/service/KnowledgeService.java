@@ -1,5 +1,6 @@
 package com.edu.agent.module.knowledge.service;
 
+import com.edu.agent.module.knowledge.dto.BatchApproveDTO;
 import com.edu.agent.module.knowledge.dto.KnowledgeDTO;
 import com.edu.agent.module.knowledge.dto.KnowledgeUploadDTO;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,7 +19,9 @@ public interface KnowledgeService {
 
     List<KnowledgeDTO> listByApprovalStatus(String approvalStatus);
 
-    void approveKnowledge(Long id, boolean approved);
+    void approveKnowledge(Long id, boolean approved, String remark);
+
+    void batchApprove(BatchApproveDTO dto);
 
     void assignToCourse(Long knowledgeId, Long courseId);
 

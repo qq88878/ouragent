@@ -1,4 +1,4 @@
--- Add uploaded_by and approval_status fields to knowledge_base table
+-- Add uploaded_by, approval_status, and approval_remark fields to knowledge_base table
 -- This migration adds role-based access control for knowledge management
 
 USE edu_agent;
@@ -10,6 +10,10 @@ ADD COLUMN `uploaded_by` BIGINT DEFAULT NULL AFTER `course_id`;
 -- Add approval_status field: PENDING/APPROVED/REJECTED
 ALTER TABLE `knowledge_base`
 ADD COLUMN `approval_status` VARCHAR(20) NOT NULL DEFAULT 'APPROVED' AFTER `status`;
+
+-- Add approval_remark field for admin to add notes when approving/rejecting
+ALTER TABLE `knowledge_base`
+ADD COLUMN `approval_remark` VARCHAR(500) DEFAULT NULL AFTER `approval_status`;
 
 -- Add index for faster queries by uploader and approval status
 CREATE INDEX `idx_uploaded_by` ON `knowledge_base` (`uploaded_by`);
