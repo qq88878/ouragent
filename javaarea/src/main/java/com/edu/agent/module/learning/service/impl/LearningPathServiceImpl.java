@@ -7,6 +7,7 @@ import com.edu.agent.common.result.ResultCode;
 import com.edu.agent.module.chat.service.client.AgentServiceClient;
 import com.edu.agent.module.course.entity.Course;
 import com.edu.agent.module.course.mapper.CourseMapper;
+import com.edu.agent.module.learning.dto.AgentLearningPathResponse;
 import com.edu.agent.module.learning.dto.LearningPathDTO;
 import com.edu.agent.module.learning.dto.LearningPathGenerateRequest;
 import com.edu.agent.module.learning.dto.LearningPathStepDTO;
@@ -22,7 +23,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -54,7 +58,7 @@ public class LearningPathServiceImpl
         profileMap.put("interests", profile.getInterests());
         profileMap.put("gradeLevel", profile.getGradeLevel());
 
-        Map<String, Object> agentResponse;
+        AgentLearningPathResponse agentResponse;
         try {
             agentResponse = agentServiceClient.generateLearningPath(
                     profileMap, request.getCourseId(),
@@ -72,19 +76,19 @@ public class LearningPathServiceImpl
         path.setStatus(0);
         save(path);
 
-        List<Map<String, Object>> steps = extractSteps(agentResponse);
+        List<AgentLearningPathResponse.Step> steps = agentResponse.getStepsSafe();
         int totalSteps = steps.size();
         path.setTotalSteps(totalSteps);
         path.setCompletedSteps(0);
         updateById(path);
 
         for (int i = 0; i < steps.size(); i++) {
-            Map<String, Object> stepData = steps.get(i);
+            AgentLearningPathResponse.Step stepData = steps.get(i);
             LearningPathStep step = new LearningPathStep();
             step.setPathId(path.getId());
             step.setStepOrder(i + 1);
-            step.setTitle((String) stepData.getOrDefault("title", "步骤 " + (i + 1)));
-            step.setDescription((String) stepData.getOrDefault("description", ""));
+            step.setTitle(stepData.getTitle() != null ? stepData.getTitle() : "步骤 " + (i + 1));
+            step.setDescription(stepData.getDescription() != null ? stepData.getDescription() : "");
             step.setStatus(0);
             stepMapper.insert(step);
         }
@@ -166,58 +170,28 @@ public class LearningPathServiceImpl
         log.info("学习路径删除成功: pathId={}", pathId);
     }
 
-    @SuppressWarnings("unchecked")
-    private List<Map<String, Object>> extractSteps(Map<String, Object> agentResponse) {
-        if (agentResponse.containsKey("steps")) {
-            Object stepsObj = agentResponse.get("steps");
-            if (stepsObj instanceof List<?> list) {
-                List<Map<String, Object>> result = new ArrayList<>();
-                for (Object item : list) {
-                    if (item instanceof Map) {
-                        result.add((Map<String, Object>) item);
-                    }
-                }
-                return result;
-            }
-        }
-        if (agentResponse.containsKey("path")) {
-            Object pathObj = agentResponse.get("path");
-            if (pathObj instanceof Map<?, ?> pathMap && pathMap.containsKey("steps")) {
-                Object stepsObj = pathMap.get("steps");
-                if (stepsObj instanceof List<?> list) {
-                    List<Map<String, Object>> result = new ArrayList<>();
-                    for (Object item : list) {
-                        if (item instanceof Map) {
-                            result.add((Map<String, Object>) item);
-                        }
-                    }
-                    return result;
-                }
-            }
-        }
-        return Collections.emptyList();
-    }
+    private AgentLearningPathResponse generateDefaultPath(String courseTitle) {
+        AgentLearningPathResponse response = new AgentLearningPathResponse();
+        response.setTitle(courseTitle + " - 默认学习路径");
 
-    private Map<String, Object> generateDefaultPath(String courseTitle) {
-        Map<String, Object> response = new HashMap<>();
-        List<Map<String, Object>> steps = new ArrayList<>();
+        List<AgentLearningPathResponse.Step> steps = new ArrayList<>();
 
-        Map<String, Object> step1 = new HashMap<>();
-        step1.put("title", "基础概念学习");
-        step1.put("description", "学习" + courseTitle + "的基础概念和核心知识");
+        AgentLearningPathResponse.Step step1 = new AgentLearningPathResponse.Step();
+        step1.setTitle("基础概念学习");
+        step1.setDescription("学习" + courseTitle + "的基础概念和核心知识");
         steps.add(step1);
 
-        Map<String, Object> step2 = new HashMap<>();
-        step2.put("title", "实践练习");
-        step2.put("description", "通过实践练习巩固所学知识");
+        AgentLearningPathResponse.Step step2 = new AgentLearningPathResponse.Step();
+        step2.setTitle("实践练习");
+        step2.setDescription("通过实践练习巩固所学知识");
         steps.add(step2);
 
-        Map<String, Object> step3 = new HashMap<>();
-        step3.put("title", "进阶提升");
-        step3.put("description", "深入学习高级内容，提升综合能力");
+        AgentLearningPathResponse.Step step3 = new AgentLearningPathResponse.Step();
+        step3.setTitle("进阶提升");
+        step3.setDescription("深入学习高级内容，提升综合能力");
         steps.add(step3);
 
-        response.put("steps", steps);
+        response.setSteps(steps);
         return response;
     }
 

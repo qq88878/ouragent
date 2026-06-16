@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, Dict, List, Optional
 
 from .base import BaseAgent
+from ..utils import parse_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -103,12 +103,4 @@ class ProfileAgent(BaseAgent):
 }}"""
 
         response = await self.chat(prompt)
-
-        try:
-            response = response.strip()
-            if response.startswith("```"):
-                response = response.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-            return json.loads(response)
-        except json.JSONDecodeError:
-            logger.warning("画像分析结果不是有效 JSON")
-            return {"raw_response": response, "confidence": 0}
+        return parse_llm_json(response, fallback={"confidence": 0})

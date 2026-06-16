@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.edu.agent.common.config.FileUploadConfig;
 import com.edu.agent.common.exception.BizException;
 import com.edu.agent.common.result.ResultCode;
+import com.edu.agent.module.chat.dto.AgentIngestResponse;
 import com.edu.agent.module.chat.service.client.AgentServiceClient;
 import com.edu.agent.module.course.entity.Course;
 import com.edu.agent.module.course.mapper.CourseMapper;
@@ -28,12 +29,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Map;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -96,10 +96,10 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         // Trigger vectorization via Python Agent
         try {
             File savedFile = new File(uploadDir + "/" + storedFilename);
-            Map<String, Object> result = agentServiceClient.ingestKnowledgeFile(
+            AgentIngestResponse result = agentServiceClient.ingestKnowledgeFile(
                     knowledge.getId(), dto.getCourseId(), savedFile);
-            Object chunks = result.get("chunks");
-            if (chunks != null && ((Number) chunks).intValue() > 0) {
+            Integer chunks = result.getChunks();
+            if (chunks != null && chunks > 0) {
                 knowledge.setStatus(1); // indexed
             } else {
                 knowledge.setStatus(2); // vectorization failed (no chunks)
@@ -112,7 +112,15 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         updateById(knowledge);
 
         log.info("知识库文件上传成功: id={}, name={}, status={}", knowledge.getId(), knowledge.getName(), knowledge.getStatus());
-        return toDTO(knowledge);
+        // Build single-item maps for DTO enrichment
+        Map<Long, Course> courseMap = new HashMap<>();
+        if (dto.getCourseId() != null) {
+            Course course = courseMapper.selectById(dto.getCourseId());
+            if (course != null) courseMap.put(course.getId(), course);
+        }
+        Map<Long, User> userMap = new HashMap<>();
+        userMap.put(loginUser.getUser().getId(), loginUser.getUser());
+        return toDTO(knowledge, courseMap, userMap);
     }
 
     @Override
@@ -121,7 +129,18 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         if (knowledge == null) {
             throw new BizException(ResultCode.NOT_FOUND, "知识库文件不存在");
         }
-        return toDTO(knowledge);
+        // Single-item: fetch course and uploader individually
+        Map<Long, Course> courseMap = new HashMap<>();
+        Map<Long, User> userMap = new HashMap<>();
+        if (knowledge.getCourseId() != null) {
+            Course course = courseMapper.selectById(knowledge.getCourseId());
+            if (course != null) courseMap.put(course.getId(), course);
+        }
+        if (knowledge.getUploadedBy() != null) {
+            User user = userMapper.selectById(knowledge.getUploadedBy());
+            if (user != null) userMap.put(user.getId(), user);
+        }
+        return toDTO(knowledge, courseMap, userMap);
     }
 
     @Override
@@ -133,18 +152,15 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         LambdaQueryWrapper<KnowledgeBase> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(KnowledgeBase::getCourseId, courseId);
 
-        // Filter by role
         if ("STUDENT".equals(role)) {
             wrapper.eq(KnowledgeBase::getApprovalStatus, "APPROVED");
         } else if ("TEACHER".equals(role)) {
             wrapper.eq(KnowledgeBase::getUploadedBy, userId);
         }
-        // ADMIN sees all
 
         wrapper.orderByDesc(KnowledgeBase::getCreateTime);
-        List<KnowledgeDTO> result = list(wrapper).stream().map(this::toDTO).toList();
-        enrichCourseNames(result);
-        return result;
+        List<KnowledgeBase> entities = list(wrapper);
+        return toDTOList(entities);
     }
 
     @Override
@@ -195,18 +211,15 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
 
         LambdaQueryWrapper<KnowledgeBase> wrapper = new LambdaQueryWrapper<>();
 
-        // Filter by role
         if ("STUDENT".equals(role)) {
             wrapper.eq(KnowledgeBase::getApprovalStatus, "APPROVED");
         } else if ("TEACHER".equals(role)) {
             wrapper.eq(KnowledgeBase::getUploadedBy, userId);
         }
-        // ADMIN sees all
 
         wrapper.orderByDesc(KnowledgeBase::getCreateTime);
-        List<KnowledgeDTO> result = list(wrapper).stream().map(this::toDTO).toList();
-        enrichCourseNames(result);
-        return result;
+        List<KnowledgeBase> entities = list(wrapper);
+        return toDTOList(entities);
     }
 
     @Override
@@ -216,10 +229,8 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
             wrapper.like(KnowledgeBase::getName, keyword);
         }
         wrapper.orderByDesc(KnowledgeBase::getCreateTime);
-        List<KnowledgeBase> list = list(wrapper);
-        List<KnowledgeDTO> dtos = list.stream().map(this::toDTO).toList();
-        enrichCourseNames(dtos);
-        return dtos;
+        List<KnowledgeBase> entities = list(wrapper);
+        return toDTOList(entities);
     }
 
     @Override
@@ -255,9 +266,8 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         LambdaQueryWrapper<KnowledgeBase> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(KnowledgeBase::getApprovalStatus, approvalStatus)
                 .orderByDesc(KnowledgeBase::getCreateTime);
-        List<KnowledgeDTO> result = list(wrapper).stream().map(this::toDTO).toList();
-        enrichCourseNames(result);
-        return result;
+        List<KnowledgeBase> entities = list(wrapper);
+        return toDTOList(entities);
     }
 
     @Override
@@ -335,19 +345,37 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         log.info("知识库文件关联更新: knowledgeId={}, courseId={}", knowledgeId, courseId);
     }
 
-    private void enrichCourseNames(List<KnowledgeDTO> list) {
-        if (list == null || list.isEmpty()) return;
-        for (KnowledgeDTO dto : list) {
-            if (dto.getCourseId() != null) {
-                Course course = courseMapper.selectById(dto.getCourseId());
-                if (course != null) {
-                    dto.setCourseName(course.getTitle());
-                }
-            }
+    private List<KnowledgeDTO> toDTOList(List<KnowledgeBase> entities) {
+        if (entities == null || entities.isEmpty()) {
+            return Collections.emptyList();
         }
+
+        // Batch fetch courses
+        Set<Long> courseIds = entities.stream()
+                .map(KnowledgeBase::getCourseId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, Course> courseMap = new HashMap<>();
+        if (!courseIds.isEmpty()) {
+            courseMapper.selectBatchIds(courseIds).forEach(c -> courseMap.put(c.getId(), c));
+        }
+
+        // Batch fetch uploaders
+        Set<Long> userIds = entities.stream()
+                .map(KnowledgeBase::getUploadedBy)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, User> userMap = new HashMap<>();
+        if (!userIds.isEmpty()) {
+            userMapper.selectBatchIds(userIds).forEach(u -> userMap.put(u.getId(), u));
+        }
+
+        return entities.stream()
+                .map(e -> toDTO(e, courseMap, userMap))
+                .toList();
     }
 
-    private KnowledgeDTO toDTO(KnowledgeBase knowledge) {
+    private KnowledgeDTO toDTO(KnowledgeBase knowledge, Map<Long, Course> courseMap, Map<Long, User> userMap) {
         KnowledgeDTO dto = new KnowledgeDTO();
         dto.setId(knowledge.getId());
         dto.setCourseId(knowledge.getCourseId());
@@ -362,9 +390,15 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         dto.setApprovalRemark(knowledge.getApprovalRemark());
         dto.setCreateTime(knowledge.getCreateTime());
 
-        // Get uploader name
-        if (knowledge.getUploadedBy() != null) {
-            var uploader = userMapper.selectById(knowledge.getUploadedBy());
+        if (knowledge.getCourseId() != null && courseMap != null) {
+            Course course = courseMap.get(knowledge.getCourseId());
+            if (course != null) {
+                dto.setCourseName(course.getTitle());
+            }
+        }
+
+        if (knowledge.getUploadedBy() != null && userMap != null) {
+            User uploader = userMap.get(knowledge.getUploadedBy());
             if (uploader != null) {
                 dto.setUploadedByName(uploader.getNickname() != null ? uploader.getNickname() : uploader.getUsername());
             }

@@ -5,8 +5,8 @@ Agent 微服务 API - 供 Java 后端调用
   GET  /health                  - 健康检查
   GET  /agent/status            - Agent 状态
 
-  POST /agent/chat              - 对话（RAG 增强）
-  POST /agent/chat/context      - 带上下文的对话（知识库 + 学生画像）
+  POST /agent/chat              - 对话（RAG 增强，支持 context 和 session_id）
+  POST /agent/chat/stream       - 流式对话（SSE）
 
   POST /agent/knowledge/ingest  - 知识文档入库（向量化）
   GET  /agent/knowledge/status  - 查询知识库状态
@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=10000, description="用户消息")
-    context: Optional[Dict[str, Any]] = None
+    context: Dict[str, Any] = Field(default_factory=dict, description="上下文（knowledge_ids, student_profile 等）")
     session_id: Optional[str] = Field(None, pattern=r"^[a-f0-9\-]{36}$", description="会话ID（UUID格式）")
 
     @field_validator("message")
@@ -68,12 +68,6 @@ class ChatResponse(BaseModel):
     response: str
     session_id: Optional[str] = None
     status: str = "success"
-
-
-class ChatWithContextRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=10000)
-    context: Dict[str, Any] = {}
-    session_id: Optional[str] = Field(None, pattern=r"^[a-f0-9\-]{36}$")
 
 
 class CreateSessionRequest(BaseModel):
@@ -283,35 +277,16 @@ async def get_agent_status():
 @app.post("/agent/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, _: dict = Depends(get_current_user)):
     """
-    RAG 增强对话（支持会话记忆）
-
-    Java 调用:
-      POST /agent/chat
-      {"message": "什么是Python列表？", "context": {"knowledge_ids": [1, 2]}, "session_id": "xxx"}
-    """
-    if not orchestrator:
-        raise HTTPException(status_code=503, detail="Agent 未初始化")
-
-    try:
-        response = await orchestrator.chat(
-            request.message,
-            request.context,
-            session_id=request.session_id,
-        )
-        return ChatResponse(response=response, session_id=request.session_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/agent/chat/context", response_model=ChatResponse)
-async def chat_with_context(request: ChatWithContextRequest, _: dict = Depends(get_current_user)):
-    """
-    带完整上下文的对话（Java AgentServiceClient.chatWithContext）
+    RAG 增强对话（支持会话记忆 + 上下文）
 
     context 可包含:
       - knowledge_ids: 知识库 ID 列表
       - student_profile: 学生画像
       - history: 对话历史（如果提供 session_id，优先使用 Redis 中的历史）
+
+    Java 调用:
+      POST /agent/chat
+      {"message": "什么是Python列表？", "context": {"knowledge_ids": [1, 2]}, "session_id": "xxx"}
     """
     if not orchestrator:
         raise HTTPException(status_code=503, detail="Agent 未初始化")
@@ -339,26 +314,7 @@ SSE_HEADERS = {
 
 @app.post("/agent/chat/stream")
 async def chat_stream(request: ChatRequest, _: dict = Depends(get_current_user)):
-    """流式对话（SSE）— 前端 fetch ReadableStream 消费"""
-    if not orchestrator:
-        raise HTTPException(status_code=503, detail="Agent 未初始化")
-
-    async def event_generator():
-        try:
-            async for chunk in orchestrator.stream_chat(
-                request.message, request.context, session_id=request.session_id,
-            ):
-                yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
-            yield f"data: {json.dumps({'done': True})}\n\n"
-        except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
-
-    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
-
-
-@app.post("/agent/chat/context/stream")
-async def chat_with_context_stream(request: ChatWithContextRequest, _: dict = Depends(get_current_user)):
-    """带上下文的流式对话（SSE）— Java AgentServiceClient 调用"""
+    """流式对话（SSE）— 前端 fetch ReadableStream / Java SSE 消费"""
     if not orchestrator:
         raise HTTPException(status_code=503, detail="Agent 未初始化")
 

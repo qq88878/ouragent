@@ -14,9 +14,6 @@ from ..rag.rag_pipeline import RAGPipeline
 from ..tools.base import ToolRegistry
 from ..tools.retrieval import RetrievalTool
 from ..tools.web_search import WebSearchTool
-from ..tools.question_gen import QuestionGenTool
-from ..tools.mindmap_gen import MindmapGenTool
-from ..tools.study_plan import StudyPlanTool
 from .profile_agent import ProfileAgent
 from .planner_agent import PlannerAgent
 from .resource_agent import ResourceAgent
@@ -51,9 +48,6 @@ class Orchestrator:
         self.tools = ToolRegistry()
         self.tools.register(RetrievalTool(rag_pipeline))
         self.tools.register(WebSearchTool())
-        self.tools.register(QuestionGenTool(llm))
-        self.tools.register(MindmapGenTool(llm))
-        self.tools.register(StudyPlanTool(llm))
 
         # 初始化 Agent（每个 Agent 挂载需要的工具）
         retrieval_tool = self.tools.get("knowledge_retrieval")
@@ -91,33 +85,20 @@ class Orchestrator:
 
     # ==================== 核心对话入口 ====================
 
-    async def chat(
+    async def _prepare_chat_messages(
         self,
         message: str,
-        context: Optional[Dict[str, Any]] = None,
-        session_id: Optional[str] = None,
-    ) -> str:
+        context: Dict[str, Any],
+        session_id: Optional[str],
+    ) -> list[dict]:
         """
-        RAG 增强对话 — 系统主入口
+        准备对话消息列表（RAG 检索 + 历史加载 + prompt 构造）。
 
-        流程:
-        1. 从 context 提取 knowledge_ids 和 student_profile
-        2. 如果有 session_id，从 Redis 加载对话历史
-        3. 用 RAG 检索相关知识（带缓存）
-        4. 构造个性化 system prompt
-        5. 调用 LLM 生成回答
-        6. 保存消息到 Redis
-
-        Args:
-            message: 用户消息
-            context: {"knowledge_ids": [1,2], "student_profile": {...}}
-            session_id: 会话ID（用于记忆对话历史）
+        chat() 和 stream_chat() 共享此逻辑。
         """
-        context = context or {}
         knowledge_ids = context.get("knowledge_ids")
         student_profile = context.get("student_profile")
 
-        # 初始化 Redis（如果需要）
         await self._ensure_redis()
 
         # 获取对话历史（优先从 Redis）
@@ -138,13 +119,10 @@ class Orchestrator:
         if not knowledge_context:
             try:
                 retrieved = await self.rag.retrieve(
-                    query=message,
-                    top_k=5,
-                    knowledge_ids=knowledge_ids,
+                    query=message, top_k=5, knowledge_ids=knowledge_ids,
                 )
                 if retrieved:
                     knowledge_context = "\n\n---\n\n".join(r["content"] for r in retrieved)
-                    # 缓存结果
                     if self._rag_cache:
                         await self._rag_cache.set_results(message, retrieved, knowledge_ids)
             except Exception as e:
@@ -152,21 +130,44 @@ class Orchestrator:
 
         # 构造个性化 prompt
         system_prompt = self._build_chat_system_prompt(student_profile, knowledge_context)
-
         messages = [{"role": "system", "content": system_prompt}]
         if history:
             messages.extend(history[-10:])
         messages.append({"role": "user", "content": message})
+        return messages
 
-        try:
-            response = await self.llm.chat(messages)
-
-            # 保存消息到 Redis
-            if session_id and self._session_manager:
+    async def _save_chat_message(
+        self, session_id: Optional[str], message: str, response: str,
+    ) -> None:
+        """保存对话消息到 Redis。"""
+        if session_id and self._session_manager and response:
+            try:
                 conv = ConversationMemory(self._redis_client, session_id)
                 await conv.add_message("user", message)
                 await conv.add_message("assistant", response)
+            except Exception as e:
+                logger.warning("保存对话历史失败: %s", e)
 
+    async def chat(
+        self,
+        message: str,
+        context: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
+    ) -> str:
+        """
+        RAG 增强对话 — 系统主入口
+
+        Args:
+            message: 用户消息
+            context: {"knowledge_ids": [1,2], "student_profile": {...}}
+            session_id: 会话ID（用于记忆对话历史）
+        """
+        context = context or {}
+        messages = await self._prepare_chat_messages(message, context, session_id)
+
+        try:
+            response = await self.llm.chat(messages)
+            await self._save_chat_message(session_id, message, response)
             return response
         except Exception as e:
             logger.error("对话失败: %s", e)
@@ -178,42 +179,9 @@ class Orchestrator:
         context: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
     ) -> AsyncIterator[str]:
-        """
-        流式 RAG 增强对话 — 镜像 chat() 逻辑，逐块 yield
-        """
+        """流式 RAG 增强对话 — 逐块 yield"""
         context = context or {}
-        knowledge_ids = context.get("knowledge_ids")
-        student_profile = context.get("student_profile")
-
-        await self._ensure_redis()
-
-        history = context.get("history")
-        if session_id and self._session_manager:
-            conv = ConversationMemory(self._redis_client, session_id)
-            history = await conv.get_recent_context_for_llm(max_messages=10)
-            await self._session_manager.touch_session(session_id)
-
-        knowledge_context = ""
-        if self._rag_cache:
-            cached_results = await self._rag_cache.get_results(message, knowledge_ids)
-            if cached_results:
-                knowledge_context = "\n\n---\n\n".join(r["content"] for r in cached_results)
-
-        if not knowledge_context:
-            try:
-                retrieved = await self.rag.retrieve(query=message, top_k=5, knowledge_ids=knowledge_ids)
-                if retrieved:
-                    knowledge_context = "\n\n---\n\n".join(r["content"] for r in retrieved)
-                    if self._rag_cache:
-                        await self._rag_cache.set_results(message, retrieved, knowledge_ids)
-            except Exception as e:
-                logger.warning("RAG 检索失败，降级为纯 LLM 对话: %s", e)
-
-        system_prompt = self._build_chat_system_prompt(student_profile, knowledge_context)
-        messages = [{"role": "system", "content": system_prompt}]
-        if history:
-            messages.extend(history[-10:])
-        messages.append({"role": "user", "content": message})
+        messages = await self._prepare_chat_messages(message, context, session_id)
 
         full_response = []
         try:
@@ -224,14 +192,7 @@ class Orchestrator:
             logger.error("流式对话失败: %s", e)
             yield f"\n\n抱歉，处理时出现错误: {e}"
         finally:
-            response_text = "".join(full_response)
-            if session_id and self._session_manager and response_text:
-                try:
-                    conv = ConversationMemory(self._redis_client, session_id)
-                    await conv.add_message("user", message)
-                    await conv.add_message("assistant", response_text)
-                except Exception as e:
-                    logger.warning("保存流式对话历史失败: %s", e)
+            await self._save_chat_message(session_id, message, "".join(full_response))
 
     def _build_chat_system_prompt(
         self,

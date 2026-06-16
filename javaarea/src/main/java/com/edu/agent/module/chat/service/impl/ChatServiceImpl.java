@@ -59,7 +59,7 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
         save(session);
 
         log.info("会话创建成功: id={}, userId={}", session.getId(), userId);
-        return toSessionDTO(session, null);
+        return toSessionDTO(session, null, Collections.emptyMap());
     }
 
     @Override
@@ -73,7 +73,7 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
             return Collections.emptyList();
         }
 
-        // Batch fetch last messages to avoid N+1 queries
+        // Batch fetch last messages
         List<Long> sessionIds = sessions.stream()
                 .map(ChatSession::getId)
                 .collect(Collectors.toList());
@@ -82,14 +82,23 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
                 .orderByDesc(ChatMessage::getCreateTime);
         List<ChatMessage> allMessages = messageMapper.selectList(msgWrapper);
 
-        // Group by sessionId, keep the latest message per session
         Map<Long, ChatMessage> lastMessageMap = new HashMap<>();
         for (ChatMessage msg : allMessages) {
             lastMessageMap.putIfAbsent(msg.getSessionId(), msg);
         }
 
+        // Batch fetch courses to avoid N+1 queries
+        Set<Long> courseIds = sessions.stream()
+                .map(ChatSession::getCourseId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, Course> courseMap = new HashMap<>();
+        if (!courseIds.isEmpty()) {
+            courseMapper.selectBatchIds(courseIds).forEach(c -> courseMap.put(c.getId(), c));
+        }
+
         return sessions.stream()
-                .map(session -> toSessionDTO(session, lastMessageMap.get(session.getId())))
+                .map(session -> toSessionDTO(session, lastMessageMap.get(session.getId()), courseMap))
                 .collect(Collectors.toList());
     }
 
@@ -334,14 +343,15 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
         log.info("会话删除成功: id={}", sessionId);
     }
 
-    private ChatSessionDTO toSessionDTO(ChatSession session, ChatMessage lastMessage) {
+    private ChatSessionDTO toSessionDTO(ChatSession session, ChatMessage lastMessage,
+                                         Map<Long, Course> courseMap) {
         ChatSessionDTO dto = new ChatSessionDTO();
         dto.setId(session.getId());
         dto.setCourseId(session.getCourseId());
         dto.setTitle(session.getTitle());
         dto.setCreateTime(session.getCreateTime());
-        if (session.getCourseId() != null) {
-            Course course = courseMapper.selectById(session.getCourseId());
+        if (session.getCourseId() != null && courseMap != null) {
+            Course course = courseMap.get(session.getCourseId());
             if (course != null) {
                 dto.setCourseName(course.getTitle());
             }

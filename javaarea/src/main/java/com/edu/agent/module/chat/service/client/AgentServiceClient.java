@@ -1,20 +1,21 @@
 package com.edu.agent.module.chat.service.client;
 
+import com.edu.agent.module.chat.dto.AgentChatResponse;
+import com.edu.agent.module.chat.dto.AgentIngestResponse;
+import com.edu.agent.module.learning.dto.AgentLearningPathResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
-
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -57,17 +58,22 @@ public class AgentServiceClient {
     // ===== Phase 1: Basic =====
 
     public String chat(String message) {
+        AgentChatResponse response = chatTyped(message);
+        return response.getResponse();
+    }
+
+    public AgentChatResponse chatTyped(String message) {
         Map<String, Object> body = new HashMap<>();
         body.put("message", message);
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, createHeaders());
-        ResponseEntity<Map> response = restTemplate.postForEntity(
-                agentServiceUrl + "/agent/chat", request, Map.class);
+        ResponseEntity<AgentChatResponse> response = restTemplate.exchange(
+                agentServiceUrl + "/agent/chat",
+                HttpMethod.POST,
+                request,
+                new ParameterizedTypeReference<>() {});
 
-        if (response.getBody() != null) {
-            return (String) response.getBody().get("response");
-        }
-        return "No response from agent";
+        return response.getBody() != null ? response.getBody() : new AgentChatResponse();
     }
 
     public boolean isHealthy() {
@@ -90,94 +96,75 @@ public class AgentServiceClient {
 
     // ===== Phase 2: Knowledge =====
 
-    public String ingestKnowledge(Long knowledgeId, Long courseId, String filePath, String fileType) {
-        try {
-            HttpHeaders headers = createHeaders();
-            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-
-            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
-            body.add("file", new FileSystemResource(filePath));
-            body.add("knowledge_id", knowledgeId.toString());
-            body.add("course_id", courseId != null ? courseId.toString() : "");
-
-            HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
-            ResponseEntity<Map> response = restTemplate.postForEntity(
-                    agentServiceUrl + "/agent/knowledge/ingest", request, Map.class);
-
-            if (response.getBody() != null) {
-                Object status = response.getBody().get("status");
-                return status != null ? status.toString() : "failed";
-            }
-            return "failed";
-        } catch (Exception e) {
-            log.error("调用 Agent 知识入库失败: knowledgeId={}", knowledgeId, e);
-            return "failed";
-        }
-    }
-
-    /**
-     * Send a file to the agent service for knowledge ingestion via multipart upload.
-     * Calls POST /agent/knowledge/ingest
-     */
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> ingestKnowledgeFile(Long knowledgeId, Long courseId, File file) {
+    public AgentIngestResponse ingestKnowledgeFile(Long knowledgeId, Long courseId, File file) {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", new FileSystemResource(file));
         body.add("knowledge_id", knowledgeId);
         body.add("course_id", courseId);
 
         HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, createMultipartHeaders());
-        ResponseEntity<Map> response = restTemplate.postForEntity(
-                agentServiceUrl + "/agent/knowledge/ingest", request, Map.class);
+        ResponseEntity<AgentIngestResponse> response = restTemplate.exchange(
+                agentServiceUrl + "/agent/knowledge/ingest",
+                HttpMethod.POST,
+                request,
+                new ParameterizedTypeReference<>() {});
 
-        return response.getBody() != null ? response.getBody() : new HashMap<>();
+        return response.getBody() != null ? response.getBody() : new AgentIngestResponse();
     }
 
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> getKnowledgeStatus(Long knowledgeId) {
-        HttpEntity<Void> request = new HttpEntity<>(createHeaders());
-        ResponseEntity<Map> response = restTemplate.exchange(
-                agentServiceUrl + "/agent/knowledge/status",
-                org.springframework.http.HttpMethod.GET,
-                request, Map.class);
-        return response.getBody() != null ? response.getBody() : new HashMap<>();
+    // Keep legacy method for backward compatibility
+    public String ingestKnowledge(Long knowledgeId, Long courseId, String filePath, String fileType) {
+        try {
+            File file = new File(filePath);
+            AgentIngestResponse response = ingestKnowledgeFile(knowledgeId, courseId, file);
+            return response.getStatus() != null ? response.getStatus() : "failed";
+        } catch (Exception e) {
+            log.error("调用 Agent 知识入库失败: knowledgeId={}", knowledgeId, e);
+            return "failed";
+        }
     }
 
     // ===== Phase 3: Enhanced AI =====
 
-    @SuppressWarnings("unchecked")
     public String chatWithContext(String message, Map<String, Object> context) {
+        AgentChatResponse response = chatWithContextTyped(message, context);
+        return response.getResponse();
+    }
+
+    public AgentChatResponse chatWithContextTyped(String message, Map<String, Object> context) {
         Map<String, Object> body = new HashMap<>();
         body.put("message", message);
         body.put("context", context);
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, createHeaders());
-        ResponseEntity<Map> response = restTemplate.postForEntity(
-                agentServiceUrl + "/agent/chat/context", request, Map.class);
+        ResponseEntity<AgentChatResponse> response = restTemplate.exchange(
+                agentServiceUrl + "/agent/chat",
+                HttpMethod.POST,
+                request,
+                new ParameterizedTypeReference<>() {});
 
-        if (response.getBody() != null) {
-            return (String) response.getBody().get("response");
-        }
-        return "No response from agent";
+        return response.getBody() != null ? response.getBody() : new AgentChatResponse();
     }
 
     // ===== Phase 4: Learning =====
 
-    @SuppressWarnings("unchecked")
-    public Map<String, Object> generateLearningPath(Map<String, Object> studentProfile, Long courseId, String goal) {
+    public AgentLearningPathResponse generateLearningPath(
+            Map<String, Object> studentProfile, Long courseId, String goal) {
         Map<String, Object> body = new HashMap<>();
         body.put("student_profile", studentProfile);
         body.put("course_id", courseId);
         body.put("goal", goal);
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, createHeaders());
-        ResponseEntity<Map> response = restTemplate.postForEntity(
-                agentServiceUrl + "/agent/plan", request, Map.class);
+        ResponseEntity<AgentLearningPathResponse> response = restTemplate.exchange(
+                agentServiceUrl + "/agent/plan",
+                HttpMethod.POST,
+                request,
+                new ParameterizedTypeReference<>() {});
 
-        return response.getBody() != null ? response.getBody() : new HashMap<>();
+        return response.getBody() != null ? response.getBody() : new AgentLearningPathResponse();
     }
 
-    @SuppressWarnings("unchecked")
     public Map<String, Object> evaluateAnswer(String question, String answer) {
         Map<String, Object> body = new HashMap<>();
         body.put("question", question);
@@ -207,7 +194,7 @@ public class AgentServiceClient {
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
 
         restTemplate.execute(
-                agentServiceUrl + "/agent/chat/context/stream",
+                agentServiceUrl + "/agent/chat/stream",
                 org.springframework.http.HttpMethod.POST,
                 restTemplate.httpEntityCallback(request),
                 (org.springframework.web.client.ResponseExtractor<Void>) response -> {

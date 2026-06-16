@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, Dict, List, Optional
 
 from .base import BaseAgent
+from ..utils import parse_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -108,13 +108,7 @@ class EvaluatorAgent(BaseAgent):
 }}"""
 
         response = await self.chat(prompt)
-        try:
-            response = response.strip()
-            if response.startswith("```"):
-                response = response.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-            return json.loads(response)
-        except json.JSONDecodeError:
-            return {"score": 0, "raw_response": response}
+        return parse_llm_json(response, fallback={"score": 0})
 
     async def assess_progress(
         self,
@@ -155,10 +149,4 @@ class EvaluatorAgent(BaseAgent):
 }}"""
 
         response = await self.chat(prompt)
-        try:
-            response = response.strip()
-            if response.startswith("```"):
-                response = response.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-            return json.loads(response)
-        except json.JSONDecodeError:
-            return {"overall_progress": "unknown", "raw_response": response}
+        return parse_llm_json(response, fallback={"overall_progress": "unknown"})

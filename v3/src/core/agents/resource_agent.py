@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, Dict, List, Optional
 
 from .base import BaseAgent
 from ..tools.retrieval import RetrievalTool
+from ..utils import parse_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -118,13 +118,7 @@ class ResourceAgent(BaseAgent):
 }}"""
 
         response = await self.chat(prompt)
-        try:
-            response = response.strip()
-            if response.startswith("```"):
-                response = response.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-            return json.loads(response)
-        except json.JSONDecodeError:
-            return {"topic": topic, "questions": [], "raw_response": response}
+        return parse_llm_json(response, fallback={"topic": topic, "questions": []})
 
     async def generate_mindmap(
         self,
@@ -166,13 +160,7 @@ class ResourceAgent(BaseAgent):
 }}"""
 
         response = await self.chat(prompt)
-        try:
-            response = response.strip()
-            if response.startswith("```"):
-                response = response.split("\n", 1)[1].rsplit("```", 1)[0].strip()
-            return json.loads(response)
-        except json.JSONDecodeError:
-            return {"topic": topic, "children": [], "raw_response": response}
+        return parse_llm_json(response, fallback={"topic": topic, "children": []})
 
     async def generate_summary(
         self,

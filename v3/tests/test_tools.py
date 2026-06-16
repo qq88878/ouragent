@@ -81,21 +81,3 @@ class TestToolSchemas:
         tool = WebSearchTool()
         schema = tool.get_schema()
         assert schema["name"] == "web_search"
-
-    def test_question_gen_schema(self):
-        from src.core.tools.question_gen import QuestionGenTool
-        tool = QuestionGenTool(llm=None)
-        schema = tool.get_schema()
-        assert schema["name"] == "question_generator"
-
-    def test_mindmap_gen_schema(self):
-        from src.core.tools.mindmap_gen import MindmapGenTool
-        tool = MindmapGenTool(llm=None)
-        schema = tool.get_schema()
-        assert schema["name"] == "mindmap_generator"
-
-    def test_study_plan_schema(self):
-        from src.core.tools.study_plan import StudyPlanTool
-        tool = StudyPlanTool(llm=None)
-        schema = tool.get_schema()
-        assert schema["name"] == "study_plan"
