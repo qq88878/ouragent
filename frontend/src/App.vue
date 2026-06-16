@@ -24,6 +24,10 @@
           <el-icon><Reading /></el-icon>
           <span>课程中心</span>
         </el-menu-item>
+        <el-menu-item v-if="isStudent" index="/schedule">
+          <el-icon><Calendar /></el-icon>
+          <span>课表</span>
+        </el-menu-item>
         <el-menu-item v-if="isStudent" index="/learning">
           <el-icon><TrendCharts /></el-icon>
           <span>学习路径</span>
@@ -68,7 +72,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import {
   HomeFilled, ChatDotRound, Reading, TrendCharts,
-  Document, User, Setting, Avatar,
+  Document, User, Setting, Avatar, Calendar,
 } from '@element-plus/icons-vue';
 
 const route = useRoute();
@@ -103,6 +107,7 @@ const pageTitles = {
   '/dashboard': '首页',
   '/chat': '智能对话',
   '/courses': '课程中心',
+  '/schedule': '课表',
   '/learning': '学习路径',
   '/knowledge': '知识库',
   '/profile': '个人资料',

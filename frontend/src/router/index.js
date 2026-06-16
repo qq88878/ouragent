@@ -63,6 +63,12 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/schedule',
+    name: 'Schedule',
+    component: () => import('@/views/ScheduleView.vue'),
+    meta: { requiresAuth: true, requiresStudent: true },
+  },
+  {
     path: '/admin', name: 'Admin', meta: { requiresAuth: true, requiresAdmin: true },
     component: () => import('@/views/AdminView.vue'),
   },

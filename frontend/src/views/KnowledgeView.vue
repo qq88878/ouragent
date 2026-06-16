@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="knowledge-page">
     <div class="page-header">
       <h3>知识库管理</h3>
@@ -117,7 +117,13 @@
     <!-- Content Preview Dialog -->
     <el-dialog v-model="showContentDialog" :title="'查看内容: ' + contentName" width="800px" top="3vh">
       <div v-loading="contentLoading" style="max-height: 70vh; overflow-y: auto;">
-        <pre v-if="!contentLoading && contentText" class="content-preview">{{ contentText }}</pre>
+        <template v-if="!contentLoading && contentText">
+          <div v-if="isPreviewPlaceholder" class="content-unavailable">
+            <el-icon :size="48" color="#909399"><WarningFilled /></el-icon>
+            <p>{{ contentText }}</p>
+          </div>
+          <pre v-else class="content-preview">{{ contentText }}</pre>
+        </template>
         <el-empty v-if="!contentLoading && !contentText" description="无法加载内容" />
       </div>
       <template #footer>
@@ -175,6 +181,7 @@ const selectedIds = ref([]);
 const contentText = ref('');
 const contentName = ref('');
 const contentLoading = ref(false);
+const isPreviewPlaceholder = computed(() => contentText.value && contentText.value.startsWith('[此文件类型'));
 const uploadForm = ref({ courseId: null, file: null, name: '', description: '' });
 const approveForm = ref({ id: null, approved: true, remark: '' });
 const batchApproveForm = ref({ approved: true, remark: '' });
@@ -369,6 +376,8 @@ function formatSize(bytes) {
   white-space: nowrap;
 }
 .text-muted { color: #c0c4cc; }
+.content-unavailable { text-align: center; padding: 40px 20px; color: #909399; }
+.content-unavailable p { margin-top: 16px; font-size: 14px; }
 .content-preview {
   background: #f5f7fa;
   padding: 16px;

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="course-page">
     <div class="page-header">
       <h3>课程中心</h3>

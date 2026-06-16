@@ -89,8 +89,8 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         knowledge.setFileType(fileType);
         knowledge.setFileSize(file.getSize());
         knowledge.setStatus(0); // pending vectorization
-        // Teachers need admin approval, admins auto-approved
-        knowledge.setApprovalStatus("ADMIN".equals(loginUser.getUser().getRole()) ? "APPROVED" : "PENDING");
+        // Teachers and admins auto-approved; approval workflow reserved for future use
+        knowledge.setApprovalStatus("APPROVED");
         save(knowledge);
 
         // Trigger vectorization via Python Agent
@@ -224,14 +224,33 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
 
     @Override
     public List<KnowledgeDTO> searchByName(String keyword) {
+        LoginUser loginUser = getCurrentLoginUser();
+        String role = loginUser.getUser().getRole();
+        Long userId = loginUser.getUser().getId();
+
         LambdaQueryWrapper<KnowledgeBase> wrapper = new LambdaQueryWrapper<>();
         if (StringUtils.hasText(keyword)) {
             wrapper.like(KnowledgeBase::getName, keyword);
         }
+
+        // Filter by role
+        if ("STUDENT".equals(role)) {
+            wrapper.eq(KnowledgeBase::getApprovalStatus, "APPROVED");
+        } else if ("TEACHER".equals(role)) {
+            wrapper.eq(KnowledgeBase::getUploadedBy, userId);
+        }
+        // ADMIN sees all
+
         wrapper.orderByDesc(KnowledgeBase::getCreateTime);
         List<KnowledgeBase> entities = list(wrapper);
         return toDTOList(entities);
     }
+
+    private static final java.util.Set<String> TEXT_EXTENSIONS = java.util.Set.of(
+        "txt", "md", "csv", "tsv", "json", "xml", "html", "htm", "css", "js", "ts",
+        "py", "java", "kt", "c", "cpp", "h", "hpp", "go", "rs", "rb", "php", "sh", "bat",
+        "yaml", "yml", "toml", "ini", "cfg", "conf", "properties", "sql", "log", "svg"
+    );
 
     @Override
     public String getContent(Long id) {
@@ -239,6 +258,12 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         if (knowledge == null) {
             throw new BizException(ResultCode.NOT_FOUND, "知识库文件不存在");
         }
+
+        String fileType = knowledge.getFileType();
+        if (fileType == null || !TEXT_EXTENSIONS.contains(fileType.toLowerCase())) {
+            return "[此文件类型（." + (fileType != null ? fileType : "unknown") + "）不支持在线预览，请下载后查看]";
+        }
+
         String fullPath = fileUploadConfig.getUploadPath() + knowledge.getFilePath();
         java.io.File file = new java.io.File(fullPath);
         if (!file.exists()) {

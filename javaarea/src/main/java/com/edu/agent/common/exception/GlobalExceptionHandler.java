@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 
 @Slf4j
 @RestControllerAdvice("com.edu.agent")
@@ -43,6 +44,13 @@ public class GlobalExceptionHandler {
     public Result<Void> handleMultipartException(MultipartException e) {
         log.error("Multipart Exception: {}", e.getMessage(), e);
         return Result.fail(ResultCode.BAD_REQUEST.getCode(), "Invalid file upload request format");
+    }
+
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public Result<Void> handleMessageNotReadable(HttpMessageNotReadableException e) {
+        log.error("Request body parse error: {}", e.getMessage());
+        return Result.fail(ResultCode.BAD_REQUEST.getCode(), "请求数据格式错误: " + e.getMessage());
     }
 
     @ExceptionHandler(Exception.class)

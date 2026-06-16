@@ -109,7 +109,7 @@ export const learningApi = {
     listRecords(page = 1, size = 10) { return http.get('/study/records/', { params: { page, size } }); },
     getStudyStats() { return http.get('/study/records/stats'); },
 
-    // 学习画像问卷
+    // 瀛︿範鐢诲儚闂嵎
     getQuestionnaire() { return http.get('/profile/questionnaire/'); },
     saveQuestionnaire(data) { return http.put('/profile/questionnaire/', data); },
     getQuestionnaireStatus() { return http.get('/profile/questionnaire/status'); },
@@ -142,4 +142,14 @@ export const adminApi = {
     getSystemHealth() { return http.get('/admin/system/health'); },
 };
 
+
+export const scheduleApi = {
+    getConfig() { return http.get('/schedule/config'); },
+    saveConfig(data) { return http.put('/schedule/config', data); },
+    listCourses() { return http.get('/schedule/courses'); },
+    createCourse(data) { return http.post('/schedule/courses', data); },
+    updateCourse(id, data) { return http.put(`/schedule/courses/${id}`, data); },
+    deleteCourse(id) { return http.delete(`/schedule/courses/${id}`); },
+    getWeekView(weekOffset = 0) { return http.get('/schedule/week-view', { params: { weekOffset } }); },
+};
 export default http;

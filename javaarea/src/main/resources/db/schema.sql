@@ -202,16 +202,49 @@ CREATE TABLE IF NOT EXISTS `student_profile` (
     UNIQUE KEY `uk_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- -----------------------------------------------------------
--- 10. student_profile_questionnaire (»´√Ê”√ªßª≠œÒŒ æÌ)
+-- 10. student_profile_questionnaire (»´ÔøΩÔøΩÔøΩ√ªÔøΩÔøΩÔøΩÔøΩÔøΩÔøΩ æÔøΩ)
 -- -----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `student_profile_questionnaire` (
     `id`                  BIGINT        NOT NULL AUTO_INCREMENT,
     `user_id`             BIGINT        NOT NULL,
-    `questionnaire_data`  JSON          DEFAULT NULL COMMENT '∆ﬂŒ¨∂»Œ æÌ ˝æ›',
-    `is_completed`        TINYINT       NOT NULL DEFAULT 0 COMMENT '0=Œ¥ÕÍ≥… 1=“—ÕÍ≥…',
+    `questionnaire_data`  JSON          DEFAULT NULL COMMENT 'ÔøΩÔøΩŒ¨ÔøΩÔøΩÔøΩ æÔøΩÔøΩÔøΩÔøΩÔøΩ',
+    `is_completed`        TINYINT       NOT NULL DEFAULT 0 COMMENT '0=Œ¥ÔøΩÔøΩÔøΩ 1=ÔøΩÔøΩÔøΩÔøΩÔøΩ',
     `create_time`         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `update_time`         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted`             TINYINT       NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_questionnaire_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- -----------------------------------------------------------
+-- 11. schedule_config (Â≠¶ÁîüËØæË°®ÈÖçÁΩÆ)
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS schedule_config (
+    id                  BIGINT        NOT NULL AUTO_INCREMENT,
+    user_id             BIGINT        NOT NULL,
+    semester_start_date DATE          DEFAULT NULL COMMENT 'ÂºÄÂ≠¶Êó•Êúü',
+    period_config       TEXT          DEFAULT NULL COMMENT 'Êó∂Èó¥ÊÆµÈÖçÁΩÆ [{name,startTime,endTime}]',
+    create_time         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted             TINYINT       NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_schedule_config_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------
+-- 12. schedule_course (Â≠¶ÁîüËØæË°®ËØæÁ®ã)
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS schedule_course (
+    id              BIGINT        NOT NULL AUTO_INCREMENT,
+    user_id         BIGINT        NOT NULL,
+    
+ame            VARCHAR(128)  NOT NULL COMMENT 'ËØæÁ®ãÂêçÁß∞',
+    week_numbers    TEXT          DEFAULT NULL COMMENT 'Âì™‰∫õÂë® [1,2,3,...]',
+    day_of_weeks    TEXT          DEFAULT NULL COMMENT 'Âì™‰∫õÂ§© 1=Âë®‰∏Ä...7=Âë®Êó•',
+    period_indexes  TEXT          DEFAULT NULL COMMENT 'Âì™‰∫õÊó∂Èó¥ÊÆµÁ¥¢Âºï',
+    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted         TINYINT       NOT NULL DEFAULT 0,
+    PRIMARY KEY (id),
+    INDEX idx_schedule_course_user_id (user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- -----------------------------------------------------------
