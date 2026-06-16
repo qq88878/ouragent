@@ -83,8 +83,9 @@ public class KnowledgeController {
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasRole('ADMIN')")
     public Result<Void> approve(@PathVariable Long id,
-                                @RequestParam boolean approved,
-                                @RequestParam(required = false) String remark) {
+                                @RequestBody(required = false) BatchApproveDTO dto) {
+        boolean approved = dto != null && dto.isApproved();
+        String remark = dto != null ? dto.getRemark() : null;
         knowledgeService.approveKnowledge(id, approved, remark);
         return Result.success();
     }
