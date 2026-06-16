@@ -28,6 +28,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.List;
 import java.util.UUID;
 
@@ -188,6 +191,42 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         List<KnowledgeDTO> result = list(wrapper).stream().map(this::toDTO).toList();
         enrichCourseNames(result);
         return result;
+    }
+
+    @Override
+    public List<KnowledgeDTO> searchByName(String keyword) {
+        LambdaQueryWrapper<KnowledgeBase> wrapper = new LambdaQueryWrapper<>();
+        if (StringUtils.hasText(keyword)) {
+            wrapper.like(KnowledgeBase::getName, keyword);
+        }
+        wrapper.orderByDesc(KnowledgeBase::getCreateTime);
+        List<KnowledgeBase> list = list(wrapper);
+        List<KnowledgeDTO> dtos = list.stream().map(this::toDTO).toList();
+        enrichCourseNames(dtos);
+        return dtos;
+    }
+
+    @Override
+    public String getContent(Long id) {
+        KnowledgeBase knowledge = getById(id);
+        if (knowledge == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "知识库文件不存在");
+        }
+        String fullPath = fileUploadConfig.getUploadPath() + knowledge.getFilePath();
+        java.io.File file = new java.io.File(fullPath);
+        if (!file.exists()) {
+            throw new BizException(ResultCode.NOT_FOUND, "文件内容不存在，可能已被删除");
+        }
+        try {
+            return Files.readString(Paths.get(fullPath), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            try {
+                byte[] bytes = Files.readAllBytes(Paths.get(fullPath));
+                return new String(bytes, StandardCharsets.UTF_8);
+            } catch (IOException ex) {
+                throw new BizException(ResultCode.INTERNAL_ERROR, "无法读取文件内容");
+            }
+        }
     }
 
     @Override

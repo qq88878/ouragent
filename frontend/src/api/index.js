@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 
 const http = axios.create({
     baseURL: '/api',
@@ -126,6 +126,8 @@ export const knowledgeApi = {
     assignToCourse(id, courseId) { return http.put(`/knowledge/${id}/assign`, null, { params: { courseId } }); },
     delete(id) { return http.delete(`/knowledge/${id}`); },
     reprocess(id) { return http.post(`/knowledge/${id}/reprocess`); },
+    search(keyword) { return http.get('/knowledge/search', { params: { keyword } }); },
+    getContent(id) { return http.get(`/knowledge/${id}/content`); },
     approve(id, approved, remark) { return http.post(`/knowledge/${id}/approve`, null, { params: { approved, remark } }); },
     batchApprove(ids, approved, remark) { return http.post('/knowledge/batch-approve', { ids, approved, remark }); },
 };

@@ -1,13 +1,14 @@
-"""
+﻿"""
 LLM 调用抽象层
 支持多种 LLM 提供商（星火、OpenAI 兼容接口）
 """
 
-import httpx
 import json
 import asyncio
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional, AsyncIterator
+
+import aiohttp
 
 from config.settings import settings
 
@@ -54,7 +55,6 @@ class SparkProvider(LLMProvider):
         if not self.api_key:
             raise ValueError("SPARK_API_KEY 未配置")
 
-        # 星火 HTTP API 格式
         payload = {
             "model": self.model,
             "messages": messages,
@@ -67,16 +67,18 @@ class SparkProvider(LLMProvider):
             "Authorization": f"Bearer {self.api_key}",
         }
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=60),
+            connector=aiohttp.TCPConnector(ssl=False),
+        ) as session:
+            async with session.post(
                 f"{self.base_url}/chat/completions",
                 json=payload,
                 headers=headers,
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            return data["choices"][0]["message"]["content"]
+            ) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+                return data["choices"][0]["message"]["content"]
 
     async def stream(self, messages: List[Dict[str, str]], **kwargs) -> AsyncIterator[str]:
         """星火流式输出"""
@@ -95,18 +97,25 @@ class SparkProvider(LLMProvider):
             "Authorization": f"Bearer {self.api_key}",
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream("POST", f"{self.base_url}/chat/completions",
-                                     json=payload, headers=headers) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=120),
+            connector=aiohttp.TCPConnector(ssl=False),
+        ) as session:
+            async with session.post(
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                headers=headers,
+            ) as resp:
+                resp.raise_for_status()
+                async for line in resp.content:
+                    line = line.decode("utf-8").strip()
                     if not line.startswith("data: "):
                         continue
-                    data = line[6:]
-                    if data.strip() == "[DONE]":
+                    data_str = line[6:]
+                    if data_str.strip() == "[DONE]":
                         break
                     try:
-                        chunk = json.loads(data)
+                        chunk = json.loads(data_str)
                         delta = chunk["choices"][0].get("delta", {})
                         content = delta.get("content")
                         if content:
@@ -118,7 +127,7 @@ class SparkProvider(LLMProvider):
 class OpenAIProvider(LLMProvider):
     """
     OpenAI 兼容接口
-    支持 OpenAI、DeepSeek、以及其他兼容接口
+    支持 OpenAI、DeepSeek、以及其它兼容接口
     """
 
     def __init__(self):
@@ -143,16 +152,18 @@ class OpenAIProvider(LLMProvider):
             "Authorization": f"Bearer {self.api_key}",
         }
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=60),
+            connector=aiohttp.TCPConnector(ssl=False),
+        ) as session:
+            async with session.post(
                 f"{self.base_url}/chat/completions",
                 json=payload,
                 headers=headers,
-            )
-            response.raise_for_status()
-            data = response.json()
-
-            return data["choices"][0]["message"]["content"]
+            ) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+                return data["choices"][0]["message"]["content"]
 
     async def stream(self, messages: List[Dict[str, str]], **kwargs) -> AsyncIterator[str]:
         """OpenAI 兼容流式输出"""
@@ -171,18 +182,25 @@ class OpenAIProvider(LLMProvider):
             "Authorization": f"Bearer {self.api_key}",
         }
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
-            async with client.stream("POST", f"{self.base_url}/chat/completions",
-                                     json=payload, headers=headers) as response:
-                response.raise_for_status()
-                async for line in response.aiter_lines():
+        async with aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=120),
+            connector=aiohttp.TCPConnector(ssl=False),
+        ) as session:
+            async with session.post(
+                f"{self.base_url}/chat/completions",
+                json=payload,
+                headers=headers,
+            ) as resp:
+                resp.raise_for_status()
+                async for line in resp.content:
+                    line = line.decode("utf-8").strip()
                     if not line.startswith("data: "):
                         continue
-                    data = line[6:]
-                    if data.strip() == "[DONE]":
+                    data_str = line[6:]
+                    if data_str.strip() == "[DONE]":
                         break
                     try:
-                        chunk = json.loads(data)
+                        chunk = json.loads(data_str)
                         delta = chunk["choices"][0].get("delta", {})
                         content = delta.get("content")
                         if content:

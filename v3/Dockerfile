@@ -23,7 +23,7 @@ FROM base AS deps
 
 WORKDIR /app
 
-# 先复制依赖文件
+# 先复制依赖文�?
 COPY requirements.txt ./
 
 # 安装 Python 依赖
@@ -45,10 +45,10 @@ COPY data/ ./data/
 COPY docs/ ./docs/
 COPY __init__.py pyproject.toml ./
 
-# 创建日志和数据目录
+# 创建日志和数据目�?
 RUN mkdir -p logs data
 
-# 健康检查
+# 健康检�?
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 

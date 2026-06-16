@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="course-detail-page">
     <div class="page-header">
       <el-button text @click="$router.push('/courses')">
@@ -22,9 +22,9 @@
       <!-- Knowledge Base Files -->
       <el-card class="files-card" shadow="hover" style="margin-top: 20px;">
         <template #header>
-          <span>辅导资料（{{ knowledgeList.length }}）</span>
+          <span>辅助资料（{{ knowledgeList.length }}）</span>
         </template>
-        <el-table :data="knowledgeList" v-loading="kbLoading" stripe empty-text="暂无辅导资料">
+        <el-table :data="knowledgeList" v-loading="kbLoading" stripe empty-text="暂无辅助资料">
           <el-table-column prop="name" label="文件名" min-width="200" />
           <el-table-column prop="fileType" label="类型" width="80">
             <template #default="{ row }">
@@ -32,16 +32,32 @@
             </template>
           </el-table-column>
           <el-table-column label="大小" width="100">
-            <template #default="{ row }">{{ formatSize(row.size) }}</template>
+            <template #default="{ row }">{{ formatSize(row.fileSize || row.size) }}</template>
           </el-table-column>
           <el-table-column label="上传时间" width="170">
             <template #default="{ row }">{{ new Date(row.createTime).toLocaleString('zh-CN') }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="120">
+            <template #default="{ row }">
+              <el-button text type="primary" size="small" @click="viewContent(row.id)">查看内容</el-button>
+            </template>
           </el-table-column>
         </el-table>
       </el-card>
     </div>
 
     <el-empty v-else-if="!loading" description="课程不存在" />
+
+    <!-- Content Preview Dialog -->
+    <el-dialog v-model="showContentDialog" :title="'查看内容: ' + contentName" width="800px" top="3vh">
+      <div v-loading="contentLoading" style="max-height: 70vh; overflow-y: auto;">
+        <pre v-if="!contentLoading && contentText" class="content-preview">{{ contentText }}</pre>
+        <el-empty v-if="!contentLoading && !contentText" description="无法加载内容" />
+      </div>
+      <template #footer>
+        <el-button @click="showContentDialog = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -50,6 +66,7 @@ import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { courseApi, knowledgeApi } from '@/api';
 import { ArrowLeft } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 
 const route = useRoute();
 const router = useRouter();
@@ -57,6 +74,10 @@ const course = ref(null);
 const knowledgeList = ref([]);
 const loading = ref(true);
 const kbLoading = ref(false);
+const showContentDialog = ref(false);
+const contentText = ref('');
+const contentName = ref('');
+const contentLoading = ref(false);
 
 const difficultyText = computed(() => {
   const d = course.value?.difficulty;
@@ -84,6 +105,24 @@ onMounted(async () => {
   finally { kbLoading.value = false; }
 });
 
+async function viewContent(id) {
+  contentLoading.value = true;
+  contentText.value = '';
+  contentName.value = '';
+  showContentDialog.value = true;
+  try {
+    const res = await knowledgeApi.getContent(id);
+    if (res.code === 200) {
+      contentText.value = res.data.content || '';
+      contentName.value = res.data.name || '';
+    }
+  } catch {
+    ElMessage.error('加载内容失败');
+  } finally {
+    contentLoading.value = false;
+  }
+}
+
 function formatSize(bytes) {
   if (!bytes) return '-';
   if (bytes < 1024) return bytes + ' B';
@@ -100,4 +139,15 @@ function formatSize(bytes) {
 .info-card .meta { display: flex; gap: 8px; margin-bottom: 8px; }
 .info-card .teacher { font-size: 13px; color: #909399; }
 .files-card :deep(.el-card__header) { font-weight: 600; }
+.content-preview {
+  background: #f5f7fa;
+  padding: 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 60vh;
+  overflow-y: auto;
+}
 </style>
