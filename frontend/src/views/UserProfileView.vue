@@ -33,35 +33,7 @@
       </el-col>
 
       <el-col :span="8">
-        <!-- Student profile card -->
-        <el-card v-if="isStudent" class="extra-card">
-          <template #header>能力画像</template>
-          <el-form :model="profile" label-width="80px" label-position="top">
-            <el-form-item label="学习风格">
-              <el-select v-model="profile.learningStyle" style="width:100%">
-                <el-option label="视觉型" value="VISUAL" />
-                <el-option label="听觉型" value="AUDITORY" />
-                <el-option label="读写型" value="READING" />
-                <el-option label="动手型" value="KINESTHETIC" />
-              </el-select>
-            </el-form-item>
-            <el-form-item label="优势领域">
-              <el-input v-model="profile.strengths" placeholder="如：逻辑推理、数学" />
-            </el-form-item>
-            <el-form-item label="薄弱环节">
-              <el-input v-model="profile.weaknesses" placeholder="如：英语阅读、记忆" />
-            </el-form-item>
-            <el-form-item label="兴趣方向">
-              <el-input v-model="profile.interests" placeholder="如：编程、AI" />
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" :loading="savingProfile" @click="saveProfile">保存画像</el-button>
-            </el-form-item>
-          </el-form>
-        </el-card>
-
-        <!-- Email verify card -->
-        <el-card v-if="!emailVerified" class="extra-card" style="margin-top:20px;">
+        <el-card v-if="!emailVerified" class="extra-card">
           <template #header>邮箱验证</template>
           <div style="display:flex;gap:8px;">
             <el-input v-model="code" placeholder="6位验证码" maxlength="6" />
@@ -71,35 +43,75 @@
         </el-card>
       </el-col>
     </el-row>
+    <!-- 学习画像问卷 -->
+    <StudentQuestionnaire v-if="isStudent" />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { useAuthStore } from '@/stores/auth';
-import { userApi, learningApi, authApi } from '@/api';
+import StudentQuestionnaire from '@/components/StudentQuestionnaire.vue';
+import { userApi, authApi } from '@/api';
 import { ElMessage } from 'element-plus';
 
 const authStore = useAuthStore();
 const user = computed(() => authStore.user);
 const emailVerified = computed(() => user.value?.emailVerified===1||authStore.emailVerified);
 const isStudent = computed(() => user.value?.role==='STUDENT');
-const saving = ref(false); const form = ref({ nickname:'', email:'', phone:'' });
-const profile = ref({ learningStyle:'VISUAL', strengths:'', weaknesses:'', interests:'', gradeLevel:'BEGINNER' });
-const savingProfile = ref(false);
-const code = ref(''); const sendingCode = ref(false); const verifying = ref(false);
+const saving = ref(false);
+const form = ref({ nickname:'', email:'', phone:'' });
+const code = ref('');
+const sendingCode = ref(false);
+const verifying = ref(false);
 
 onMounted(async () => {
   await authStore.fetchUser();
   form.value = { nickname:user.value?.nickname||'', email:user.value?.email||'', phone:user.value?.phone||'' };
-  if (isStudent.value) { try { const r=await learningApi.getProfile(); if(r.code===200){ const d=r.data; profile.value={learningStyle:d.learningStyle||'VISUAL',strengths:d.strengths||'',weaknesses:d.weaknesses||'',interests:d.interests||'',gradeLevel:d.gradeLevel||'BEGINNER'}; } } catch{} }
 });
 
-async function save() { saving.value=true; try { const r=await userApi.updateProfile({...form.value}); if(r.code===200){ ElMessage.success('保存成功'); authStore.fetchUser(); } } catch{ ElMessage.error('保存失败'); } finally {saving.value=false;} }
-async function saveProfile() { savingProfile.value=true; try { await learningApi.updateProfile({...profile.value}); ElMessage.success('画像已保存'); } catch{ ElMessage.error('保存失败'); } finally {savingProfile.value=false;} }
-async function sendCode() { sendingCode.value=true; try { await authApi.sendVerifyCode(user.value.email); ElMessage.success('验证码已发送'); } catch{ElMessage.error('发送失败');} finally {sendingCode.value=false;} }
-async function verifyEmail() { if(!code.value) return; verifying.value=true; try { await authApi.verifyEmail(user.value.email,code.value); ElMessage.success('验证成功'); user.value.emailVerified=1; } catch{ElMessage.error('验证失败');} finally {verifying.value=false;} }
-function formatTime(t) { if(!t) return ''; return new Date(t).toLocaleString('zh-CN'); }
+async function save() {
+  saving.value = true;
+  try {
+    const r = await userApi.updateProfile({...form.value});
+    if (r.code === 200) { ElMessage.success('保存成功'); authStore.fetchUser(); }
+  } catch {
+    ElMessage.error('保存失败');
+  } finally {
+    saving.value = false;
+  }
+}
+
+async function sendCode() {
+  sendingCode.value = true;
+  try {
+    await authApi.sendVerifyCode(user.value.email);
+    ElMessage.success('验证码已发送');
+  } catch {
+    ElMessage.error('发送失败');
+  } finally {
+    sendingCode.value = false;
+  }
+}
+
+async function verifyEmail() {
+  if (!code.value) return;
+  verifying.value = true;
+  try {
+    await authApi.verifyEmail(user.value.email, code.value);
+    ElMessage.success('验证成功');
+    user.value.emailVerified = 1;
+  } catch {
+    ElMessage.error('验证失败');
+  } finally {
+    verifying.value = false;
+  }
+}
+
+function formatTime(t) {
+  if (!t) return '';
+  return new Date(t).toLocaleString('zh-CN');
+}
 </script>
 
 <style scoped>

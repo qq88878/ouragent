@@ -19,8 +19,14 @@ import com.edu.agent.module.course.entity.Course;
 import com.edu.agent.module.course.mapper.CourseMapper;
 import com.edu.agent.module.knowledge.entity.KnowledgeBase;
 import com.edu.agent.module.knowledge.mapper.KnowledgeMapper;
+import com.edu.agent.module.learning.entity.StudentProfile;
+import com.edu.agent.module.learning.dto.QuestionnaireDTO;
+import com.edu.agent.module.learning.service.StudentProfileService;
+import com.edu.agent.module.learning.service.StudentProfileQuestionnaireService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -39,6 +45,8 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
     private final ChatMessageMapper messageMapper;
     private final KnowledgeMapper knowledgeMapper;
     private final CourseMapper courseMapper;
+    private final StudentProfileService studentProfileService;
+    private final StudentProfileQuestionnaireService questionnaireService;
     private final ExecutorService streamExecutor = Executors.newCachedThreadPool();
 
     @Override
@@ -186,7 +194,12 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
         SseEmitter emitter = new SseEmitter(120_000L); // 2 min timeout
         StringBuilder accumulator = new StringBuilder();
 
+        // Capture SecurityContext on request thread for async propagation
+        SecurityContext secCtx = SecurityContextHolder.getContext();
+
         streamExecutor.submit(() -> {
+            // Restore SecurityContext on worker thread
+            SecurityContextHolder.setContext(secCtx);
             try {
                 agentServiceClient.streamChatWithContext(request.getMessage(), context, emitter, accumulator);
             } catch (Exception e) {
@@ -205,6 +218,7 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
                     assistantMessage.setContent(fullResponse);
                     messageMapper.insert(assistantMessage);
                 }
+                SecurityContextHolder.clearContext();
             }
         });
 
@@ -216,6 +230,8 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
 
     private Map<String, Object> buildContext(ChatSession session) {
         Map<String, Object> context = new HashMap<>();
+
+        // Knowledge context
         if (session.getCourseId() != null) {
             LambdaQueryWrapper<KnowledgeBase> kbWrapper = new LambdaQueryWrapper<>();
             kbWrapper.eq(KnowledgeBase::getCourseId, session.getCourseId())
@@ -228,6 +244,72 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
                 context.put("knowledge_ids", knowledgeIds);
             }
         }
+
+        // Student profile context
+        Long userId = session.getUserId();
+        if (userId != null) {
+            Map<String, Object> profileData = new HashMap<>();
+
+            // Basic student profile (learning style, strengths, weaknesses, interests)
+            try {
+                StudentProfile profile = studentProfileService.getProfile(userId);
+                if (profile != null) {
+                    if (profile.getLearningStyle() != null) {
+                        profileData.put("learning_style", profile.getLearningStyle());
+                    }
+                    if (profile.getStrengths() != null) {
+                        profileData.put("strengths", profile.getStrengths());
+                    }
+                    if (profile.getWeaknesses() != null) {
+                        profileData.put("weaknesses", profile.getWeaknesses());
+                    }
+                    if (profile.getInterests() != null) {
+                        profileData.put("interests", profile.getInterests());
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("获取学生画像失败: userId={}", userId, e);
+            }
+
+            // Questionnaire data (7 dimensions)
+            try {
+                QuestionnaireDTO questionnaire = questionnaireService.getQuestionnaire(userId);
+                if (questionnaire != null && Boolean.TRUE.equals(questionnaire.getIsCompleted())) {
+                    Map<String, Object> qData = new HashMap<>();
+                    if (questionnaire.getEducationLevel() != null) qData.put("education_level", questionnaire.getEducationLevel());
+                    if (questionnaire.getMajorDirection() != null) qData.put("major_direction", questionnaire.getMajorDirection());
+                    if (questionnaire.getAgeRange() != null) qData.put("age_range", questionnaire.getAgeRange());
+                    if (questionnaire.getLearningGoals() != null) qData.put("learning_goals", questionnaire.getLearningGoals());
+                    if (questionnaire.getGoalClarity() != null) qData.put("goal_clarity", questionnaire.getGoalClarity());
+                    if (questionnaire.getMotivationLevel() != null) qData.put("motivation_level", questionnaire.getMotivationLevel());
+                    if (questionnaire.getSubjectLevel() != null) qData.put("subject_level", questionnaire.getSubjectLevel());
+                    if (questionnaire.getSelfStrengths() != null) qData.put("self_strengths", questionnaire.getSelfStrengths());
+                    if (questionnaire.getSelfWeaknesses() != null) qData.put("self_weaknesses", questionnaire.getSelfWeaknesses());
+                    if (questionnaire.getLearningMethods() != null) qData.put("learning_methods", questionnaire.getLearningMethods());
+                    if (questionnaire.getStudyTimeSlots() != null) qData.put("study_time_slots", questionnaire.getStudyTimeSlots());
+                    if (questionnaire.getSessionDuration() != null) qData.put("session_duration", questionnaire.getSessionDuration());
+                    if (questionnaire.getPlanningHabit() != null) qData.put("planning_habit", questionnaire.getPlanningHabit());
+                    if (questionnaire.getFocusLevel() != null) qData.put("focus_level", questionnaire.getFocusLevel());
+                    if (questionnaire.getReviewHabit() != null) qData.put("review_habit", questionnaire.getReviewHabit());
+                    if (questionnaire.getDailyStudyHours() != null) qData.put("daily_study_hours", questionnaire.getDailyStudyHours());
+                    if (questionnaire.getDevices() != null) qData.put("devices", questionnaire.getDevices());
+                    if (questionnaire.getHasMentor() != null) qData.put("has_mentor", questionnaire.getHasMentor());
+                    if (questionnaire.getHasPastFailures() != null) qData.put("has_past_failures", questionnaire.getHasPastFailures());
+                    if (questionnaire.getMainBarriers() != null) qData.put("main_barriers", questionnaire.getMainBarriers());
+                    if (questionnaire.getConfidenceLevel() != null) qData.put("confidence_level", questionnaire.getConfidenceLevel());
+                    profileData.put("questionnaire", qData);
+                    log.debug("问卷画像已注入: userId={}", userId);
+                }
+            } catch (Exception e) {
+                log.debug("获取问卷数据失败: userId={}", userId, e);
+            }
+
+            if (!profileData.isEmpty()) {
+                context.put("student_profile", profileData);
+                log.info("学生画像已注入对话上下文: userId={}, fields={}", userId, profileData.size());
+            }
+        }
+
         return context;
     }
 

@@ -7,6 +7,7 @@ FROM maven:3.9-eclipse-temurin-17 AS builder
 WORKDIR /build
 
 # 先复制pom.xml，利用Docker缓存加速依赖下�?
+COPY settings.xml /root/.m2/settings.xml
 COPY pom.xml .
 RUN mvn dependency:go-offline -B
 

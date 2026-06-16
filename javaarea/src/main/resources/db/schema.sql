@@ -201,3 +201,17 @@ CREATE TABLE IF NOT EXISTS `student_profile` (
     PRIMARY KEY (`id`),
     UNIQUE KEY `uk_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+-- -----------------------------------------------------------
+-- 10. student_profile_questionnaire (全面用户画像问卷)
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `student_profile_questionnaire` (
+    `id`                  BIGINT        NOT NULL AUTO_INCREMENT,
+    `user_id`             BIGINT        NOT NULL,
+    `questionnaire_data`  JSON          DEFAULT NULL COMMENT '七维度问卷数据',
+    `is_completed`        TINYINT       NOT NULL DEFAULT 0 COMMENT '0=未完成 1=已完成',
+    `create_time`         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `update_time`         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted`             TINYINT       NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_questionnaire_user_id` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

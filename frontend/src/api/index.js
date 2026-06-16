@@ -1,4 +1,4 @@
-﻿import axios from 'axios';
+import axios from 'axios';
 
 const http = axios.create({
     baseURL: '/api',
@@ -108,6 +108,11 @@ export const learningApi = {
     recordStudy(data) { return http.post('/study/records/', data); },
     listRecords(page = 1, size = 10) { return http.get('/study/records/', { params: { page, size } }); },
     getStudyStats() { return http.get('/study/records/stats'); },
+
+    // 学习画像问卷
+    getQuestionnaire() { return http.get('/profile/questionnaire/'); },
+    saveQuestionnaire(data) { return http.put('/profile/questionnaire/', data); },
+    getQuestionnaireStatus() { return http.get('/profile/questionnaire/status'); },
 };
 
 export const knowledgeApi = {

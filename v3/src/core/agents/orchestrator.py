@@ -244,19 +244,118 @@ class Orchestrator:
         ]
 
         if student_profile:
+            # 基本学习风格
             style = student_profile.get("learning_style", "")
-            weaknesses = student_profile.get("weaknesses", [])
             if style:
                 style_map = {
-                    "visual": "多使用图表、流程图、示意图来解释",
-                    "auditory": "多用类比和故事来解释概念",
-                    "reading": "提供结构化的文字说明",
-                    "kinesthetic": "多举实际操作的例子",
+                    "VISUAL": "多用图表、流程图、示意图来解释",
+                    "AUDITORY": "多用类比和故事来解释概念",
+                    "READING": "提供结构化的文字说明",
+                    "KINESTHETIC": "多举实际操作例子",
                 }
                 if style in style_map:
                     parts.append(f"该学生是{style}型学习者，{style_map[style]}。")
+
+            # 强弱项
+            strengths = student_profile.get("strengths", "")
+            weaknesses = student_profile.get("weaknesses", "")
+            if strengths:
+                parts.append(f"该学生的优势领域: {strengths}。")
             if weaknesses:
-                parts.append(f"该学生在以下方面较薄弱，请多关注: {', '.join(weaknesses)}。")
+                parts.append(f"该学生的薄弱环节: {weaknesses}，请多关注这些方面。")
+
+            interests = student_profile.get("interests", "")
+            if interests:
+                parts.append(f"该学生的兴趣方向: {interests}。")
+
+            # 七维度问卷数据
+            q = student_profile.get("questionnaire")
+            if q:
+                major = q.get("major_direction", "")
+                if major:
+                    parts.append(f"专业方向: {major}。")
+
+                education = q.get("education_level", "")
+                if education:
+                    edu_map = {
+                        "HIGH_SCHOOL": "高中", "ASSOCIATE": "大专", "BACHELOR": "本科",
+                        "MASTER": "硕士", "PHD": "博士", "OTHER": "其他"
+                    }
+                    parts.append(f"学历: {edu_map.get(education, education)}。")
+
+                goals = q.get("learning_goals", [])
+                if goals:
+                    goal_map = {
+                        "EXAM": "应对考试", "INTEREST": "兴趣爱好", "EMPLOYMENT": "就业求职",
+                        "PROMOTION": "职业晋升", "SELF_IMPROVEMENT": "自我提升", "OTHER": "其他"
+                    }
+                    goals_cn = [goal_map.get(g, g) for g in goals]
+                    parts.append(f"学习目标: {', '.join(goals_cn)}。")
+
+                motivation = q.get("motivation_level", "")
+                if motivation:
+                    mot_map = {"STRONG": "强烈", "MODERATE": "一般", "WEAK": "较弱"}
+                    parts.append(f"动机强度: {mot_map.get(motivation, motivation)}。")
+
+                subj_level = q.get("subject_level", "")
+                if subj_level:
+                    lvl_map = {"ZERO_BASIC": "零基础", "BEGINNER": "入门", "INTERMEDIATE": "中级", "ADVANCED": "高级"}
+                    parts.append(f"当前水平: {lvl_map.get(subj_level, subj_level)}。")
+
+                self_strengths = q.get("self_strengths", [])
+                if self_strengths:
+                    parts.append(f"自评优势: {', '.join(self_strengths)}。")
+
+                self_weaknesses = q.get("self_weaknesses", [])
+                if self_weaknesses:
+                    parts.append(f"自评薄弱: {', '.join(self_weaknesses)}。")
+
+                learning_methods = q.get("learning_methods", [])
+                if learning_methods:
+                    method_map = {
+                        "VIDEO": "看视频", "READING": "阅读文档", "HANDS_ON": "动手操作",
+                        "DISCUSSION": "讨论交流", "LECTURE": "听讲座", "QUIZ": "做题测试"
+                    }
+                    methods_cn = [method_map.get(m, m) for m in learning_methods]
+                    parts.append(f"偏好学习方式: {', '.join(methods_cn)}。")
+
+                session_dur = q.get("session_duration", "")
+                if session_dur:
+                    dur_map = {
+                        "LESS_30MIN": "不足30分钟", "30_60MIN": "30-60分钟", "1_2HOURS": "1-2小时",
+                        "2_4HOURS": "2-4小时", "MORE_4HOURS": "4小时以上"
+                    }
+                    parts.append(f"单次学习时长: {dur_map.get(session_dur, session_dur)}。")
+
+                focus = q.get("focus_level", "")
+                if focus:
+                    f_map = {"VERY_HIGH": "非常专注", "HIGH": "比较专注", "MODERATE": "一般", "LOW": "容易分心", "VERY_LOW": "难以集中"}
+                    parts.append(f"专注程度: {f_map.get(focus, focus)}。")
+
+                plan = q.get("planning_habit", "")
+                if plan:
+                    p_map = {"ALWAYS": "总是计划", "OFTEN": "经常计划", "SOMETIMES": "偶尔计划", "RARELY": "很少计划", "NEVER": "从不计划"}
+                    parts.append(f"学习计划性: {p_map.get(plan, plan)}。")
+
+                confidence = q.get("confidence_level", "")
+                if confidence:
+                    c_map = {"VERY_HIGH": "非常有信心", "HIGH": "比较有信心", "MODERATE": "一般", "LOW": "信心不足", "VERY_LOW": "非常缺乏信心"}
+                    parts.append(f"自信心: {c_map.get(confidence, confidence)}。")
+
+                barriers = q.get("main_barriers", [])
+                if barriers:
+                    b_map = {
+                        "LAZINESS": "懒惰拖延", "DISTRACTION": "容易分心", "NO_METHOD": "缺乏方法",
+                        "NO_CONFIDENCE": "缺乏自信", "NO_TIME": "时间不足", "NO_SUPPORT": "缺乏支持",
+                        "BORING": "内容枯燥", "ANXIETY": "焦虑压力"
+                    }
+                    b_cn = [b_map.get(b, b) for b in barriers]
+                    parts.append(f"主要学习障碍: {', '.join(b_cn)}，请针对性鼓励和引导。")
+
+                mentor = q.get("has_mentor", "")
+                if mentor:
+                    m_map = {"YES": "有导师/同伴", "NO": "无导师/同伴", "WANT": "希望有导师/同伴"}
+                    parts.append(f"学习支持: {m_map.get(mentor, mentor)}。")
 
         if knowledge_context:
             parts.append(f"\n以下是知识库中的相关内容，请基于这些内容回答:\n\n{knowledge_context}")
@@ -264,117 +363,6 @@ class Orchestrator:
             parts.append("\n知识库中没有找到相关内容，请基于你的知识回答，并说明这不是来自课程资料。")
 
         return "\n".join(parts)
-
-    # ==================== 专业 Agent 调用接口 ====================
-
-    async def analyze_profile(
-        self,
-        user_id: str,
-        chat_history: List[Dict[str, str]],
-        study_records: List[Dict[str, Any]],
-        current_profile: Optional[Dict[str, Any]] = None,
-        course_id: Optional[int] = None,
-        force_refresh: bool = False,
-    ) -> Dict[str, Any]:
-        """
-        分析学生画像（带缓存）
-
-        Args:
-            user_id: 用户ID
-            chat_history: 聊天记录
-            study_records: 学习记录
-            current_profile: 现有画像（增量更新）
-            course_id: 课程ID
-            force_refresh: 强制刷新缓存
-        """
-        # 初始化 Redis
-        await self._ensure_redis()
-
-        # 检查缓存
-        if not force_refresh and self._profile_cache:
-            cached = await self._profile_cache.get_profile(user_id, course_id)
-            if cached:
-                logger.debug("画像缓存命中: user=%s", user_id)
-                return cached
-
-        # 调用 Agent 分析
-        profile = await self.profile_agent.analyze(chat_history, study_records, current_profile)
-
-        # 缓存结果
-        if self._profile_cache and profile:
-            await self._profile_cache.set_profile(user_id, profile, course_id)
-
-        return profile
-
-    async def generate_learning_path(
-        self,
-        student_profile: Dict[str, Any],
-        course_title: str,
-        course_knowledge: List[Dict[str, Any]],
-        goal: str = "掌握课程核心知识",
-    ) -> Dict[str, Any]:
-        """生成个性化学习路径"""
-        return await self.planner_agent.generate_path(
-            student_profile=student_profile,
-            course_title=course_title,
-            course_knowledge=course_knowledge,
-            goal=goal,
-        )
-
-    async def generate_resource(
-        self,
-        resource_type: str,
-        topic: str,
-        knowledge_ids: Optional[List[int]] = None,
-        difficulty: str = "medium",
-        count: int = 5,
-    ) -> Dict[str, Any]:
-        """
-        生成教学资源
-
-        Args:
-            resource_type: "question" | "mindmap" | "summary"
-            topic: 主题
-            knowledge_ids: 知识库 ID 列表
-            difficulty: 难度（仅题目）
-            count: 数量（仅题目）
-        """
-        if resource_type == "question":
-            return await self.resource_agent.generate_questions(
-                topic=topic,
-                knowledge_ids=knowledge_ids,
-                difficulty=difficulty,
-                count=count,
-            )
-        elif resource_type == "mindmap":
-            return await self.resource_agent.generate_mindmap(
-                topic=topic,
-                knowledge_ids=knowledge_ids,
-            )
-        elif resource_type == "summary":
-            return await self.resource_agent.generate_summary(
-                topic=topic,
-                knowledge_ids=knowledge_ids,
-            )
-        else:
-            return {"error": f"不支持的资源类型: {resource_type}"}
-
-    async def evaluate_answer(
-        self,
-        question: str,
-        student_answer: str,
-        reference_answer: str = "",
-        knowledge_context: str = "",
-    ) -> Dict[str, Any]:
-        """评估学生答案"""
-        return await self.evaluator_agent.evaluate_answer(
-            question=question,
-            student_answer=student_answer,
-            reference_answer=reference_answer,
-            knowledge_context=knowledge_context,
-        )
-
-    # ==================== 状态查询 ====================
 
     def get_status(self) -> Dict[str, Any]:
         return {

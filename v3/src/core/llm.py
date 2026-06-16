@@ -1,4 +1,4 @@
-﻿"""
+"""
 LLM 调用抽象层
 支持多种 LLM 提供商（星火、OpenAI 兼容接口）
 """
@@ -68,8 +68,8 @@ class SparkProvider(LLMProvider):
         }
 
         async with aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=60),
-            connector=aiohttp.TCPConnector(ssl=False),
+            timeout=aiohttp.ClientTimeout(total=120),
+            connector=aiohttp.TCPConnector(ssl=True),
         ) as session:
             async with session.post(
                 f"{self.base_url}/chat/completions",
@@ -78,7 +78,7 @@ class SparkProvider(LLMProvider):
             ) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
-                return data["choices"][0]["message"]["content"]
+                return data['choices'][0]['message'].get('content') or data['choices'][0]['message'].get('reasoning_content', '')
 
     async def stream(self, messages: List[Dict[str, str]], **kwargs) -> AsyncIterator[str]:
         """星火流式输出"""
@@ -99,7 +99,7 @@ class SparkProvider(LLMProvider):
 
         async with aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=120),
-            connector=aiohttp.TCPConnector(ssl=False),
+            connector=aiohttp.TCPConnector(ssl=True),
         ) as session:
             async with session.post(
                 f"{self.base_url}/chat/completions",
@@ -117,7 +117,7 @@ class SparkProvider(LLMProvider):
                     try:
                         chunk = json.loads(data_str)
                         delta = chunk["choices"][0].get("delta", {})
-                        content = delta.get("content")
+                        content = delta.get('content') or delta.get('reasoning_content')
                         if content:
                             yield content
                     except (json.JSONDecodeError, KeyError, IndexError):
@@ -153,8 +153,8 @@ class OpenAIProvider(LLMProvider):
         }
 
         async with aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=60),
-            connector=aiohttp.TCPConnector(ssl=False),
+            timeout=aiohttp.ClientTimeout(total=120),
+            connector=aiohttp.TCPConnector(ssl=True),
         ) as session:
             async with session.post(
                 f"{self.base_url}/chat/completions",
@@ -163,7 +163,7 @@ class OpenAIProvider(LLMProvider):
             ) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
-                return data["choices"][0]["message"]["content"]
+                return data['choices'][0]['message'].get('content') or data['choices'][0]['message'].get('reasoning_content', '')
 
     async def stream(self, messages: List[Dict[str, str]], **kwargs) -> AsyncIterator[str]:
         """OpenAI 兼容流式输出"""
@@ -184,7 +184,7 @@ class OpenAIProvider(LLMProvider):
 
         async with aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=120),
-            connector=aiohttp.TCPConnector(ssl=False),
+            connector=aiohttp.TCPConnector(ssl=True),
         ) as session:
             async with session.post(
                 f"{self.base_url}/chat/completions",
@@ -202,7 +202,7 @@ class OpenAIProvider(LLMProvider):
                     try:
                         chunk = json.loads(data_str)
                         delta = chunk["choices"][0].get("delta", {})
-                        content = delta.get("content")
+                        content = delta.get('content') or delta.get('reasoning_content')
                         if content:
                             yield content
                     except (json.JSONDecodeError, KeyError, IndexError):
