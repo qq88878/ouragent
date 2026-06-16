@@ -28,6 +28,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Map;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -92,7 +93,22 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         knowledge.setApprovalStatus("ADMIN".equals(loginUser.getUser().getRole()) ? "APPROVED" : "PENDING");
         save(knowledge);
 
-        // TODO: async vectorization via Python Agent (deferred)
+        // Trigger vectorization via Python Agent
+        try {
+            File savedFile = new File(uploadDir + "/" + storedFilename);
+            Map<String, Object> result = agentServiceClient.ingestKnowledgeFile(
+                    knowledge.getId(), dto.getCourseId(), savedFile);
+            Object chunks = result.get("chunks");
+            if (chunks != null && ((Number) chunks).intValue() > 0) {
+                knowledge.setStatus(1); // indexed
+            } else {
+                knowledge.setStatus(2); // vectorization failed (no chunks)
+                log.warn("向量化返回0个分块: knowledgeId={}", knowledge.getId());
+            }
+        } catch (Exception e) {
+            knowledge.setStatus(2); // vectorization failed
+            log.error("向量化调用失败，文件已保存但未索引: knowledgeId={}", knowledge.getId(), e);
+        }
         updateById(knowledge);
 
         log.info("知识库文件上传成功: id={}, name={}, status={}", knowledge.getId(), knowledge.getName(), knowledge.getStatus());

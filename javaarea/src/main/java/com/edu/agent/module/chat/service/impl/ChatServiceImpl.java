@@ -15,6 +15,8 @@ import com.edu.agent.module.chat.mapper.ChatMessageMapper;
 import com.edu.agent.module.chat.mapper.ChatSessionMapper;
 import com.edu.agent.module.chat.service.ChatService;
 import com.edu.agent.module.chat.service.client.AgentServiceClient;
+import com.edu.agent.module.course.entity.Course;
+import com.edu.agent.module.course.mapper.CourseMapper;
 import com.edu.agent.module.knowledge.entity.KnowledgeBase;
 import com.edu.agent.module.knowledge.mapper.KnowledgeMapper;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +38,7 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
     private final AgentServiceClient agentServiceClient;
     private final ChatMessageMapper messageMapper;
     private final KnowledgeMapper knowledgeMapper;
+    private final CourseMapper courseMapper;
     private final ExecutorService streamExecutor = Executors.newCachedThreadPool();
 
     @Override
@@ -255,6 +258,12 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
         dto.setCourseId(session.getCourseId());
         dto.setTitle(session.getTitle());
         dto.setCreateTime(session.getCreateTime());
+        if (session.getCourseId() != null) {
+            Course course = courseMapper.selectById(session.getCourseId());
+            if (course != null) {
+                dto.setCourseName(course.getTitle());
+            }
+        }
         if (lastMessage != null) {
             dto.setLastMessage(lastMessage.getContent());
             dto.setLastMessageTime(lastMessage.getCreateTime());

@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 public class ChatSessionDTO {
     private Long id;
     private Long courseId;
+    private String courseName;
     private String title;
     private String lastMessage;
     private LocalDateTime lastMessageTime;

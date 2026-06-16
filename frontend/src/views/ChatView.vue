@@ -2,6 +2,21 @@
   <div class="chat-page">
     <div class="chat-sidebar">
       <div class="sidebar-header">
+        <el-select
+          v-model="selectedCourseId"
+          placeholder="选择课程（可选）"
+          clearable
+          size="small"
+          style="width: 100%; margin-bottom: 8px;"
+          @change="onCourseChange"
+        >
+          <el-option
+            v-for="c in courses"
+            :key="c.id"
+            :label="c.title"
+            :value="c.id"
+          />
+        </el-select>
         <el-button type="primary" style="width: 100%;" @click="createSession">
           + 新对话
         </el-button>
@@ -15,6 +30,7 @@
           @click="selectSession(session.id)"
         >
           <div class="session-title">{{ session.title }}</div>
+          <div v-if="session.courseName" class="session-course">{{ session.courseName }}</div>
           <div class="session-time">{{ formatTime(session.lastMessageTime || session.createTime) }}</div>
           <el-button
             class="delete-btn"
@@ -71,7 +87,7 @@
 <script setup>
 import { ref, onMounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { chatApi } from '@/api';
+import { chatApi, courseApi } from '@/api';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Delete, ChatDotRound } from '@element-plus/icons-vue';
 
@@ -84,9 +100,14 @@ const currentSessionId = ref(null);
 const inputMessage = ref('');
 const sending = ref(false);
 const messagesArea = ref(null);
+const courses = ref([]);
+const selectedCourseId = ref(null);
 
 onMounted(async () => {
-  await loadSessions();
+  await Promise.all([loadSessions(), loadCourses()]);
+  // 恢复用户上次选择的课程
+  const saved = localStorage.getItem('chatCourseId');
+  if (saved) selectedCourseId.value = Number(saved);
   if (route.params.sessionId) {
     selectSession(Number(route.params.sessionId));
   }
@@ -103,9 +124,24 @@ async function loadSessions() {
   } catch { /* ignore */ }
 }
 
+async function loadCourses() {
+  try {
+    const res = await courseApi.list({ page: 1, size: 100 });
+    if (res.code === 200) courses.value = res.data?.records || res.data || [];
+  } catch { /* ignore */ }
+}
+
+function onCourseChange(courseId) {
+  if (courseId) {
+    localStorage.setItem('chatCourseId', courseId);
+  } else {
+    localStorage.removeItem('chatCourseId');
+  }
+}
+
 async function createSession() {
   try {
-    const res = await chatApi.createSession();
+    const res = await chatApi.createSession(selectedCourseId.value || undefined);
     if (res.code === 200) {
       await loadSessions();
       selectSession(res.data.id);
@@ -253,6 +289,7 @@ function formatTime(time) {
 .session-item:hover { background: #f5f7fa; }
 .session-item.active { background: #ecf5ff; border-left: 3px solid #409eff; }
 .session-title { font-size: 14px; color: #303133; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.session-course { font-size: 11px; color: #409eff; margin-top: 2px; }
 .session-time { font-size: 12px; color: #909399; margin-top: 4px; }
 .delete-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); opacity: 0; }
 .session-item:hover .delete-btn { opacity: 1; }
