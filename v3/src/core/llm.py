@@ -78,7 +78,7 @@ class SparkProvider(LLMProvider):
             ) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
-                return data['choices'][0]['message'].get('content') or data['choices'][0]['message'].get('reasoning_content', '')
+                return data['choices'][0]['message'].get('content', '')
 
     async def stream(self, messages: List[Dict[str, str]], **kwargs) -> AsyncIterator[str]:
         """星火流式输出"""
@@ -117,7 +117,7 @@ class SparkProvider(LLMProvider):
                     try:
                         chunk = json.loads(data_str)
                         delta = chunk["choices"][0].get("delta", {})
-                        content = delta.get('content') or delta.get('reasoning_content')
+                        content = delta.get('content')
                         if content:
                             yield content
                     except (json.JSONDecodeError, KeyError, IndexError):
@@ -163,7 +163,7 @@ class OpenAIProvider(LLMProvider):
             ) as resp:
                 resp.raise_for_status()
                 data = await resp.json()
-                return data['choices'][0]['message'].get('content') or data['choices'][0]['message'].get('reasoning_content', '')
+                return data['choices'][0]['message'].get('content', '')
 
     async def stream(self, messages: List[Dict[str, str]], **kwargs) -> AsyncIterator[str]:
         """OpenAI 兼容流式输出"""
@@ -202,7 +202,7 @@ class OpenAIProvider(LLMProvider):
                     try:
                         chunk = json.loads(data_str)
                         delta = chunk["choices"][0].get("delta", {})
-                        content = delta.get('content') or delta.get('reasoning_content')
+                        content = delta.get('content')
                         if content:
                             yield content
                     except (json.JSONDecodeError, KeyError, IndexError):

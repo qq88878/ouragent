@@ -56,7 +56,17 @@
         <div class="messages-area" ref="messagesArea">
           <div v-for="msg in messages" :key="msg.id" class="message-row" :class="msg.role.toLowerCase()">
             <div class="message-bubble">
-              <div class="message-content">{{ msg.content }}<span v-if="msg.streaming" class="cursor">|</span></div>
+              <div class="message-content" :class="{ thinking: msg.streaming && !msg.content }">
+              <template v-if="msg.streaming && !msg.content">
+                <span class="thinking-dots">
+                  <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+                </span>
+                <span class="thinking-text">思考中... {{ thinkingTime }}</span>
+              </template>
+              <template v-else>
+                {{ msg.content }}<span v-if="msg.streaming" class="cursor">|</span>
+              </template>
+            </div>
             </div>
           </div>
         </div>
@@ -85,14 +95,16 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { chatApi, courseApi } from '@/api';
+import { useChatStore } from '@/stores/chat';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Delete, ChatDotRound } from '@element-plus/icons-vue';
 
 const route = useRoute();
 const router = useRouter();
+const chatStore = useChatStore();
 
 const sessions = ref([]);
 const messages = ref([]);
@@ -102,10 +114,31 @@ const sending = ref(false);
 const messagesArea = ref(null);
 const courses = ref([]);
 const selectedCourseId = ref(null);
-let streamAbortController = null;
+const thinkingStart = ref(null);
+const thinkingTime = ref('');
+let thinkingTimer = null;
+
+function startThinking() {
+  thinkingStart.value = Date.now();
+  thinkingTime.value = '0s';
+  thinkingTimer = setInterval(() => {
+    const elapsed = ((Date.now() - thinkingStart.value) / 1000).toFixed(1);
+    thinkingTime.value = elapsed + 's';
+  }, 100);
+}
+
+function stopThinking() {
+  if (thinkingTimer) {
+    clearInterval(thinkingTimer);
+    thinkingTimer = null;
+  }
+  thinkingStart.value = null;
+  thinkingTime.value = '';
+}
 
 onMounted(async () => {
   await Promise.all([loadSessions(), loadCourses()]);
+  // 恢复用户上次选择的课程
   const saved = localStorage.getItem('chatCourseId');
   if (saved) selectedCourseId.value = Number(saved);
   if (route.params.sessionId) {
@@ -113,16 +146,9 @@ onMounted(async () => {
   }
 });
 
-onBeforeUnmount(() => {
-  abortStream();
+onUnmounted(() => {
+  chatStore.setChatPageActive(false);
 });
-
-function abortStream() {
-  if (streamAbortController) {
-    streamAbortController.abort();
-    streamAbortController = null;
-  }
-}
 
 watch(() => route.params.sessionId, (id) => {
   if (id) selectSession(Number(id));
@@ -163,10 +189,55 @@ async function createSession() {
 }
 
 async function selectSession(id) {
-  abortStream();
   currentSessionId.value = id;
+  chatStore.setChatPageActive(true);
   router.replace(`/chat/${id}`);
   await loadMessages(id);
+
+  // Reconnect to existing stream if any
+  const existing = chatStore.getStream(id);
+  if (existing && !existing.done) {
+    // Inject the in-progress assistant message
+    const assistantMsg = {
+      id: Date.now(),
+      role: 'ASSISTANT',
+      content: existing.content,
+      streaming: true,
+    };
+    messages.value.push(assistantMsg);
+    sending.value = true;
+    let displayLen = existing.content.length;
+    let startTime = Date.now();
+    const CHARS_PER_SEC = 80;
+
+    const poll = new Promise((resolve) => {
+      const timer = setInterval(() => {
+        const s = chatStore.getStream(id);
+        if (!s || s.done) {
+          stopThinking();
+          assistantMsg.content = s ? s.content : assistantMsg.content;
+          if (assistantMsg.content) {
+            assistantMsg.streaming = false;
+          } else {
+            messages.value.pop();
+          }
+          sending.value = false;
+          clearInterval(timer);
+          resolve();
+          return;
+        }
+        const sourceLen = s.content.length;
+        const elapsedSec = (Date.now() - startTime) / 1000;
+        const targetLen = Math.min(Math.floor(elapsedSec * CHARS_PER_SEC), sourceLen);
+        if (targetLen > displayLen) {
+          displayLen = targetLen;
+          assistantMsg.content = s.content.slice(0, displayLen);
+          scrollToBottom();
+        }
+      }, 33);
+    });
+    await poll;
+  }
 }
 
 async function loadMessages(sessionId) {
@@ -193,70 +264,71 @@ async function sendMessage() {
     content: text,
   });
 
-  const idx = messages.value.length;
-  messages.value.push({
+  const assistantMsg = {
     id: Date.now() + 1,
     role: 'ASSISTANT',
     content: '',
     streaming: true,
-  });
+  };
+  messages.value.push(assistantMsg);
   await nextTick();
   scrollToBottom();
 
-  const buffer = [];
-  let streamDone = false;
-  let hasError = '';
+  startThinking();
 
-  // 创建 AbortController 用于中断流式请求
-  streamAbortController = new AbortController();
+  const sid = currentSessionId.value;
 
-  // 消费 SSE 流，写入 buffer
-  const consume = (async () => {
-    try {
-      for await (const chunk of chatApi.sendMessageStream(currentSessionId.value, text, streamAbortController.signal)) {
-        if (chunk.error) { hasError = chunk.error; break; }
-        if (chunk.content) buffer.push(chunk.content);
-        if (chunk.done) break;
-      }
-    } catch (e) {
-      if (e.name === 'AbortError') {
-        streamDone = true;
-        return;
-      }
-      if (!buffer.length && !hasError) hasError = '网络错误，请稍后重试。';
-    } finally {
-      streamDone = true;
-    }
-  })();
+  // Start stream via store ? runs in background even if component unmounts
+  chatStore.startStream(sid, text);
 
-  // 渲染循环：每 30ms 从 buffer 读取内容更新 UI
-  const render = new Promise(resolve => {
+  // Typewriter: reveal at steady 80 chars/sec using cumulative timing
+  let displayLen = 0;
+  let startTime = 0;
+  const CHARS_PER_SEC = 80;
+
+  const poll = new Promise((resolve) => {
     const timer = setInterval(() => {
-      if (hasError) {
-        messages.value[idx].content = hasError;
+      const s = chatStore.getStream(sid);
+      if (!s) { clearInterval(timer); resolve(); return; }
+      if (s.error) {
+        stopThinking();
+        assistantMsg.content = s.error;
+        assistantMsg.streaming = false;
         clearInterval(timer);
+        sending.value = false;
         resolve();
         return;
       }
-      if (buffer.length) {
-        messages.value[idx].content += buffer.splice(0).join('');
+
+      if (startTime === 0) startTime = Date.now();
+      const sourceLen = s.content.length;
+
+      // Calculate target display length based on elapsed time
+      const elapsedSec = (Date.now() - startTime) / 1000;
+      const targetLen = Math.min(Math.floor(elapsedSec * CHARS_PER_SEC), sourceLen);
+
+      if (targetLen > displayLen) {
+        if (displayLen === 0) stopThinking();
+        displayLen = targetLen;
+        assistantMsg.content = s.content.slice(0, displayLen);
         scrollToBottom();
       }
-      if (streamDone && buffer.length === 0) {
+
+      // Stream done and all chars revealed
+      if (s.done && displayLen >= sourceLen) {
+        stopThinking();
+        assistantMsg.content = s.content;
+        assistantMsg.streaming = false;
         clearInterval(timer);
+        sending.value = false;
+        loadSessions();
+        nextTick().then(scrollToBottom);
         resolve();
       }
-    }, 30);
+    }, 33);  // ~30fps
   });
 
-  await Promise.all([consume, render]);
-
-  messages.value[idx].streaming = false;
-  sending.value = false;
-  streamAbortController = null;
-  await loadSessions();
-  await nextTick();
-  scrollToBottom();
+  await poll;
 }
 
 async function deleteSession(id) {
@@ -328,6 +400,36 @@ function formatTime(time) {
 .message-content { padding: 10px 16px; font-size: 14px; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 .typing { color: #909399; }
 .cursor { animation: blink 0.8s infinite; color: #409eff; }
+
+.message-content.thinking {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+}
+.thinking-dots {
+  display: inline-flex;
+  gap: 3px;
+}
+.thinking-dots .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #909399;
+  display: inline-block;
+  animation: dotPulse 1.4s infinite ease-in-out both;
+}
+.thinking-dots .dot:nth-child(1) { animation-delay: 0s; }
+.thinking-dots .dot:nth-child(2) { animation-delay: 0.2s; }
+.thinking-dots .dot:nth-child(3) { animation-delay: 0.4s; }
+.thinking-text {
+  font-size: 13px;
+  color: #909399;
+}
+@keyframes dotPulse {
+  0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1.2); }
+}
 @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
 
 .input-area { padding: 16px; border-top: 1px solid #ebeef5; display: flex; gap: 12px; align-items: flex-end; }

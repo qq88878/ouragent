@@ -13,6 +13,8 @@ from ..memory.learning_progress import LearningProgress
 from ..rag.rag_pipeline import RAGPipeline
 from ..tools.base import ToolRegistry
 from ..tools.retrieval import RetrievalTool
+from datetime import datetime
+
 from ..tools.web_search import WebSearchTool
 from .profile_agent import ProfileAgent
 from .planner_agent import PlannerAgent
@@ -129,7 +131,8 @@ class Orchestrator:
                 logger.warning("RAG 检索失败，降级为纯 LLM 对话: %s", e)
 
         # 构造个性化 prompt
-        system_prompt = self._build_chat_system_prompt(student_profile, knowledge_context)
+        schedule = context.get("schedule")
+        system_prompt = self._build_chat_system_prompt(student_profile, knowledge_context, schedule)
         messages = [{"role": "system", "content": system_prompt}]
         if history:
             messages.extend(history[-10:])
@@ -198,132 +201,157 @@ class Orchestrator:
         self,
         student_profile: Optional[Dict[str, Any]],
         knowledge_context: str,
+        schedule: Optional[Dict[str, Any]] = None,
     ) -> str:
+        now = datetime.now()
+        weekday_names = ["??", "??", "??", "??", "??", "??", "??"]
+        today_str = f"{now.year}?{now.month}?{now.day}? {weekday_names[now.weekday()]}"
+
         parts = [
-            "你是一位专业的教育AI助手，基于知识库内容为学生提供个性化辅导。",
-            "请用中文回答，保持友好和专业。",
+            f"???{today_str}?",
+            "?????????AI????????????????????????????",
+            "",
+            "??????? ? ???????",
+            "- ????????????????????????????1-2?????????????",
+            "- ??????????????????????????????????????????????????????",
+            "- ???????????????????????????",
+            "- ???????????????????????????",
         ]
 
         if student_profile:
-            # 基本学习风格
+            parts.append("")
+            parts.append("????? ? ????????????????????????????????")
+            # ??????
             style = student_profile.get("learning_style", "")
             if style:
                 style_map = {
-                    "VISUAL": "多用图表、流程图、示意图来解释",
-                    "AUDITORY": "多用类比和故事来解释概念",
-                    "READING": "提供结构化的文字说明",
-                    "KINESTHETIC": "多举实际操作例子",
+                    "VISUAL": "???",
+                    "AUDITORY": "???",
+                    "READING": "???",
+                    "KINESTHETIC": "???",
                 }
                 if style in style_map:
-                    parts.append(f"该学生是{style}型学习者，{style_map[style]}。")
+                    parts.append(f"- ?????{style_map[style]}")
 
-            # 强弱项
+            # ???
             strengths = student_profile.get("strengths", "")
             weaknesses = student_profile.get("weaknesses", "")
             if strengths:
-                parts.append(f"该学生的优势领域: {strengths}。")
+                parts.append(f"- ???{strengths}")
             if weaknesses:
-                parts.append(f"该学生的薄弱环节: {weaknesses}，请多关注这些方面。")
+                parts.append(f"- ???{weaknesses}")
 
             interests = student_profile.get("interests", "")
             if interests:
-                parts.append(f"该学生的兴趣方向: {interests}。")
+                parts.append(f"- ???{interests}")
 
-            # 七维度问卷数据
+            # ???????
             q = student_profile.get("questionnaire")
             if q:
                 major = q.get("major_direction", "")
                 if major:
-                    parts.append(f"专业方向: {major}。")
+                    parts.append(f"- ?????{major}")
 
                 education = q.get("education_level", "")
                 if education:
                     edu_map = {
-                        "HIGH_SCHOOL": "高中", "ASSOCIATE": "大专", "BACHELOR": "本科",
-                        "MASTER": "硕士", "PHD": "博士", "OTHER": "其他"
+                        "HIGH_SCHOOL": "??", "ASSOCIATE": "??", "BACHELOR": "??",
+                        "MASTER": "??", "PHD": "??", "OTHER": "??"
                     }
-                    parts.append(f"学历: {edu_map.get(education, education)}。")
+                    parts.append(f"- ???{edu_map.get(education, education)}")
 
                 goals = q.get("learning_goals", [])
                 if goals:
                     goal_map = {
-                        "EXAM": "应对考试", "INTEREST": "兴趣爱好", "EMPLOYMENT": "就业求职",
-                        "PROMOTION": "职业晋升", "SELF_IMPROVEMENT": "自我提升", "OTHER": "其他"
+                        "EXAM": "????", "INTEREST": "????", "EMPLOYMENT": "????",
+                        "PROMOTION": "????", "SELF_IMPROVEMENT": "????", "OTHER": "??"
                     }
                     goals_cn = [goal_map.get(g, g) for g in goals]
-                    parts.append(f"学习目标: {', '.join(goals_cn)}。")
+                    parts.append(f"- ?????{', '.join(goals_cn)}")
 
                 motivation = q.get("motivation_level", "")
                 if motivation:
-                    mot_map = {"STRONG": "强烈", "MODERATE": "一般", "WEAK": "较弱"}
-                    parts.append(f"动机强度: {mot_map.get(motivation, motivation)}。")
+                    mot_map = {"STRONG": "??", "MODERATE": "??", "WEAK": "??"}
+                    parts.append(f"- ???{mot_map.get(motivation, motivation)}")
 
                 subj_level = q.get("subject_level", "")
                 if subj_level:
-                    lvl_map = {"ZERO_BASIC": "零基础", "BEGINNER": "入门", "INTERMEDIATE": "中级", "ADVANCED": "高级"}
-                    parts.append(f"当前水平: {lvl_map.get(subj_level, subj_level)}。")
+                    lvl_map = {"ZERO_BASIC": "???", "BEGINNER": "??", "INTERMEDIATE": "??", "ADVANCED": "??"}
+                    parts.append(f"- ?????{lvl_map.get(subj_level, subj_level)}")
 
                 self_strengths = q.get("self_strengths", [])
                 if self_strengths:
-                    parts.append(f"自评优势: {', '.join(self_strengths)}。")
+                    parts.append(f"- ?????{', '.join(self_strengths)}")
 
                 self_weaknesses = q.get("self_weaknesses", [])
                 if self_weaknesses:
-                    parts.append(f"自评薄弱: {', '.join(self_weaknesses)}。")
+                    parts.append(f"- ?????{', '.join(self_weaknesses)}")
 
                 learning_methods = q.get("learning_methods", [])
                 if learning_methods:
                     method_map = {
-                        "VIDEO": "看视频", "READING": "阅读文档", "HANDS_ON": "动手操作",
-                        "DISCUSSION": "讨论交流", "LECTURE": "听讲座", "QUIZ": "做题测试"
+                        "VIDEO": "???", "READING": "????", "HANDS_ON": "????",
+                        "DISCUSSION": "????", "LECTURE": "???", "QUIZ": "????"
                     }
                     methods_cn = [method_map.get(m, m) for m in learning_methods]
-                    parts.append(f"偏好学习方式: {', '.join(methods_cn)}。")
+                    parts.append(f"- ???????{', '.join(methods_cn)}")
 
                 session_dur = q.get("session_duration", "")
                 if session_dur:
                     dur_map = {
-                        "LESS_30MIN": "不足30分钟", "30_60MIN": "30-60分钟", "1_2HOURS": "1-2小时",
-                        "2_4HOURS": "2-4小时", "MORE_4HOURS": "4小时以上"
+                        "LESS_30MIN": "??30??", "30_60MIN": "30-60??", "1_2HOURS": "1-2??",
+                        "2_4HOURS": "2-4??", "MORE_4HOURS": "4????"
                     }
-                    parts.append(f"单次学习时长: {dur_map.get(session_dur, session_dur)}。")
+                    parts.append(f"- ???????{dur_map.get(session_dur, session_dur)}")
 
                 focus = q.get("focus_level", "")
                 if focus:
-                    f_map = {"VERY_HIGH": "非常专注", "HIGH": "比较专注", "MODERATE": "一般", "LOW": "容易分心", "VERY_LOW": "难以集中"}
-                    parts.append(f"专注程度: {f_map.get(focus, focus)}。")
+                    f_map = {"VERY_HIGH": "????", "HIGH": "????", "MODERATE": "??", "LOW": "????", "VERY_LOW": "????"}
+                    parts.append(f"- ?????{f_map.get(focus, focus)}")
 
                 plan = q.get("planning_habit", "")
                 if plan:
-                    p_map = {"ALWAYS": "总是计划", "OFTEN": "经常计划", "SOMETIMES": "偶尔计划", "RARELY": "很少计划", "NEVER": "从不计划"}
-                    parts.append(f"学习计划性: {p_map.get(plan, plan)}。")
+                    p_map = {"ALWAYS": "????", "OFTEN": "????", "SOMETIMES": "????", "RARELY": "????", "NEVER": "????"}
+                    parts.append(f"- ??????{p_map.get(plan, plan)}")
 
                 confidence = q.get("confidence_level", "")
                 if confidence:
-                    c_map = {"VERY_HIGH": "非常有信心", "HIGH": "比较有信心", "MODERATE": "一般", "LOW": "信心不足", "VERY_LOW": "非常缺乏信心"}
-                    parts.append(f"自信心: {c_map.get(confidence, confidence)}。")
+                    c_map = {"VERY_HIGH": "?????", "HIGH": "?????", "MODERATE": "??", "LOW": "????", "VERY_LOW": "??????"}
+                    parts.append(f"- ????{c_map.get(confidence, confidence)}")
 
                 barriers = q.get("main_barriers", [])
                 if barriers:
                     b_map = {
-                        "LAZINESS": "懒惰拖延", "DISTRACTION": "容易分心", "NO_METHOD": "缺乏方法",
-                        "NO_CONFIDENCE": "缺乏自信", "NO_TIME": "时间不足", "NO_SUPPORT": "缺乏支持",
-                        "BORING": "内容枯燥", "ANXIETY": "焦虑压力"
+                        "LAZINESS": "????", "DISTRACTION": "????", "NO_METHOD": "????",
+                        "NO_CONFIDENCE": "????", "NO_TIME": "????", "NO_SUPPORT": "????",
+                        "BORING": "????", "ANXIETY": "????"
                     }
                     b_cn = [b_map.get(b, b) for b in barriers]
-                    parts.append(f"主要学习障碍: {', '.join(b_cn)}，请针对性鼓励和引导。")
+                    parts.append(f"- ???????{', '.join(b_cn)}")
 
                 mentor = q.get("has_mentor", "")
                 if mentor:
-                    m_map = {"YES": "有导师/同伴", "NO": "无导师/同伴", "WANT": "希望有导师/同伴"}
-                    parts.append(f"学习支持: {m_map.get(mentor, mentor)}。")
+                    m_map = {"YES": "???/??", "NO": "???/??", "WANT": "?????/??"}
+                    parts.append(f"- ?????{m_map.get(mentor, mentor)}")
+
+        if schedule:
+            parts.append("")
+            parts.append("????? ? ?????????????????????????????")
+            if isinstance(schedule, dict):
+                for day, courses in schedule.items():
+                    if isinstance(courses, list):
+                        course_str = "?".join(str(c) for c in courses)
+                        parts.append(f"- {day}?{course_str}")
+                    else:
+                        parts.append(f"- {day}?{courses}")
 
         if knowledge_context:
-            parts.append(f"\n以下是知识库中的相关内容，请基于这些内容回答:\n\n{knowledge_context}")
+            parts.append(f"\n??????????????????:\n\n{knowledge_context}")
         else:
-            parts.append("\n知识库中没有找到相关内容，请基于你的知识回答，并说明这不是来自课程资料。")
+            parts.append("\n???????????????????????????")
 
         return "\n".join(parts)
+
 
     def get_status(self) -> Dict[str, Any]:
         return {
