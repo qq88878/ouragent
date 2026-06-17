@@ -85,7 +85,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch } from 'vue';
+import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { chatApi, courseApi } from '@/api';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -102,16 +102,27 @@ const sending = ref(false);
 const messagesArea = ref(null);
 const courses = ref([]);
 const selectedCourseId = ref(null);
+let streamAbortController = null;
 
 onMounted(async () => {
   await Promise.all([loadSessions(), loadCourses()]);
-  // 恢复用户上次选择的课程
   const saved = localStorage.getItem('chatCourseId');
   if (saved) selectedCourseId.value = Number(saved);
   if (route.params.sessionId) {
     selectSession(Number(route.params.sessionId));
   }
 });
+
+onBeforeUnmount(() => {
+  abortStream();
+});
+
+function abortStream() {
+  if (streamAbortController) {
+    streamAbortController.abort();
+    streamAbortController = null;
+  }
+}
 
 watch(() => route.params.sessionId, (id) => {
   if (id) selectSession(Number(id));
@@ -152,6 +163,7 @@ async function createSession() {
 }
 
 async function selectSession(id) {
+  abortStream();
   currentSessionId.value = id;
   router.replace(`/chat/${id}`);
   await loadMessages(id);
@@ -195,15 +207,22 @@ async function sendMessage() {
   let streamDone = false;
   let hasError = '';
 
+  // 创建 AbortController 用于中断流式请求
+  streamAbortController = new AbortController();
+
   // 消费 SSE 流，写入 buffer
   const consume = (async () => {
     try {
-      for await (const chunk of chatApi.sendMessageStream(currentSessionId.value, text)) {
+      for await (const chunk of chatApi.sendMessageStream(currentSessionId.value, text, streamAbortController.signal)) {
         if (chunk.error) { hasError = chunk.error; break; }
         if (chunk.content) buffer.push(chunk.content);
         if (chunk.done) break;
       }
-    } catch {
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        streamDone = true;
+        return;
+      }
       if (!buffer.length && !hasError) hasError = '网络错误，请稍后重试。';
     } finally {
       streamDone = true;
@@ -234,6 +253,7 @@ async function sendMessage() {
 
   messages.value[idx].streaming = false;
   sending.value = false;
+  streamAbortController = null;
   await loadSessions();
   await nextTick();
   scrollToBottom();

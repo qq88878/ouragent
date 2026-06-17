@@ -59,7 +59,7 @@ export const chatApi = {
     sendMessage(sessionId, message) {
         return http.post(`/chat/sessions/${sessionId}/messages`, { message });
     },
-    async *sendMessageStream(sessionId, message) {
+    async *sendMessageStream(sessionId, message, signal) {
         const token = localStorage.getItem('accessToken');
         const response = await fetch(`/api/chat/sessions/${sessionId}/messages/stream`, {
             method: 'POST',
@@ -68,6 +68,7 @@ export const chatApi = {
                 ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
             body: JSON.stringify({ message }),
+            signal,
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const reader = response.body.getReader();

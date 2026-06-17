@@ -34,6 +34,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -202,6 +203,7 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
 
         SseEmitter emitter = new SseEmitter(120_000L); // 2 min timeout
         StringBuilder accumulator = new StringBuilder();
+        AtomicBoolean responseSaved = new AtomicBoolean(false);
 
         // Capture SecurityContext on request thread for async propagation
         SecurityContext secCtx = SecurityContextHolder.getContext();
@@ -218,21 +220,20 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
                     emitter.complete();
                 } catch (Exception ignored) {}
             } finally {
-                // Persist full response to DB
-                String fullResponse = accumulator.toString();
-                if (!fullResponse.isEmpty()) {
-                    ChatMessage assistantMessage = new ChatMessage();
-                    assistantMessage.setSessionId(sessionId);
-                    assistantMessage.setRole("ASSISTANT");
-                    assistantMessage.setContent(fullResponse);
-                    messageMapper.insert(assistantMessage);
-                }
+                // Persist response to DB (full or partial)
+                saveAssistantMessage(sessionId, accumulator, responseSaved);
                 SecurityContextHolder.clearContext();
             }
         });
 
-        emitter.onTimeout(() -> log.warn("SSE 超时: sessionId={}", sessionId));
-        emitter.onError(e -> log.warn("SSE 错误: sessionId={}", sessionId, e));
+        emitter.onTimeout(() -> {
+            log.warn("SSE 超时: sessionId={}", sessionId);
+            saveAssistantMessage(sessionId, accumulator, responseSaved);
+        });
+        emitter.onError(e -> {
+            log.warn("SSE 错误/客户端断开: sessionId={}", sessionId, e);
+            saveAssistantMessage(sessionId, accumulator, responseSaved);
+        });
 
         return emitter;
     }
@@ -341,6 +342,23 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
         // Delete session
         removeById(sessionId);
         log.info("会话删除成功: id={}", sessionId);
+    }
+
+    private void saveAssistantMessage(Long sessionId, StringBuilder accumulator, AtomicBoolean saved) {
+        String content = accumulator.toString().trim();
+        if (content.isEmpty() || !saved.compareAndSet(false, true)) {
+            return; // empty or already saved
+        }
+        try {
+            ChatMessage msg = new ChatMessage();
+            msg.setSessionId(sessionId);
+            msg.setRole("ASSISTANT");
+            msg.setContent(content);
+            messageMapper.insert(msg);
+            log.info("流式回复已保存: sessionId={}, length={}", sessionId, content.length());
+        } catch (Exception e) {
+            log.error("保存流式回复失败: sessionId={}", sessionId, e);
+        }
     }
 
     private ChatSessionDTO toSessionDTO(ChatSession session, ChatMessage lastMessage,
