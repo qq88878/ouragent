@@ -1,58 +1,147 @@
-﻿<template>
+<template>
   <div v-if="isAuthPage" class="auth-wrapper">
     <router-view />
   </div>
   <el-container v-else class="app-layout">
+    <!-- 侧边栏 -->
     <el-aside width="240px" class="app-sidebar">
-      <div class="logo">EduAgent</div>
-      <el-menu
-        :default-active="$route.path"
-        router
-        background-color="#304156"
-        text-color="#bfcbd9"
-        active-text-color="#409eff"
-      >
-        <el-menu-item index="/dashboard">
-          <el-icon><HomeFilled /></el-icon>
-          <span>首页</span>
-        </el-menu-item>
-        <el-menu-item index="/chat">
-          <el-icon><ChatDotRound /></el-icon>
-          <span>智能对话</span>
-        </el-menu-item>
-        <el-menu-item index="/courses">
-          <el-icon><Reading /></el-icon>
-          <span>课程中心</span>
-        </el-menu-item>
-        <el-menu-item v-if="isStudent" index="/schedule">
-          <el-icon><Calendar /></el-icon>
-          <span>课表</span>
-        </el-menu-item>
-        <el-menu-item v-if="isStudent" index="/mistake-book">
-          <el-icon><WarningFilled /></el-icon>
-          <span>错题本</span>
-        </el-menu-item>
-        <el-menu-item v-if="isStudent" index="/learning">
-          <el-icon><TrendCharts /></el-icon>
-          <span>学习路径</span>
-        </el-menu-item>
-        <el-menu-item index="/knowledge">
-          <el-icon><Document /></el-icon>
-          <span>知识库</span>
-        </el-menu-item>
-        <el-menu-item index="/profile">
-          <el-icon><User /></el-icon>
-          <span>个人资料</span>
-        </el-menu-item>
-        <el-menu-item v-if="isAdmin" index="/admin">
-          <el-icon><Setting /></el-icon>
-          <span>管理后台</span>
-        </el-menu-item>
-        <el-menu-item v-if="isAdmin" index="/admin/users">
-          <el-icon><Avatar /></el-icon>
-          <span>用户管理</span>
-        </el-menu-item>
-      </el-menu>
+      <div class="sidebar-brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="36" height="36" rx="10" fill="url(#lg)"/>
+            <path d="M18 8L26 14v10l-8 6-8-6V14l8-6z" fill="white" opacity="0.9"/>
+            <circle cx="18" cy="17" r="5" fill="url(#lg)"/>
+            <defs><linearGradient id="lg" x1="0" y1="0" x2="36" y2="36"><stop stop-color="#5B6AF0"/><stop offset="1" stop-color="#7C5CFC"/></linearGradient></defs>
+          </svg>
+        </div>
+        <span class="brand-text">EduAgent</span>
+      </div>
+
+      <div class="sidebar-nav">
+        <div class="nav-section-label">主导航</div>
+        <el-menu
+          :default-active="activeMenu"
+          router
+          background-color="transparent"
+          text-color="rgba(255,255,255,0.70)"
+          active-text-color="#fff"
+        >
+          <el-menu-item index="/dashboard">
+            <template #title>
+              <div class="menu-item-inner">
+                <div class="menu-icon-box"><el-icon :size="18"><HomeFilled /></el-icon></div>
+                <span>首页</span>
+              </div>
+            </template>
+          </el-menu-item>
+          <el-menu-item index="/chat">
+            <template #title>
+              <div class="menu-item-inner">
+                <div class="menu-icon-box"><el-icon :size="18"><ChatDotRound /></el-icon></div>
+                <span>智能对话</span>
+              </div>
+            </template>
+          </el-menu-item>
+          <el-menu-item index="/courses">
+            <template #title>
+              <div class="menu-item-inner">
+                <div class="menu-icon-box"><el-icon :size="18"><Reading /></el-icon></div>
+                <span>课程中心</span>
+              </div>
+            </template>
+          </el-menu-item>
+        </el-menu>
+
+        <div v-if="isStudent" class="nav-section-label">学习工具</div>
+        <el-menu
+          v-if="isStudent"
+          :default-active="activeMenu"
+          router
+          background-color="transparent"
+          text-color="rgba(255,255,255,0.70)"
+          active-text-color="#fff"
+        >
+          <el-menu-item index="/schedule">
+            <template #title>
+              <div class="menu-item-inner">
+                <div class="menu-icon-box"><el-icon :size="18"><Calendar /></el-icon></div>
+                <span>课表</span>
+              </div>
+            </template>
+          </el-menu-item>
+          <el-menu-item index="/learning">
+            <template #title>
+              <div class="menu-item-inner">
+                <div class="menu-icon-box"><el-icon :size="18"><TrendCharts /></el-icon></div>
+                <span>学习路径</span>
+              </div>
+            </template>
+          </el-menu-item>
+        </el-menu>
+
+        <div class="nav-section-label">知识管理</div>
+        <el-menu
+          :default-active="activeMenu"
+          router
+          background-color="transparent"
+          text-color="rgba(255,255,255,0.70)"
+          active-text-color="#fff"
+        >
+          <el-menu-item index="/knowledge">
+            <template #title>
+              <div class="menu-item-inner">
+                <div class="menu-icon-box"><el-icon :size="18"><Document /></el-icon></div>
+                <span>知识库</span>
+              </div>
+            </template>
+          </el-menu-item>
+          <el-menu-item index="/profile">
+            <template #title>
+              <div class="menu-item-inner">
+                <div class="menu-icon-box"><el-icon :size="18"><User /></el-icon></div>
+                <span>个人资料</span>
+              </div>
+            </template>
+          </el-menu-item>
+        </el-menu>
+
+        <div v-if="isAdmin" class="nav-section-label">系统管理</div>
+        <el-menu
+          v-if="isAdmin"
+          :default-active="activeMenu"
+          router
+          background-color="transparent"
+          text-color="rgba(255,255,255,0.70)"
+          active-text-color="#fff"
+        >
+          <el-menu-item index="/admin">
+            <template #title>
+              <div class="menu-item-inner">
+                <div class="menu-icon-box"><el-icon :size="18"><Setting /></el-icon></div>
+                <span>管理后台</span>
+              </div>
+            </template>
+          </el-menu-item>
+          <el-menu-item index="/admin/users">
+            <template #title>
+              <div class="menu-item-inner">
+                <div class="menu-icon-box"><el-icon :size="18"><Avatar /></el-icon></div>
+                <span>用户管理</span>
+              </div>
+            </template>
+          </el-menu-item>
+        </el-menu>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user">
+          <div class="user-avatar">{{ (userDisplay || '?')[0] }}</div>
+          <div class="user-detail">
+            <div class="user-name">{{ userDisplay }}</div>
+            <div class="user-role">{{ roleLabel }}</div>
+          </div>
+        </div>
+      </div>
     </el-aside>
 
     <!-- 主内容区 -->
@@ -130,7 +219,7 @@ const pageTitles = {
   '/chat': '智能对话',
   '/courses': '课程中心',
   '/schedule': '课表',
-  '/mistake-book': '错题本',
+    '/mistake-book': '错题本',
   '/learning': '学习路径',
   '/knowledge': '知识库',
   '/profile': '个人资料',
