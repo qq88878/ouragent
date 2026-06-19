@@ -32,6 +32,7 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.*;
@@ -50,6 +51,7 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
     private final StudentProfileService studentProfileService;
     private final StudentProfileQuestionnaireService questionnaireService;
     private final ScheduleService scheduleService;
+    private final TransactionTemplate transactionTemplate;
     private final ExecutorService streamExecutor = Executors.newCachedThreadPool();
     public ChatServiceImpl(AgentServiceClient agentServiceClient, ChatMessageMapper messageMapper, KnowledgeMapper knowledgeMapper, CourseMapper courseMapper, StudentProfileService studentProfileService, StudentProfileQuestionnaireService questionnaireService, ScheduleService scheduleService) {
         this.agentServiceClient = agentServiceClient;
@@ -233,8 +235,9 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
                     emitter.complete();
                 } catch (Exception ignored) {}
             } finally {
-                // Persist full response to DB
-                String fullResponse = accumulator.toString();
+                // Persist full response to DB within a transaction
+                final String fullResponse = accumulator.toString();
+                final Long sid = sessionId;
                 if (!fullResponse.isEmpty()) {
                     ChatMessage assistantMessage = new ChatMessage();
                     assistantMessage.setSessionId(sessionId);

@@ -250,3 +250,7 @@ ame            VARCHAR(128)  NOT NULL COMMENT '课程名称',
     INDEX idx_schedule_course_user_id (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- -----------------------------------------------------------
+
+
+-- 执行 javaarea/src/main/resources/db/migration/add_schedule_course_fields.sql
+ALTER TABLE schedule_course ADD COLUMN location VARCHAR(255), ADD COLUMN remark VARCHAR(512);

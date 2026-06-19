@@ -222,22 +222,30 @@ public class AgentServiceClient {
                     try (BufferedReader reader = new BufferedReader(
                             new InputStreamReader(response.getBody(), StandardCharsets.UTF_8))) {
                         String line;
+                        java.util.Map<String, Object> wrapped;
+                        com.fasterxml.jackson.databind.ObjectMapper localMapper = new com.fasterxml.jackson.databind.ObjectMapper();
                         while ((line = reader.readLine()) != null) {
                             if (line.startsWith("data: ")) {
                                 String data = line.substring(6);
                                 try {
-                                    Map<String, Object> parsed = new com.fasterxml.jackson.databind.ObjectMapper()
-                                            .readValue(data, Map.class);
+                                    java.util.Map<String, Object> parsed = localMapper.readValue(data, java.util.Map.class);
                                     Object content = parsed.get("content");
                                     if (content != null) {
                                         accumulator.append(content.toString());
                                     }
+                                    wrapped = new java.util.HashMap<>();
+                                    wrapped.put("type", "text");
+                                    wrapped.put("content", content != null ? content.toString() : "");
+                                    emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter
+                                            .event().data(localMapper.writeValueAsString(wrapped)));
                                 } catch (Exception ignored) {
                                 }
-                                emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter
-                                        .event().data(data));
                             }
                         }
+                        try {
+                            emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter
+                                    .event().data("{\"type\":\"end\"}"));
+                        } catch (Exception ignored) {}
                         emitter.complete();
                     } catch (Exception e) {
                         log.error("SSE stream read error", e);
