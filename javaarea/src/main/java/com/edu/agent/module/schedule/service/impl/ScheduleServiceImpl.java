@@ -81,6 +81,8 @@ public class ScheduleServiceImpl implements ScheduleService {
             course.setWeekNumbers(objectMapper.writeValueAsString(request.getWeekNumbers()));
             course.setDayOfWeeks(objectMapper.writeValueAsString(request.getDayOfWeeks()));
             course.setPeriodIndexes(objectMapper.writeValueAsString(request.getPeriodIndexes()));
+            course.setLocation(request.getLocation());
+            course.setRemark(request.getRemark());
         } catch (JsonProcessingException e) {
             throw new BizException(ResultCode.INTERNAL_ERROR, "课程数据序列化失败");
         }
@@ -100,6 +102,8 @@ public class ScheduleServiceImpl implements ScheduleService {
             course.setWeekNumbers(objectMapper.writeValueAsString(request.getWeekNumbers()));
             course.setDayOfWeeks(objectMapper.writeValueAsString(request.getDayOfWeeks()));
             course.setPeriodIndexes(objectMapper.writeValueAsString(request.getPeriodIndexes()));
+            course.setLocation(request.getLocation());
+            course.setRemark(request.getRemark());
         } catch (JsonProcessingException e) {
             throw new BizException(ResultCode.INTERNAL_ERROR, "课程数据序列化失败");
         }
@@ -156,13 +160,17 @@ public class ScheduleServiceImpl implements ScheduleService {
             List<ScheduleWeekViewDTO.PeriodSlot> slots = new ArrayList<>();
             for (int pi = 0; pi < periods.size(); pi++) {
                 ScheduleConfigDTO.PeriodConfig pc = periods.get(pi);
-                String courseName = findCourseAt(courses, weekNumber, dayOfWeek, pi);
+                ScheduleCourse matched = findCourseAtSlot(courses, weekNumber, dayOfWeek, pi);
                 ScheduleWeekViewDTO.PeriodSlot slot = new ScheduleWeekViewDTO.PeriodSlot();
                 slot.setPeriodIndex(pi);
                 slot.setPeriodName(pc.getName());
                 slot.setStartTime(pc.getStartTime());
                 slot.setEndTime(pc.getEndTime());
-                slot.setCourseName(courseName);
+                if (matched != null) {
+                    slot.setCourseId(matched.getId());
+                    slot.setCourseName(matched.getName());
+                    slot.setLocation(matched.getLocation());
+                }
                 slots.add(slot);
             }
 
@@ -182,13 +190,13 @@ public class ScheduleServiceImpl implements ScheduleService {
         return view;
     }
 
-    private String findCourseAt(List<ScheduleCourse> courses, int weekNumber, int dayOfWeek, int periodIndex) {
+    private ScheduleCourse findCourseAtSlot(List<ScheduleCourse> courses, int weekNumber, int dayOfWeek, int periodIndex) {
         for (ScheduleCourse c : courses) {
             List<Integer> weeks = parseJsonList(c.getWeekNumbers());
             List<Integer> days = parseJsonList(c.getDayOfWeeks());
             List<Integer> periods = parseJsonList(c.getPeriodIndexes());
             if (weeks.contains(weekNumber) && days.contains(dayOfWeek) && periods.contains(periodIndex)) {
-                return c.getName();
+                return c;
             }
         }
         return null;
@@ -251,6 +259,8 @@ public class ScheduleServiceImpl implements ScheduleService {
         dto.setWeekNumbers(parseJsonList(course.getWeekNumbers()));
         dto.setDayOfWeeks(parseJsonList(course.getDayOfWeeks()));
         dto.setPeriodIndexes(parseJsonList(course.getPeriodIndexes()));
+        dto.setLocation(course.getLocation());
+        dto.setRemark(course.getRemark());
         return dto;
     }
 }

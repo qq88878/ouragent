@@ -26,6 +26,8 @@ public class ScheduleWeekViewDTO {
         private String periodName;
         private String startTime;
         private String endTime;
+        private Long courseId;
         private String courseName;          // null表示空闲
+        private String location;
     }
 }

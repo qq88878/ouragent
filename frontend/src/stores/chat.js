@@ -77,10 +77,12 @@ export const useChatStore = defineStore("chat", () => {
               if (data) {
                 try {
                   const parsed = JSON.parse(data);
-                  if (parsed.error) {
-                    stream.error = parsed.error;
-                  } else if (parsed.content) {
-                    stream.content += parsed.content;
+                  if (parsed.type === 'end' || parsed.done) {
+                    stream.done = true;
+                  } else if (parsed.type === 'error' || parsed.error) {
+                    stream.error = parsed.error || 'AI服务错误';
+                  } else if (parsed.content !== undefined) {
+                    stream.content += parsed.content || '';
                   }
                 } catch {
                   /* skip malformed */

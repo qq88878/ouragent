@@ -19,4 +19,6 @@ public class CreateCourseRequest {
 
     @NotEmpty(message = "时间段不能为空")
     private List<Integer> periodIndexes;
+    private String location;
+    private String remark;
 }

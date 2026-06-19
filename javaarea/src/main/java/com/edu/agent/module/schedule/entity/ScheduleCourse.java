@@ -17,4 +17,6 @@ public class ScheduleCourse extends BaseEntity {
     private String dayOfWeeks;
     /** JSON: [0,1,2,...] */
     private String periodIndexes;
+    private String location;
+    private String remark;
 }

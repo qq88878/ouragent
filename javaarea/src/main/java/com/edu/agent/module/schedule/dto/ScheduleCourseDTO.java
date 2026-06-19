@@ -15,4 +15,6 @@ public class ScheduleCourseDTO {
     private List<Integer> weekNumbers;
     private List<Integer> dayOfWeeks;
     private List<Integer> periodIndexes;
+    private String location;
+    private String remark;
 }
