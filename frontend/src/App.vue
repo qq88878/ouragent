@@ -69,6 +69,14 @@
               </div>
             </template>
           </el-menu-item>
+          <el-menu-item index="/mistake-book">
+            <template #title>
+              <div class="menu-item-inner">
+                <div class="menu-icon-box"><el-icon :size="18"><WarningFilled /></el-icon></div>
+                <span>错题本</span>
+              </div>
+            </template>
+          </el-menu-item>
           <el-menu-item index="/learning">
             <template #title>
               <div class="menu-item-inner">
