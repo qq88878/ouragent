@@ -1,4 +1,4 @@
-"""Orchestrator - 多 Agent 协作编排器，系统总入口"""
+﻿"""Orchestrator - 多 Agent 协作编排器，系统总入口"""
 
 from __future__ import annotations
 
@@ -535,3 +535,202 @@ class Orchestrator:
         })
 
         return {"recorded": True, "is_correct": is_correct}
+
+
+    # ==================== 错题本 ====================
+
+    async def _ensure_mistake_book(self):
+        """懒加载错题本"""
+        if not hasattr(self, "_mistake_book"):
+            from ..memory.mistake_book import MistakeBook
+            await self._ensure_redis()
+            self._mistake_book = MistakeBook(self._redis_client)
+        return self._mistake_book
+
+    async def add_mistake(self, user_id: str, question: str, student_answer: str, correct_answer: str = "", error_category: str = "concept_unclear", course_id: Optional[int] = None, knowledge_id: Optional[int] = None, knowledge_name: str = "") -> Dict[str, Any]:
+        """添加错题"""
+        mb = await self._ensure_mistake_book()
+        return await mb.add_mistake(user_id=user_id, question=question, student_answer=student_answer, reference_answer=correct_answer, error_category=error_category, course_id=course_id, knowledge_id=knowledge_id, knowledge_name=knowledge_name)
+
+    async def list_mistakes(self, user_id: str, course_id: Optional[int] = None, error_category: Optional[str] = None, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+        """获取错题列表"""
+        mb = await self._ensure_mistake_book()
+        return await mb.list_mistakes(user_id=user_id, course_id=course_id, error_category=error_category, limit=limit, offset=offset)
+
+    async def record_review(self, mistake_id: str, recalled: bool) -> Dict[str, Any]:
+        """记录复习结果"""
+        mb = await self._ensure_mistake_book()
+        return await mb.record_review(mistake_id=mistake_id, recalled=recalled)
+
+    async def get_mistake_stats(self, user_id: str) -> Dict[str, Any]:
+        """获取错题统计"""
+        mb = await self._ensure_mistake_book()
+        return await mb.get_stats(user_id=user_id)
+
+    async def get_due_reviews(self, user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """获取到期需复习的错题"""
+        mb = await self._ensure_mistake_book()
+        return await mb.get_due_reviews(user_id=user_id, limit=limit)
+
+    async def generate_daily_review_notifications(self, user_id: str) -> List[Dict[str, Any]]:
+        """生成每日复习提醒"""
+        mb = await self._ensure_mistake_book()
+        return await mb.generate_daily_review_notifications(user_id=user_id)
+
+    async def get_pending_notifications(self, user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """获取待处理通知"""
+        mb = await self._ensure_mistake_book()
+        return await mb.get_pending_notifications(user_id=user_id, limit=limit)
+
+    async def diagnose_mistake(self, user_id: str, question: str, student_answer: str, correct_answer: str = "", course_id: Optional[int] = None) -> Dict[str, Any]:
+        """LLM智能诊断 — 从对话中提取题目/答案/正确答案，然后分析错误原因"""
+        import json, re
+        mb = await self._ensure_mistake_book()
+
+        # Step 1: 使用LLM从对话中提取结构化信息
+        extract_prompt = f"""你是一个错题本助手。请从一段师生对话中提取错题信息。
+
+=== 学生说的话 ===
+{question}
+
+=== AI老师纠正的回复（包含正确答案） ===
+{correct_answer}
+
+请仔细阅读以上对话，完成以下任务并输出纯JSON（不要任何其他文字）：
+
+{{
+    "extracted_question": "学生在回答什么问题？用最简短的一句话描述，如：1+1=?、地球的形状？、水的沸点？",
+    "extracted_student_answer": "学生给出的错误答案是什么？只写答案本身",
+    "extracted_correct_answer": "从AI纠正中提取正确答案。只写答案本身（数字、词语、短句），如：2、球体、100℃",
+    "error_category": "concept_unclear / careless / wrong_approach / incomplete",
+    "error_pattern": "一句话描述具体错误",
+    "error_root_cause": "错误原因",
+    "suggestion": "学习建议",
+    "knowledge_name": "知识点名称"
+}}
+
+提取示例：
+学生说：1加1等于3
+老师纠正：1+1=2，不是3哦
+→ extracted_question: 1+1=?
+→ extracted_student_answer: 3
+→ extracted_correct_answer: 2
+
+学生说：地球是平的
+老师纠正：地球是球体，不是平的
+→ extracted_question: 地球是什么形状？
+→ extracted_student_answer: 平的
+→ extracted_correct_answer: 球体
+
+关键：extracted_correct_answer 必须是裸答案，不要解释文字！只输出JSON！"""
+
+        try:
+            response_text = await self.llm.chat([{"role": "user", "content": extract_prompt}])
+            json_match = re.search(r"\{.*\}", response_text, re.DOTALL)
+            if json_match:
+                diagnosis = json.loads(json_match.group())
+            else:
+                diagnosis = {
+                    "extracted_question": question[:100],
+                    "extracted_student_answer": student_answer,
+                    "extracted_correct_answer": correct_answer[:200] if correct_answer else "",
+                    "error_category": "concept_unclear",
+                    "error_pattern": "LLM解析失败",
+                    "error_root_cause": "LLM返回格式异常",
+                    "suggestion": "",
+                    "knowledge_name": ""
+                }
+        except Exception as e:
+            diagnosis = {
+                "extracted_question": question[:100],
+                "extracted_student_answer": student_answer,
+                "extracted_correct_answer": correct_answer[:200] if correct_answer else "",
+                "error_category": "concept_unclear",
+                "error_pattern": f"LLM调用异常: {str(e)[:50]}",
+                "error_root_cause": "LLM调用异常",
+                "suggestion": "",
+                "knowledge_name": ""
+            }
+
+        # Step 2: 使用提取后的结构化数据保存到错题本
+        extracted_q = diagnosis.get("extracted_question") or question[:100]
+        extracted_a = diagnosis.get("extracted_student_answer") or student_answer
+        extracted_correct = diagnosis.get("extracted_correct_answer") or correct_answer
+
+        mistake = await mb.add_mistake(
+            user_id=user_id,
+            question=extracted_q,
+            student_answer=extracted_a,
+            reference_answer=extracted_correct,
+            error_category=diagnosis.get("error_category", "concept_unclear"),
+            error_pattern=diagnosis.get("error_pattern", ""),
+            error_root_cause=diagnosis.get("error_root_cause", ""),
+            knowledge_name=diagnosis.get("knowledge_name", ""),
+            course_id=course_id,
+            diagnosis=diagnosis,
+        )
+
+        return {"mistake": mistake, "diagnosis": diagnosis}
+
+    async def delete_mistake(self, mistake_id: str) -> bool:
+        """删除错题"""
+        mb = await self._ensure_mistake_book()
+        return await mb.delete_mistake(mistake_id)
+
+    async def clear_mistakes(self, user_id: str) -> int:
+        """清空用户错题"""
+        mb = await self._ensure_mistake_book()
+        return await mb.clear_all_mistakes(user_id)
+
+    async def generate_practice(self, user_id: str, question: str, student_answer: str, correct_answer: str = "", course_id: Optional[int] = None) -> Dict[str, Any]:
+        """生成专项练习 — 基于同类错误聚合"""
+        mb = await self._ensure_mistake_book()
+
+        # 获取用户错误模式
+        patterns = await mb.get_error_patterns(user_id)
+        weak_points = patterns.get("weak_points", [])
+        primary_error = patterns.get("primary_error_type", "concept_unclear")
+
+        # 获取同类错误
+        mistakes = await mb.list_mistakes(user_id=user_id, error_category=primary_error, limit=5)
+
+        # 使用LLM生成专项练习
+        similar_questions = "\n".join([f"- {m.get('question', '')} (错误原因: {m.get('error_root_cause', '未知')})" for m in mistakes[:3]])
+
+        prompt = f"""你是一位教学专家。请根据学生的错误模式生成针对性练习题。
+
+学生错题：{question}
+错误类型：{primary_error}
+薄弱知识点：{', '.join(weak_points) if weak_points else '待分析'}
+
+历史同类错误：
+{similar_questions if similar_questions else '暂无'}
+
+请生成3道与错误类型高度相关的练习题，输出JSON格式：
+{{
+    "practice_title": "练习标题",
+    "target_skill": "目标技能",
+    "questions": [
+        {{"question": "题目", "answer": "参考答案", "hint": "解题提示"}}
+    ]
+}}"""
+
+        try:
+            response_text = await self.llm.chat([{"role": "user", "content": prompt}])
+            import json, re
+            json_match = re.search(r"\{.*\}", response_text, re.DOTALL)
+            if json_match:
+                practice = json.loads(json_match.group())
+            else:
+                practice = {"practice_title": "专项练习", "target_skill": "待加强", "questions": []}
+        except Exception:
+            practice = {"practice_title": "专项练习", "target_skill": "待加强", "questions": []}
+
+        return {
+            "practice": practice,
+            "error_context": {
+                "primary_error": primary_error,
+                "weak_points": weak_points,
+                "similar_mistakes_count": len(mistakes),
+            }
+        }

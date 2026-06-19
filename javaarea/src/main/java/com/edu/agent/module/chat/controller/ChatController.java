@@ -9,7 +9,6 @@ import com.edu.agent.module.chat.entity.ChatMessage;
 import com.edu.agent.module.chat.service.ChatService;
 import com.edu.agent.security.LoginUser;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -19,10 +18,12 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/chat")
-@RequiredArgsConstructor
 public class ChatController {
 
     private final ChatService chatService;
+    public ChatController(ChatService chatService) {
+        this.chatService = chatService;
+    }
 
     @PostMapping("/sessions")
     public Result<ChatSessionDTO> createSession(@RequestParam(required = false) Long courseId) {

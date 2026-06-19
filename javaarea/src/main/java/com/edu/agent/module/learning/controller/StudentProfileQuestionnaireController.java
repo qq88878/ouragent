@@ -4,7 +4,6 @@ import com.edu.agent.common.result.Result;
 import com.edu.agent.module.learning.service.StudentProfileQuestionnaireService;
 import com.edu.agent.security.LoginUser;
 import com.edu.agent.module.learning.dto.QuestionnaireDTO;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -13,11 +12,13 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/profile/questionnaire")
-@RequiredArgsConstructor
 @PreAuthorize("hasRole('STUDENT')")
 public class StudentProfileQuestionnaireController {
 
     private final StudentProfileQuestionnaireService questionnaireService;
+    public StudentProfileQuestionnaireController(StudentProfileQuestionnaireService questionnaireService) {
+        this.questionnaireService = questionnaireService;
+    }
 
     @GetMapping("/")
     public Result<QuestionnaireDTO> getQuestionnaire() {

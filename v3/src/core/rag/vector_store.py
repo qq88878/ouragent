@@ -287,7 +287,13 @@ class VectorStore:
                 embeddings.append(doc.embedding)
             else:
                 embeddings.append(np.zeros(self.dimension, dtype=np.float32))
+        if not embeddings:
+            self._embeddings = np.empty((0, self.dimension), dtype=np.float32)
+            self._dirty = False
+            return
         self._embeddings = np.array(embeddings, dtype=np.float32)
+        if self._embeddings.ndim == 1:
+            self._embeddings = self._embeddings.reshape(1, -1)
         # L2 normalize
         norms = np.linalg.norm(self._embeddings, axis=1, keepdims=True) + 1e-10
         self._embeddings = self._embeddings / norms

@@ -29,17 +29,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class LearningPathServiceImpl
         extends ServiceImpl<LearningPathMapper, LearningPath>
         implements LearningPathService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(LearningPathServiceImpl.class);
 
     private final LearningPathStepMapper stepMapper;
     private final AgentServiceClient agentServiceClient;
     private final StudentProfileService studentProfileService;
     private final CourseMapper courseMapper;
+    public LearningPathServiceImpl(LearningPathStepMapper stepMapper, AgentServiceClient agentServiceClient, StudentProfileService studentProfileService, CourseMapper courseMapper) {
+        this.stepMapper = stepMapper;
+        this.agentServiceClient = agentServiceClient;
+        this.studentProfileService = studentProfileService;
+        this.courseMapper = courseMapper;
+    }
 
     @Override
     @Transactional

@@ -10,13 +10,13 @@ import com.edu.agent.module.user.entity.User;
 import com.edu.agent.module.user.mapper.UserMapper;
 import com.edu.agent.module.user.service.UserService;
 import com.edu.agent.security.LoginUser;
-import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
-@Slf4j
 @Service
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(UserServiceImpl.class);
 
     @Override
     public UserDTO getUserById(Long id) {

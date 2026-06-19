@@ -39,10 +39,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession> implements ChatService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ChatServiceImpl.class);
 
     private final AgentServiceClient agentServiceClient;
     private final ChatMessageMapper messageMapper;
@@ -52,6 +51,15 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
     private final StudentProfileQuestionnaireService questionnaireService;
     private final ScheduleService scheduleService;
     private final ExecutorService streamExecutor = Executors.newCachedThreadPool();
+    public ChatServiceImpl(AgentServiceClient agentServiceClient, ChatMessageMapper messageMapper, KnowledgeMapper knowledgeMapper, CourseMapper courseMapper, StudentProfileService studentProfileService, StudentProfileQuestionnaireService questionnaireService, ScheduleService scheduleService) {
+        this.agentServiceClient = agentServiceClient;
+        this.messageMapper = messageMapper;
+        this.knowledgeMapper = knowledgeMapper;
+        this.courseMapper = courseMapper;
+        this.studentProfileService = studentProfileService;
+        this.questionnaireService = questionnaireService;
+        this.scheduleService = scheduleService;
+    }
 
     @Override
     @Transactional
@@ -158,6 +166,9 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
         assistantMessage.setContent(agentResponse);
         messageMapper.insert(assistantMessage);
 
+        // 对话中自动检测问答，记录错题
+        tryAutoRecordMistake(sessionId, String.valueOf(userId), request.getMessage());
+
         // Update session title if first message
         if ("新对话".equals(session.getTitle())) {
             String title = request.getMessage().length() > 50
@@ -230,6 +241,8 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
                     assistantMessage.setRole("ASSISTANT");
                     assistantMessage.setContent(fullResponse);
                     messageMapper.insert(assistantMessage);
+                    // 对话中自动记录错题
+                    tryAutoRecordMistake(sessionId, String.valueOf(userId), request.getMessage());
                 }
                 SecurityContextHolder.clearContext();
             }
@@ -357,7 +370,7 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
                     }
                     if (!daySchedule.isEmpty()) {
                         context.put("schedule", daySchedule);
-                        log.info("??????????: userId={}, courses={}", userId, courses.size());
+                        log.info("?????????: userId={}, courses={}", userId, courses.size());
                     }
                 }
             } catch (Exception e) {
@@ -458,4 +471,146 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
         }
         return dto;
     }
+
+    /**
+     * 对话中自动检测问答并记录错题
+     * 如果上一条 AI 消息是提问（以?或？结尾），
+     * 则将当前用户回答自动记录到错题本
+     */
+        private void tryAutoRecordMistake(Long sessionId, String userId, String userMessage) {
+        try {
+            LambdaQueryWrapper<ChatMessage> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(ChatMessage::getSessionId, sessionId)
+                   .orderByDesc(ChatMessage::getCreateTime)
+                   .last("LIMIT 4");
+            List<ChatMessage> recentMessages = messageMapper.selectList(wrapper);
+
+            if (recentMessages.size() < 2) return;
+
+            // recentMessages[0] = ?? assistant (????)
+            // recentMessages[1] = ?????
+            // recentMessages[2] = ??? AI (?????)
+            ChatMessage lastAiMsg = null;
+            ChatMessage prevAiMsg = null;
+            int aiCount = 0;
+            for (ChatMessage msg : recentMessages) {
+                if ("ASSISTANT".equals(msg.getRole())) {
+                    aiCount++;
+                    if (aiCount == 1) lastAiMsg = msg;
+                    else if (aiCount == 2) { prevAiMsg = msg; break; }
+                }
+            }
+
+            if (lastAiMsg == null) return;
+
+            String lastContent = lastAiMsg.getContent();
+            if (lastContent == null) return;
+            lastContent = lastContent.trim();
+
+            // ??1??? AI ??????300?? ? / ?
+            boolean isQuestion = lastContent.endsWith("?") || lastContent.endsWith("？");
+            if (!isQuestion) {
+                String tail = lastContent.length() > 300 
+                    ? lastContent.substring(lastContent.length() - 300) 
+                    : lastContent;
+                isQuestion = tail.contains("?") || tail.contains("？");
+            }
+            // 收紧提问判断：AI消息必须包含教育场景关键词（计算、题目、练习等）
+            if (isQuestion) {
+                String lowLast = lastContent.toLowerCase();
+                boolean isEdu = lowLast.contains("计算") || lowLast.contains("题目") 
+                    || lowLast.contains("练习") || lowLast.contains("答案")
+                    || lowLast.contains("等于") || lowLast.contains("calculate")
+                    || lowLast.contains("question") || lowLast.contains("problem")
+                    || lowLast.contains("solve") || lowLast.contains("exercise")
+                    || lowLast.contains("判断") || lowLast.contains("填空")
+                    || lowLast.contains("选择") || lowLast.contains("简答")
+                    || lowLast.contains("求解") || lowLast.contains("解答")
+                    || lowLast.contains("证明");
+                if (!isEdu) isQuestion = false;
+            }
+
+            // ??2??? AI ?????????
+            // 先检查 AI 是否在表扬学生（答对了 → 不记录错题）
+            boolean isPraise = false;
+            String[] praiseKeywords = {
+                "你答对了", "回答正确", "完全正确", "正确无误",
+                "做得很好", "非常好", "很好！", "没错",
+                "答案正确", "you are correct", "that's right",
+                "well done", "good job", "exactly right"
+            };
+            for (String kw : praiseKeywords) {
+                if (lastContent.contains(kw)) {
+                    isPraise = true;
+                    break;
+                }
+            }
+            if (isPraise) return;
+
+            boolean isCorrection = false;
+            if (!isQuestion) {
+                String[] correctionKeywords = {
+                    "不对", "不正确", "错了", "错误", "不等于", "不是", "错的",
+                    "正确答案", "应该是", "解答", "答案是", "实际上",
+                    "incorrect", "wrong", "not correct", "mistake",
+                    "correct answer", "should be", "actually"
+                };
+                for (String kw : correctionKeywords) {
+                    if (lastContent.contains(kw)) {
+                        isCorrection = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!isQuestion && !isCorrection) return;
+
+            // 过滤用户消息：跳过问候语、闲聊、纯表情等
+            String trimmedUser = userMessage.trim().toLowerCase();
+            String[] skipPatterns = {
+                "你好", "hi", "hello", "hey", "在吗", "在不",
+                "谢谢", "thanks", "thank you", "好的", "ok",
+                "晚上好", "早上好", "下午好",
+                "晚安", "再见", "bye", "goodbye",
+                "哈哈", "嘻嘻", "啊", "哦",
+                "没事", "无聊"
+            };
+            boolean isGreeting = false;
+            for (String p : skipPatterns) {
+                if (trimmedUser.equals(p) || trimmedUser.startsWith(p)) {
+                    isGreeting = true;
+                    break;
+                }
+            }
+            if (isGreeting || trimmedUser.length() < 2) return;
+
+            // 过滤：如果用户消息是提问（问问题），不是回答 → 跳过
+            if (trimmedUser.endsWith("?") || trimmedUser.endsWith("？")
+                || trimmedUser.contains("什么") || trimmedUser.contains("怎么")
+                || trimmedUser.contains("多少") || trimmedUser.contains("如何")
+                || trimmedUser.contains("哪个") || trimmedUser.contains("为什么")
+                || trimmedUser.contains("what") || trimmedUser.contains("how")
+                || trimmedUser.contains("which") || trimmedUser.contains("why")) {
+                return;
+            }
+
+            // ?????????
+            if (userMessage.length() > 500) return;
+
+            // 简洁传参：用户说的原话 + AI的纠正回复，让LLM自行提取题目和答案
+            final String studentSaid = userMessage;
+            final String aiCorrection = lastContent;
+            streamExecutor.submit(() -> {
+                try {
+                    agentServiceClient.diagnoseMistake(userId, studentSaid, studentSaid, aiCorrection);
+                    log.info("自动记录错题成功: userId={}", userId);
+                } catch (Exception e) {
+                    log.debug("自动记录错题跳过: {}", e.getMessage());
+                }
+            });
+        } catch (Exception e) {
+            log.debug("自动记录错题跳过: {}", e.getMessage());
+        }
+    }
+
 }

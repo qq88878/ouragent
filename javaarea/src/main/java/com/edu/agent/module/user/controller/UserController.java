@@ -4,16 +4,17 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.edu.agent.common.result.Result;
 import com.edu.agent.module.user.dto.UserDTO;
 import com.edu.agent.module.user.service.UserService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/users")
-@RequiredArgsConstructor
 public class UserController {
 
     private final UserService userService;
+    public UserController(UserService userService) {
+        this.userService = userService;
+    }
 
     @GetMapping("/me")
     public Result<UserDTO> getCurrentUser() {

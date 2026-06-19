@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS `user` (
     `email`          VARCHAR(128) DEFAULT NULL,
     `phone`          VARCHAR(32)  DEFAULT NULL,
     `avatar`         VARCHAR(255) DEFAULT NULL,
+    `education_level` VARCHAR(32)  DEFAULT NULL COMMENT 'PRIMARY / JUNIOR / SENIOR / UNIVERSITY',
+    `major`          VARCHAR(255) DEFAULT NULL COMMENT '大学为专业名，小初高为感兴趣学科(逗号分隔)',
     `role`           VARCHAR(32)  NOT NULL DEFAULT 'STUDENT' COMMENT 'STUDENT / TEACHER / ADMIN',
     `status`         TINYINT      NOT NULL DEFAULT 1 COMMENT '1=active 0=disabled',
     `email_verified` TINYINT      NOT NULL DEFAULT 0 COMMENT '0=unverified 1=verified',

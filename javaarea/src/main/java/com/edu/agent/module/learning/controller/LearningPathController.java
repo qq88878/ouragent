@@ -6,7 +6,6 @@ import com.edu.agent.module.learning.dto.LearningPathGenerateRequest;
 import com.edu.agent.module.learning.service.LearningPathService;
 import com.edu.agent.security.LoginUser;
 import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -15,11 +14,13 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/learning/paths")
-@RequiredArgsConstructor
 @PreAuthorize("hasRole('STUDENT')")
 public class LearningPathController {
 
     private final LearningPathService learningPathService;
+    public LearningPathController(LearningPathService learningPathService) {
+        this.learningPathService = learningPathService;
+    }
 
     @PostMapping("/generate")
     public Result<LearningPathDTO> generatePath(@Valid @RequestBody LearningPathGenerateRequest request) {

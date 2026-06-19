@@ -6,7 +6,6 @@ import com.edu.agent.module.course.dto.CourseDTO;
 import com.edu.agent.module.course.dto.CourseQueryDTO;
 import com.edu.agent.module.course.service.CourseService;
 import com.edu.agent.security.LoginUser;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
@@ -15,10 +14,12 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/courses")
-@RequiredArgsConstructor
 public class CourseController {
 
     private final CourseService courseService;
+    public CourseController(CourseService courseService) {
+        this.courseService = courseService;
+    }
 
     @PostMapping
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")

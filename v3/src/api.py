@@ -1,4 +1,4 @@
-"""
+﻿"""
 Agent 微服务 API - 供 Java 后端调用
 
 接口清单（对齐 Java AgentServiceClient）:
@@ -839,3 +839,126 @@ async def record_answer_result(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ==================== 错题本接口 ====================
+
+class MistakeBookAddRequest(BaseModel):
+    user_id: str = Field(..., description="用户ID")
+    question: str = Field(..., description="题目内容")
+    student_answer: str = Field(..., description="学生答案")
+    correct_answer: str = Field(default="", description="正确答案")
+    error_category: str = Field(default="concept_unclear", description="错误分类")
+    course_id: Optional[int] = Field(default=None, description="课程ID")
+    knowledge_id: Optional[int] = Field(default=None, description="知识点ID")
+    knowledge_name: str = Field(default="", description="知识点名称")
+
+class MistakeBookReviewRequest(BaseModel):
+    mistake_id: str = Field(..., description="错题ID")
+    recalled: bool = Field(..., description="是否回忆成功")
+
+class MistakeBookDiagnoseRequest(BaseModel):
+    user_id: str = Field(..., description="用户ID")
+    question: str = Field(..., description="题目")
+    student_answer: str = Field(..., description="学生答案")
+    correct_answer: str = Field(default="", description="正确答案")
+    course_id: Optional[int] = Field(default=None, description="课程ID")
+
+@app.post("/agent/mistake-book/add")
+async def add_mistake(request: MistakeBookAddRequest, _: dict = Depends(get_current_user)):
+    if not orchestrator: raise HTTPException(status_code=503, detail="Agent 未初始化")
+    try:
+        result = await orchestrator.add_mistake(user_id=request.user_id, question=request.question, student_answer=request.student_answer, correct_answer=request.correct_answer, error_category=request.error_category, course_id=request.course_id, knowledge_id=request.knowledge_id, knowledge_name=request.knowledge_name)
+        return result
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/agent/mistake-book/{mistake_id}")
+async def delete_mistake(mistake_id: str, _: dict = Depends(get_current_user)):
+    """删除单条错题"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+    try:
+        result = await orchestrator.delete_mistake(mistake_id)
+        if not result:
+            raise HTTPException(status_code=404, detail="错题不存在")
+        return {"success": True, "mistake_id": mistake_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/agent/mistake-book/user/{user_id}")
+async def clear_mistakes(user_id: str, _: dict = Depends(get_current_user)):
+    """清空用户所有错题"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+    try:
+        count = await orchestrator.clear_mistakes(user_id)
+        return {"success": True, "deleted_count": count}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/agent/mistake-book/list/{user_id}")
+async def list_mistakes(user_id: str, course_id: Optional[int] = None, error_category: Optional[str] = None, limit: int = 50, offset: int = 0, _: dict = Depends(get_current_user)):
+    if not orchestrator: raise HTTPException(status_code=503, detail="Agent 未初始化")
+    try:
+        result = await orchestrator.list_mistakes(user_id=user_id, course_id=course_id, error_category=error_category, limit=limit, offset=offset)
+        return {"mistakes": result, "total": len(result)}
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/agent/mistake-book/review")
+async def record_review(request: MistakeBookReviewRequest, _: dict = Depends(get_current_user)):
+    if not orchestrator: raise HTTPException(status_code=503, detail="Agent 未初始化")
+    try:
+        result = await orchestrator.record_review(mistake_id=request.mistake_id, recalled=request.recalled)
+        return result
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/agent/mistake-book/stats/{user_id}")
+async def get_mistake_stats(user_id: str, _: dict = Depends(get_current_user)):
+    if not orchestrator: raise HTTPException(status_code=503, detail="Agent 未初始化")
+    try:
+        result = await orchestrator.get_mistake_stats(user_id)
+        return result
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/agent/mistake-book/due/{user_id}")
+async def get_due_reviews(user_id: str, limit: int = 20, _: dict = Depends(get_current_user)):
+    if not orchestrator: raise HTTPException(status_code=503, detail="Agent 未初始化")
+    try:
+        result = await orchestrator.get_due_reviews(user_id, limit)
+        return {"due_reviews": result, "total": len(result)}
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/agent/mistake-book/diagnose")
+async def diagnose_mistake(request: MistakeBookDiagnoseRequest, _: dict = Depends(get_current_user)):
+    if not orchestrator: raise HTTPException(status_code=503, detail="Agent 未初始化")
+    try:
+        result = await orchestrator.diagnose_mistake(user_id=request.user_id, question=request.question, student_answer=request.student_answer, correct_answer=request.correct_answer, course_id=request.course_id)
+        return result
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/agent/mistake-book/practice")
+async def generate_practice(request: MistakeBookDiagnoseRequest, _: dict = Depends(get_current_user)):
+    if not orchestrator: raise HTTPException(status_code=503, detail="Agent 未初始化")
+    try:
+        result = await orchestrator.generate_practice(user_id=request.user_id, question=request.question, student_answer=request.student_answer, correct_answer=request.correct_answer, course_id=request.course_id)
+        return result
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/agent/mistake-book/daily-review")
+async def daily_review_check(user_id: str = Form(...), _: dict = Depends(get_current_user)):
+    if not orchestrator: raise HTTPException(status_code=503, detail="Agent 未初始化")
+    try:
+        result = await orchestrator.generate_daily_review_notifications(user_id)
+        return {"notifications": result, "total": len(result)}
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/agent/mistake-book/notifications/{user_id}")
+async def get_notifications(user_id: str, limit: int = 10, _: dict = Depends(get_current_user)):
+    if not orchestrator: raise HTTPException(status_code=503, detail="Agent 未初始化")
+    try:
+        result = await orchestrator.get_pending_notifications(user_id, limit)
+        return {"notifications": result, "total": len(result)}
+    except Exception as e: raise HTTPException(status_code=500, detail=str(e))
+

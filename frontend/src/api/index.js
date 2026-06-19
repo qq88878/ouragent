@@ -153,4 +153,37 @@ export const scheduleApi = {
     deleteCourse(id) { return http.delete(`/schedule/courses/${id}`); },
     getWeekView(weekOffset = 0) { return http.get('/schedule/week-view', { params: { weekOffset } }); },
 };
+
+// Agent service??????JWT?????????
+const agentHttp = axios.create({
+    baseURL: '/agent',
+    timeout: 120000,
+});
+agentHttp.interceptors.request.use((config) => {
+    const token = localStorage.getItem('accessToken');
+    if (token) config.headers.Authorization = `Bearer ${token}`;
+    return config;
+});
+agentHttp.interceptors.response.use(
+    (response) => response.data,
+    (error) => Promise.reject(error)
+);
+
+
+// 错题本API
+export const mistakeBookApi = {
+    add(data) { return agentHttp.post('/mistake-book/add', data); },
+    list(userId, params = {}) { return agentHttp.get(`/mistake-book/list/${userId}`, { params }); },
+    review(data) { return agentHttp.post('/mistake-book/review', data); },
+
+    delete(mistakeId) { return agentHttp.delete(`/mistake-book/${mistakeId}`); },
+    clearAll(userId) { return agentHttp.delete(`/mistake-book/user/${userId}`); },
+    stats(userId) { return agentHttp.get(`/mistake-book/stats/${userId}`); },
+    dueReviews(userId, limit = 20) { return agentHttp.get(`/mistake-book/due/${userId}`, { params: { limit } }); },
+    diagnose(data) { return agentHttp.post('/mistake-book/diagnose', data); },
+    practice(data) { return agentHttp.post('/mistake-book/practice', data); },
+    dailyReview(userId) { return agentHttp.post('/mistake-book/daily-review', new URLSearchParams({ user_id: userId })); },
+    notifications(userId, limit = 10) { return agentHttp.get(`/mistake-book/notifications/${userId}`, { params: { limit } }); },
+};
+
 export default http;

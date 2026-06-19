@@ -26,13 +26,16 @@ import org.springframework.util.StringUtils;
 import java.util.List;
 import java.util.stream.Collectors;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class CourseServiceImpl extends ServiceImpl<CourseMapper, Course> implements CourseService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(CourseServiceImpl.class);
 
     private final CourseEnrollmentMapper enrollmentMapper;
     private final UserMapper userMapper;
+    public CourseServiceImpl(CourseEnrollmentMapper enrollmentMapper, UserMapper userMapper) {
+        this.enrollmentMapper = enrollmentMapper;
+        this.userMapper = userMapper;
+    }
 
     @Override
     @Transactional

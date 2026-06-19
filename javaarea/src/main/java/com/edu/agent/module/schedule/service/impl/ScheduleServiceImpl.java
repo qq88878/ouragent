@@ -12,7 +12,6 @@ import com.edu.agent.module.schedule.service.ScheduleService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,12 +22,16 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class ScheduleServiceImpl implements ScheduleService {
 
     private final ScheduleConfigMapper configMapper;
     private final ScheduleCourseMapper courseMapper;
     private final ObjectMapper objectMapper;
+    public ScheduleServiceImpl(ScheduleConfigMapper configMapper, ScheduleCourseMapper courseMapper, ObjectMapper objectMapper) {
+        this.configMapper = configMapper;
+        this.courseMapper = courseMapper;
+        this.objectMapper = objectMapper;
+    }
 
     @Override
     public ScheduleConfigDTO getConfig(Long userId) {

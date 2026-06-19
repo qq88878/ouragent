@@ -45,6 +45,7 @@ services:
       - AGENT_SERVICE_URL=http://agent-service:8000
       - AGENT_SERVICE_KEY=${AGENT_SERVICE_KEY:-internal-agent-key-2024}
       - AGENT_TIMEOUT=${AGENT_TIMEOUT:-120000}
+      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
     volumes:
       - java-uploads:/data/uploads
     depends_on:
@@ -88,6 +89,7 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
       - SECRET_KEY=${SECRET_KEY:-change-this-in-production}
+      - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
       - AGENT_SERVICE_KEY=${AGENT_SERVICE_KEY:-internal-agent-key-2024}
       - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
       - LLM_PROVIDER=${LLM_PROVIDER:-openai}
@@ -127,6 +129,7 @@ services:
     volumes:
       - mysql-data:/var/lib/mysql
       - ./javaarea/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ./javaarea/src/main/resources/db/migration_001_add_education.sql:/docker-entrypoint-initdb.d/04-migration.sql:ro
       - ./v3/config/mysql-init.sql:/docker-entrypoint-initdb.d/02-agent.sql:ro
       - ./javaarea/src/main/resources/db/seed.sql:/docker-entrypoint-initdb.d/03-seed.sql:ro
     healthcheck:

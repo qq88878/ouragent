@@ -12,11 +12,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@Slf4j
 @Service
 public class StudentProfileQuestionnaireServiceImpl
         extends ServiceImpl<StudentProfileQuestionnaireMapper, StudentProfileQuestionnaire>
         implements StudentProfileQuestionnaireService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(StudentProfileQuestionnaireServiceImpl.class);
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 

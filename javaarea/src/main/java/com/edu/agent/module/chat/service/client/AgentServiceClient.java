@@ -24,9 +24,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
-@Slf4j
 @Service
 public class AgentServiceClient {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AgentServiceClient.class);
 
     private final RestTemplate restTemplate;
     private final String agentServiceUrl;
@@ -96,6 +96,37 @@ public class AgentServiceClient {
 
     // ===== Phase 2: Knowledge =====
 
+    public String ingestKnowledge(Long knowledgeId, Long courseId, String filePath, String fileType) {
+        try {
+            HttpHeaders headers = createHeaders();
+            headers.setContentType(new MediaType(MediaType.MULTIPART_FORM_DATA, StandardCharsets.UTF_8));
+
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            body.add("file", new FileSystemResource(filePath));
+            body.add("knowledge_id", knowledgeId.toString());
+            body.add("course_id", courseId != null ? courseId.toString() : "");
+
+            HttpEntity<MultiValueMap<String, Object>> request = new HttpEntity<>(body, headers);
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    agentServiceUrl + "/agent/knowledge/ingest", request, Map.class);
+
+            if (response.getBody() != null) {
+                Object status = response.getBody().get("status");
+                return status != null ? status.toString() : "failed";
+            }
+            return "failed";
+        } catch (Exception e) {
+            log.error("调用 Agent 知识入库失败: knowledgeId={}", knowledgeId, e);
+            return "failed";
+        }
+    }
+
+    /**
+     * Send a file to the agent service for knowledge ingestion via multipart upload.
+     * Calls POST /agent/knowledge/ingest
+     */
+    @SuppressWarnings("unchecked")
+
     public AgentIngestResponse ingestKnowledgeFile(Long knowledgeId, Long courseId, File file) {
         MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
         body.add("file", new FileSystemResource(file));
@@ -113,16 +144,6 @@ public class AgentServiceClient {
     }
 
     // Keep legacy method for backward compatibility
-    public String ingestKnowledge(Long knowledgeId, Long courseId, String filePath, String fileType) {
-        try {
-            File file = new File(filePath);
-            AgentIngestResponse response = ingestKnowledgeFile(knowledgeId, courseId, file);
-            return response.getStatus() != null ? response.getStatus() : "failed";
-        } catch (Exception e) {
-            log.error("调用 Agent 知识入库失败: knowledgeId={}", knowledgeId, e);
-            return "failed";
-        }
-    }
 
     // ===== Phase 3: Enhanced AI =====
 
@@ -229,4 +250,31 @@ public class AgentServiceClient {
                 }
         );
     }
+
+    // ===== Phase 5: Mistake Book =====
+
+    /**
+     * 诊断错题，自动记录到错题本
+     */
+    public Map<String, Object> diagnoseMistake(String userId, String question, 
+                                                String studentAnswer, String correctAnswer) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("user_id", userId);
+        body.put("question", question);
+        body.put("student_answer", studentAnswer);
+        if (correctAnswer != null && !correctAnswer.isEmpty()) {
+            body.put("correct_answer", correctAnswer);
+        }
+
+        try {
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, createHeaders());
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    agentServiceUrl + "/agent/mistake-book/diagnose", request, Map.class);
+            return response.getBody() != null ? response.getBody() : new HashMap<>();
+        } catch (Exception e) {
+            log.error("调用错题诊断失败: userId={}", userId, e);
+            return new HashMap<>();
+        }
+    }
+
 }

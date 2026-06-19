@@ -14,11 +14,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.HashMap;
 import java.util.Map;
 
-@Slf4j
 @Service
 public class StudentProfileServiceImpl
         extends ServiceImpl<StudentProfileMapper, StudentProfile>
         implements StudentProfileService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(StudentProfileServiceImpl.class);
 
     @Override
     public StudentProfile getProfile(Long userId) {

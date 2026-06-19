@@ -1,32 +1,49 @@
-"""
-服务间认证 - Agent微服务内部调用鉴权
-使用共享密钥验证，不面向终端用户
+﻿"""
+服务间认证 + JWT用户认证
+支持两种认证方式：
+1. X-Service-Key — Java后端内部调用
+2. JWT Bearer Token — 前端直接调用
 """
 
 import os
-from fastapi import Depends, HTTPException, Header, status
+import logging
+from fastapi import Depends, HTTPException, Header, Request, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-# 服务间共享密钥（从环境变量读取）
+logger = logging.getLogger(__name__)
+
+# 服务间共享密钥
 AGENT_SERVICE_KEY = os.environ.get("AGENT_SERVICE_KEY", "default-dev-key")
 
+# JWT认证方案
+security_scheme = HTTPBearer(auto_error=False)
 
-async def get_current_user(x_service_key: str = Header(..., alias="X-Service-Key")) -> dict:
+
+async def get_current_user(
+    request: Request,
+    x_service_key: str = Header(default=None, alias="X-Service-Key"),
+    credentials: HTTPAuthorizationCredentials = Depends(security_scheme),
+) -> dict:
     """
-    验证服务间密钥（FastAPI 依赖注入）
+    双重认证：JWT Token 或 X-Service-Key
 
-    Java后端调用Agent时必须在请求头中携带:
-        X-Service-Key: <密钥>
-
-    Returns:
-        dict: 包含 service 信息的字典
-
-    Raises:
-        HTTPException 403: 密钥不匹配
+    优先级：JWT > X-Service-Key
     """
-    if x_service_key != AGENT_SERVICE_KEY:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="无效的服务密钥",
-        )
+    # 方式1：JWT Bearer Token
+    if credentials:
+        try:
+            from src.auth.jwt_handler import decode_jwt_token
+            payload = decode_jwt_token(credentials.credentials)
+            return {"user_id": str(payload.get("user_id", payload.get("sub", ""))), "authenticated": True, "auth_type": "jwt"}
+        except Exception as e:
+            logger.warning(f"JWT验证失败: {e}")
 
-    return {"service": "java-backend", "authenticated": True}
+    # 方式2：X-Service-Key
+    if x_service_key and x_service_key == AGENT_SERVICE_KEY:
+        return {"service": "java-backend", "authenticated": True, "auth_type": "service_key"}
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="认证失败：请提供有效的JWT Token或服务密钥",
+    )
+

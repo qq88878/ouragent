@@ -14,14 +14,16 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@Slf4j
 @RestController
 @RequestMapping("/schedule")
-@RequiredArgsConstructor
 @PreAuthorize("hasRole('STUDENT')")
 public class ScheduleController {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ScheduleController.class);
 
     private final ScheduleService scheduleService;
+    public ScheduleController(ScheduleService scheduleService) {
+        this.scheduleService = scheduleService;
+    }
 
     @GetMapping("/ping")
     public Result<String> ping() {

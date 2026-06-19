@@ -13,8 +13,6 @@ import com.edu.agent.module.user.mapper.UserMapper;
 import com.edu.agent.security.JwtProvider;
 import com.edu.agent.security.LoginUser;
 import io.jsonwebtoken.Claims;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -25,16 +23,22 @@ import java.time.LocalDateTime;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AuthServiceImpl.class);
 
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final RedisTemplate<String, Object> redisTemplate;
     private final EmailService emailService;
+    public AuthServiceImpl(UserMapper userMapper, PasswordEncoder passwordEncoder, JwtProvider jwtProvider, RedisTemplate<String, Object> redisTemplate, EmailService emailService) {
+        this.userMapper = userMapper;
+        this.passwordEncoder = passwordEncoder;
+        this.jwtProvider = jwtProvider;
+        this.redisTemplate = redisTemplate;
+        this.emailService = emailService;
+    }
 
     @Override
     public void register(RegisterRequest request) {

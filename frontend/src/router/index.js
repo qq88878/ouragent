@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import MistakeBookView from '@/views/MistakeBookView.vue';
 
 const routes = [
   { path: '/', redirect: '/dashboard' },
@@ -45,7 +46,13 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-    path: '/learning',
+    path: '/mistake-book',
+    name: 'MistakeBook',
+    component: MistakeBookView,
+    meta: { requiresAuth: true },
+  },
+  {
+        path: '/learning',
     name: 'Learning',
     component: () => import('@/views/LearningView.vue'),
     meta: { requiresAuth: true },

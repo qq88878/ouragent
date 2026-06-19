@@ -36,7 +36,7 @@ class ProfileAgent(BaseAgent):
 1. 学习风格偏好（visual/auditory/reading/kinesthetic）
 2. 知识掌握情况（强项和薄弱点）
 3. 学习兴趣方向
-4. 适合的学习策略
+4. 适合的学习策略（要考虑学历阶段和专业特点）
 
 输出必须是结构化的 JSON 格式。"""
 
@@ -62,6 +62,8 @@ class ProfileAgent(BaseAgent):
         chat_history: List[Dict[str, str]],
         study_records: List[Dict[str, Any]],
         current_profile: Optional[Dict[str, Any]] = None,
+        education_level: Optional[str] = None,
+        major: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         分析学生并生成/更新画像
@@ -80,9 +82,20 @@ class ProfileAgent(BaseAgent):
         records_text = json.dumps(study_records, ensure_ascii=False) if study_records else "暂无学习记录"
         profile_text = json.dumps(current_profile, ensure_ascii=False) if current_profile else "暂无画像"
 
+        # 学历和学科信息
+        edu_info = ""
+        if education_level:
+            level_map = {"PRIMARY": "小学", "JUNIOR": "初中", "SENIOR": "高中", "UNIVERSITY": "大学"}
+            edu_info += f"学历阶段: {level_map.get(education_level, education_level)}\n"
+        if major:
+            if education_level == "UNIVERSITY":
+                edu_info += f"大学专业: {major}\n"
+            else:
+                edu_info += f"感兴趣学科: {major}\n"
+
         prompt = f"""请分析以下学生信息，生成学习画像。
 
-最近对话记录:
+{edu_info}最近对话记录:
 {history_text}
 
 学习记录:
@@ -98,7 +111,9 @@ class ProfileAgent(BaseAgent):
   "weaknesses": ["薄弱点1", "薄弱点2"],
   "interests": ["兴趣1", "兴趣2"],
   "grade_level": "beginner|intermediate|advanced",
-  "recommended_strategy": "建议的学习策略",
+  "recommended_strategy": "建议的学习策略（要考虑学历阶段特点）",
+  "education_level": "{education_level or ''}",
+  "major": "{major or ''}",
   "confidence": 0.8
 }}"""
 

@@ -20,15 +20,18 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.*;
 import java.util.stream.Collectors;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class StudyRecordServiceImpl
         extends ServiceImpl<StudyRecordMapper, StudyRecord>
         implements StudyRecordService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(StudyRecordServiceImpl.class);
 
     private final CourseMapper courseMapper;
     private final CourseEnrollmentMapper enrollmentMapper;
+    public StudyRecordServiceImpl(CourseMapper courseMapper, CourseEnrollmentMapper enrollmentMapper) {
+        this.courseMapper = courseMapper;
+        this.enrollmentMapper = enrollmentMapper;
+    }
 
     @Override
     @Transactional

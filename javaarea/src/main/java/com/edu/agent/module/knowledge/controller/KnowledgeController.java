@@ -17,13 +17,15 @@ import java.util.Map;
 
 import java.util.List;
 
-@Slf4j
 @RestController
 @RequestMapping("/knowledge")
-@RequiredArgsConstructor
 public class KnowledgeController {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(KnowledgeController.class);
 
     private final KnowledgeService knowledgeService;
+    public KnowledgeController(KnowledgeService knowledgeService) {
+        this.knowledgeService = knowledgeService;
+    }
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")

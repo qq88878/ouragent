@@ -28,6 +28,10 @@
           <el-icon><Calendar /></el-icon>
           <span>课表</span>
         </el-menu-item>
+        <el-menu-item v-if="isStudent" index="/mistake-book">
+          <el-icon><WarningFilled /></el-icon>
+          <span>错题本</span>
+        </el-menu-item>
         <el-menu-item v-if="isStudent" index="/learning">
           <el-icon><TrendCharts /></el-icon>
           <span>学习路径</span>
@@ -72,7 +76,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import {
   HomeFilled, ChatDotRound, Reading, TrendCharts,
-  Document, User, Setting, Avatar, Calendar,
+  Document, User, Setting, Avatar, Calendar, WarningFilled,
 } from '@element-plus/icons-vue';
 
 const route = useRoute();
@@ -108,6 +112,7 @@ const pageTitles = {
   '/chat': '智能对话',
   '/courses': '课程中心',
   '/schedule': '课表',
+  '/mistake-book': '错题本',
   '/learning': '学习路径',
   '/knowledge': '知识库',
   '/profile': '个人资料',

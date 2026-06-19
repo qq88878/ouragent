@@ -22,10 +22,9 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Map;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class AdminServiceImpl implements AdminService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AdminServiceImpl.class);
 
     private final UserMapper userMapper;
     private final CourseMapper courseMapper;
@@ -34,6 +33,15 @@ public class AdminServiceImpl implements AdminService {
     private final AgentServiceClient agentServiceClient;
     private final LearningPathMapper learningPathMapper;
     private final StringRedisTemplate redisTemplate;
+    public AdminServiceImpl(UserMapper userMapper, CourseMapper courseMapper, ChatMessageMapper chatMessageMapper, KnowledgeMapper knowledgeMapper, AgentServiceClient agentServiceClient, LearningPathMapper learningPathMapper, StringRedisTemplate redisTemplate) {
+        this.userMapper = userMapper;
+        this.courseMapper = courseMapper;
+        this.chatMessageMapper = chatMessageMapper;
+        this.knowledgeMapper = knowledgeMapper;
+        this.agentServiceClient = agentServiceClient;
+        this.learningPathMapper = learningPathMapper;
+        this.redisTemplate = redisTemplate;
+    }
 
     @Override
     public DashboardStatsDTO getDashboardStats() {

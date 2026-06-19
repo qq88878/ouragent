@@ -35,15 +35,20 @@ import java.nio.file.Paths;
 import java.util.*;
 import java.util.stream.Collectors;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, KnowledgeBase> implements KnowledgeService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(KnowledgeServiceImpl.class);
 
     private final FileUploadConfig fileUploadConfig;
     private final CourseMapper courseMapper;
     private final UserMapper userMapper;
     private final AgentServiceClient agentServiceClient;
+    public KnowledgeServiceImpl(FileUploadConfig fileUploadConfig, CourseMapper courseMapper, UserMapper userMapper, AgentServiceClient agentServiceClient) {
+        this.fileUploadConfig = fileUploadConfig;
+        this.courseMapper = courseMapper;
+        this.userMapper = userMapper;
+        this.agentServiceClient = agentServiceClient;
+    }
 
     @Override
     @Transactional

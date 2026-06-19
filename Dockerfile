@@ -1,5 +1,5 @@
-# ============================================================
-# Python Agent 服务 - 多阶段构�?
+﻿# ============================================================
+# Python Agent 服务 - 多阶段构�?
 # 优化镜像大小，加快构建速度
 # ============================================================
 
@@ -9,19 +9,19 @@ FROM python:3.13-slim AS builder
 # 设置工作目录
 WORKDIR /build
 
-# 安装构建依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN sed -i "s/deb.debian.org/mirrors.aliyun.com/g" /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # 复制依赖文件
 COPY v3/requirements-core.txt .
 
-# 创建虚拟环境并安装依�?
+# 创建虚拟环境并安装依�?
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-# 使用清华镜像源安装依�?
+# 使用清华镜像源安装依�?
 RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple \
     --prefer-binary \
     -r requirements-core.txt
@@ -45,7 +45,7 @@ RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debia
 # 复制应用代码
 COPY v3/ .
 
-# 创建必要的目�?
+# 创建必要的目�?
 RUN mkdir -p logs data uploads
 
 # 设置环境变量
@@ -58,7 +58,7 @@ ENV PORT=8000
 # 暴露端口
 EXPOSE 8000
 
-# 健康检�?
+# 健康检�?
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
