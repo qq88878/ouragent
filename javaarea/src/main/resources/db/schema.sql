@@ -1,5 +1,5 @@
-CREATE DATABASE IF NOT EXISTS edu_agent;
-USE edu_agent;
+﻿CREATE DATABASE IF NOT EXISTS edu;
+USE edu;
 
 -- ============================================================
 -- edu-agent Database Schema

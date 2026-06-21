@@ -1,4 +1,4 @@
-# AI教育系统 -- Java后端
+﻿# AI教育系统 -- Java后端
 
 基于Spring Boot 3的AI驱动智能教育平台后端服务。教师上传知识库，学生获得基于RAG的AI问答和个性化学习路线。
 
@@ -105,10 +105,10 @@ src/main/resources/
 
 ```bash
 # 创建数据库
-mysql -u root -p -e "CREATE DATABASE edu_agent DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+mysql -u root -p -e "CREATE DATABASE edu DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
 # 导入表结构
-mysql -u root -p edu_agent < src/main/resources/db/schema.sql
+mysql -u root -p edu < src/main/resources/db/schema.sql
 ```
 
 ### 2. 配置应用
@@ -118,7 +118,7 @@ mysql -u root -p edu_agent < src/main/resources/db/schema.sql
 ```yaml
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/edu_agent?useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://localhost:3306/edu?useSSL=false&serverTimezone=Asia/Shanghai
     username: root
     password: your_password
   data:

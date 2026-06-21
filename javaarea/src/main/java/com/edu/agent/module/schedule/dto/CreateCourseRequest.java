@@ -14,6 +14,8 @@ public class CreateCourseRequest {
     private List<Integer> dayOfWeeks;
     @NotEmpty(message = "时间段不能为空")
     private List<Integer> periodIndexes;
+    private String location;
+    private String remark;
 
     @java.lang.SuppressWarnings("all")
     public CreateCourseRequest() {
@@ -40,6 +42,16 @@ public class CreateCourseRequest {
     }
 
     @java.lang.SuppressWarnings("all")
+    public String getLocation() {
+        return this.location;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public String getRemark() {
+        return this.remark;
+    }
+
+    @java.lang.SuppressWarnings("all")
     public void setName(final String name) {
         this.name = name;
     }
@@ -57,6 +69,16 @@ public class CreateCourseRequest {
     @java.lang.SuppressWarnings("all")
     public void setPeriodIndexes(final List<Integer> periodIndexes) {
         this.periodIndexes = periodIndexes;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setLocation(final String location) {
+        this.location = location;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setRemark(final String remark) {
+        this.remark = remark;
     }
 
     @java.lang.Override

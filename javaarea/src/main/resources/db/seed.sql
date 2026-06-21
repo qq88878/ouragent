@@ -1,10 +1,10 @@
--- ============================================================
+﻿-- ============================================================
 -- Seed Data for Development
 -- Default passwords are BCrypt-hashed: "123456"
 -- Run after schema.sql
 -- ============================================================
 
-USE edu_agent;
+USE edu;
 
 -- Admin account: admin / 123456
 INSERT IGNORE INTO `user` (`username`, `password`, `nickname`, `email`, `role`, `status`, `email_verified`)

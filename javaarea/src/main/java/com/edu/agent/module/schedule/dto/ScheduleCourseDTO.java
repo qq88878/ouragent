@@ -9,6 +9,8 @@ public class ScheduleCourseDTO {
     private List<Integer> weekNumbers;
     private List<Integer> dayOfWeeks;
     private List<Integer> periodIndexes;
+    private String location;
+    private String remark;
 
     @java.lang.SuppressWarnings("all")
     public Long getId() {
@@ -36,6 +38,16 @@ public class ScheduleCourseDTO {
     }
 
     @java.lang.SuppressWarnings("all")
+    public String getLocation() {
+        return this.location;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public String getRemark() {
+        return this.remark;
+    }
+
+    @java.lang.SuppressWarnings("all")
     public void setId(final Long id) {
         this.id = id;
     }
@@ -58,6 +70,16 @@ public class ScheduleCourseDTO {
     @java.lang.SuppressWarnings("all")
     public void setPeriodIndexes(final List<Integer> periodIndexes) {
         this.periodIndexes = periodIndexes;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setLocation(final String location) {
+        this.location = location;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setRemark(final String remark) {
+        this.remark = remark;
     }
 
     @java.lang.Override

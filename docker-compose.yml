@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # Docker Compose - education system service orchestration
 # Java backend + Python Agent + Vue frontend (Nginx) + MySQL + Redis
 #
@@ -80,7 +80,7 @@ services:
       - PORT=8000
       - DB_HOST=mysql
       - DB_PORT=3306
-      - DB_NAME=${DB_NAME:-edu_agent}
+      - DB_NAME=${DB_NAME:-edu}
       - DB_USER=root
       - DB_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - DB_POOL_SIZE=${DB_POOL_SIZE:-10}
@@ -94,11 +94,11 @@ services:
       - CORS_ORIGINS=http://localhost:3000,http://localhost:8080
       - LLM_PROVIDER=${LLM_PROVIDER:-openai}
       - LLM_API_KEY=${LLM_API_KEY:-tp-c4ksz64wen9n5g0pbqjw34nfghupg0suks538m24snl8d61u}
-      - LLM_BASE_URL=${LLM_BASE_URL:-http://host.docker.internal:18080/v1}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://token-plan-cn.xiaomimimo.com/v1}
       - LLM_MODEL=${LLM_MODEL:-mimo-v2.5-pro}
-      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-sk-glrxajaobfyfrjrxawleeumwdcixvomrkoqkbabcxjrfahmo}
-      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-http://host.docker.internal:18080/v1}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-large-zh-v1.5}
+      - EMBEDDING_API_KEY=${EMBEDDING_API_KEY:-tp-c4ksz64wen9n5g0pbqjw34nfghupg0suks538m24snl8d61u}
+      - EMBEDDING_BASE_URL=${EMBEDDING_BASE_URL:-https://token-plan-cn.xiaomimimo.com/v1}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
     volumes:
       - agent-uploads:/app/uploads
       - agent-logs:/app/logs
@@ -123,7 +123,7 @@ services:
     container_name: edu-mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-edu_agent}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-edu}
     ports:
       - "3308:3306"
     volumes:

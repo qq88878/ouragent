@@ -117,7 +117,9 @@ public class ScheduleWeekViewDTO {
         private String periodName;
         private String startTime;
         private String endTime;
-        private String courseName; // null表示空闲
+        private String courseName;
+        private Long courseId;
+        private String location; // null表示空闲
 
         @java.lang.SuppressWarnings("all")
         public PeriodSlot() {
@@ -149,6 +151,16 @@ public class ScheduleWeekViewDTO {
         }
 
         @java.lang.SuppressWarnings("all")
+        public Long getCourseId() {
+            return this.courseId;
+        }
+
+        @java.lang.SuppressWarnings("all")
+        public String getLocation() {
+            return this.location;
+        }
+
+        @java.lang.SuppressWarnings("all")
         public void setPeriodIndex(final Integer periodIndex) {
             this.periodIndex = periodIndex;
         }
@@ -171,6 +183,16 @@ public class ScheduleWeekViewDTO {
         @java.lang.SuppressWarnings("all")
         public void setCourseName(final String courseName) {
             this.courseName = courseName;
+        }
+
+        @java.lang.SuppressWarnings("all")
+        public void setCourseId(final Long courseId) {
+            this.courseId = courseId;
+        }
+
+        @java.lang.SuppressWarnings("all")
+        public void setLocation(final String location) {
+            this.location = location;
         }
 
         @java.lang.Override

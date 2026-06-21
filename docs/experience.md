@@ -1,4 +1,4 @@
-# 从零部署 OurAgent 项目 —— 完整经验指南
+﻿# 从零部署 OurAgent 项目 —— 完整经验指南
 
 > 本文档记录了将整个项目从代码状态部署为 Docker 容器的完整过程、踩过的坑、以及每个部分的原理说明。
 > 目标读者：新手，有基础编程能力但不熟悉 Docker/微服务部署。
@@ -169,8 +169,8 @@ ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
 
 **MySQL（给 Java 用）**：
 - 服务名：`mysql`（Docker 内部 DNS 解析用这个名字）
-- 数据库名：`edu_agent`
-- 用户名/密码：`edu_agent` / `edu_agent_password`
+- 数据库名：`edu`
+- 用户名/密码：`edu` / `edu_password`
 - 对外端口：3307（避免和本机 MySQL 冲突）
 
 **PostgreSQL（给 Python 用）**：
@@ -193,7 +193,7 @@ docker-compose.yml 里的 `environment` 会注入到容器中。
 docker-compose.yml          application-prod.yml         Java 代码
 ─────────────────          ────────────────────         ─────────
 DB_HOST=mysql        -->   ${DB_HOST:mysql}        -->   连接 mysql:3306
-DB_USER=edu_agent    -->   ${DB_USER:edu_agent}    -->   用 edu_agent 登录
+DB_USER=edu    -->   ${DB_USER:edu}    -->   用 edu 登录
 DB_PASSWORD=xxx      -->   ${DB_PASSWORD:}         -->   密码 xxx
 ```
 
@@ -327,12 +327,12 @@ mysql:
 ```bash
 # 进入 MySQL 容器，改认证方式
 docker exec edu-mysql mysql -u root -proot_password -e \
-  "ALTER USER 'edu_agent'@'%' IDENTIFIED WITH mysql_native_password BY 'edu_agent_password'; FLUSH PRIVILEGES;"
+  "ALTER USER 'edu'@'%' IDENTIFIED WITH mysql_native_password BY 'edu_password'; FLUSH PRIVILEGES;"
 ```
 
 同时在 JDBC URL 里加参数：
 ```yaml
-url: jdbc:mysql://mysql:3306/edu_agent?...&useSSL=false&allowPublicKeyRetrieval=true
+url: jdbc:mysql://mysql:3306/edu?...&useSSL=false&allowPublicKeyRetrieval=true
 ```
 
 ### 坑 4：schema.sql 没有自动执行
@@ -348,11 +348,11 @@ volumes:
 
 **解决**：手动执行建表 SQL：
 ```bash
-docker exec -i edu-mysql mysql -u root -proot_password edu_agent < javaarea/src/main/resources/db/schema.sql
+docker exec -i edu-mysql mysql -u root -proot_password edu < javaarea/src/main/resources/db/schema.sql
 ```
 
-**注意**：schema.sql 里有 `CREATE DATABASE edu; USE edu;`，但实际数据库名是 `edu_agent`。
-需要去掉这两行，或者直接在 `edu_agent` 库里执行建表语句。
+**注意**：schema.sql 里有 `CREATE DATABASE edu; USE edu;`，但实际数据库名是 `edu`。
+需要去掉这两行，或者直接在 `edu` 库里执行建表语句。
 
 ### 坑 5：Spring Profile 不生效
 

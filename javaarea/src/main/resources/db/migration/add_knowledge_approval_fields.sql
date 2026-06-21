@@ -1,7 +1,7 @@
--- Add uploaded_by, approval_status, and approval_remark fields to knowledge_base table
+﻿-- Add uploaded_by, approval_status, and approval_remark fields to knowledge_base table
 -- This migration adds role-based access control for knowledge management
 
-USE edu_agent;
+USE edu;
 
 -- Add uploaded_by field to track who uploaded the file
 ALTER TABLE `knowledge_base`

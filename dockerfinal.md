@@ -1,4 +1,4 @@
-# OurAgent Docker 部署文档
+﻿# OurAgent Docker 部署文档
 
 > 基于大模型的个性化资源生成与学习多智能体系统
 
@@ -85,7 +85,7 @@ ouragent/
 ```bash
 # ==================== MySQL 数据库 ====================
 MYSQL_ROOT_PASSWORD=your_mysql_password    # 必须修改！
-MYSQL_DATABASE=edu_agent
+MYSQL_DATABASE=edu
 
 # ==================== Java 后端 ====================
 SPRING_PROFILES_ACTIVE=prod
@@ -109,7 +109,7 @@ APP_BASE_URL=http://localhost
 APP_ENV=production
 DEBUG=false
 LOG_LEVEL=INFO
-DB_NAME=edu_agent
+DB_NAME=edu
 DB_PORT=3306
 DB_POOL_SIZE=10
 DB_MAX_OVERFLOW=20
@@ -392,10 +392,10 @@ docker-compose exec agent-service bash
 docker-compose exec mysql mysql -uroot -p
 
 # 导出数据库
-docker-compose exec mysql mysqldump -uroot -p edu_agent > backup.sql
+docker-compose exec mysql mysqldump -uroot -p edu > backup.sql
 
 # 导入数据库
-docker-compose exec -T mysql mysql -uroot -p edu_agent < backup.sql
+docker-compose exec -T mysql mysql -uroot -p edu < backup.sql
 ```
 
 ### 向量库管理
@@ -533,7 +533,7 @@ docker-compose exec agent-service python import_education_data.py --source local
 
 ```bash
 # 定期备份数据库
-docker-compose exec mysql mysqldump -uroot -p edu_agent > backup_$(date +%Y%m%d).sql
+docker-compose exec mysql mysqldump -uroot -p edu > backup_$(date +%Y%m%d).sql
 
 # 备份向量库
 docker cp agent-service:/app/data/vector_store.json ./backup/

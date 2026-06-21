@@ -53,7 +53,7 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
     private final ScheduleService scheduleService;
     private final TransactionTemplate transactionTemplate;
     private final ExecutorService streamExecutor = Executors.newCachedThreadPool();
-    public ChatServiceImpl(AgentServiceClient agentServiceClient, ChatMessageMapper messageMapper, KnowledgeMapper knowledgeMapper, CourseMapper courseMapper, StudentProfileService studentProfileService, StudentProfileQuestionnaireService questionnaireService, ScheduleService scheduleService) {
+    public ChatServiceImpl(AgentServiceClient agentServiceClient, ChatMessageMapper messageMapper, KnowledgeMapper knowledgeMapper, CourseMapper courseMapper, StudentProfileService studentProfileService, StudentProfileQuestionnaireService questionnaireService, ScheduleService scheduleService, TransactionTemplate transactionTemplate) {
         this.agentServiceClient = agentServiceClient;
         this.messageMapper = messageMapper;
         this.knowledgeMapper = knowledgeMapper;
@@ -61,6 +61,7 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
         this.studentProfileService = studentProfileService;
         this.questionnaireService = questionnaireService;
         this.scheduleService = scheduleService;
+        this.transactionTemplate = transactionTemplate;
     }
 
     @Override

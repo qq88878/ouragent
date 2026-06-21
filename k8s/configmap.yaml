@@ -1,12 +1,12 @@
-apiVersion: v1
+﻿apiVersion: v1
 kind: ConfigMap
 metadata:
   name: edu-config
   namespace: edu-agent
 data:
   # MySQL
-  MYSQL_DATABASE: edu_agent
-  MYSQL_USER: edu_agent
+  MYSQL_DATABASE: edu
+  MYSQL_USER: edu
   DB_HOST: mysql
   # PostgreSQL
   POSTGRES_DB: agent_db

@@ -20,6 +20,8 @@ public class ScheduleCourse extends BaseEntity {
      * JSON: [0,1,2,...]
      */
     private String periodIndexes;
+    private String location;
+    private String remark;
 
     @java.lang.SuppressWarnings("all")
     public ScheduleCourse() {
@@ -60,6 +62,16 @@ public class ScheduleCourse extends BaseEntity {
     }
 
     @java.lang.SuppressWarnings("all")
+    public String getLocation() {
+        return this.location;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public String getRemark() {
+        return this.remark;
+    }
+
+    @java.lang.SuppressWarnings("all")
     public void setUserId(final Long userId) {
         this.userId = userId;
     }
@@ -91,6 +103,16 @@ public class ScheduleCourse extends BaseEntity {
     @java.lang.SuppressWarnings("all")
     public void setPeriodIndexes(final String periodIndexes) {
         this.periodIndexes = periodIndexes;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setLocation(final String location) {
+        this.location = location;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setRemark(final String remark) {
+        this.remark = remark;
     }
 
     @java.lang.Override
