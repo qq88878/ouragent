@@ -124,25 +124,25 @@ async function handleDelete(row) {
 </script>
 
 <style scoped>
-.user-mgmt-page { max-width: 1200px; }
+.user-mgmt-page { max-width: 1260px; }
 
-.page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
-.page-header h3 { font-size: 22px; font-weight: 700; color: var(--color-text); }
-.page-desc { font-size: 13px; color: var(--color-text-muted); margin-top: 4px; }
-.back-link { color: var(--color-text-muted); font-size: 13px; }
+.page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
+.page-header h3 { font-size: 24px; font-weight: 700; color: var(--color-text); letter-spacing: -0.01em; }
+.page-desc { font-size: 14px; color: var(--color-text-muted); margin-top: 4px; }
+.back-link { color: var(--color-text-muted); font-size: 14px; padding: 4px 10px; border-radius: 6px; }
+.back-link:hover { color: var(--color-primary); background: var(--color-bg-hover); }
 
 .table-card {
-  background: var(--color-bg-card);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-card);
-  overflow: hidden;
+  background: var(--color-bg-card); border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-card); overflow: hidden;
 }
 .mgmt-table { border-radius: var(--radius-xl); overflow: hidden; }
+.mgmt-table :deep(.el-table__body tr:hover > td) { background: var(--color-bg-hover) !important; }
 
-.status-cell { display: flex; align-items: center; gap: 8px; }
-.status-text { font-size: 12px; color: var(--color-text-secondary); }
+.status-cell { display: flex; align-items: center; gap: 10px; }
+.status-text { font-size: 13px; color: var(--color-text-secondary); font-weight: 500; }
 .status-text.disabled { color: var(--color-text-placeholder); }
-.text-muted { color: var(--color-text-placeholder); font-size: 12px; }
+.text-muted { color: var(--color-text-placeholder); font-size: 13px; }
 
-.pagination-wrap { padding: 16px 20px; display: flex; justify-content: flex-end; }
+.pagination-wrap { padding: 18px 22px; display: flex; justify-content: flex-end; }
 </style>

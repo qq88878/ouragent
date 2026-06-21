@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="knowledge-page">
     <div class="page-header">
       <div>
@@ -102,7 +102,7 @@
         </el-form-item>
         <el-form-item label="文件">
           <el-upload :auto-upload="false" :on-change="handleFileChange" :limit="1" drag style="width: 100%;">
-            <el-icon :size="32" color="#C9CDD4"><UploadFilled /></el-icon>
+            <el-icon :size="32" color="#C4BAB0"><UploadFilled /></el-icon>
             <div style="margin-top: 6px; font-size: 13px;">拖拽或点击选择文件</div>
           </el-upload>
         </el-form-item>
@@ -144,7 +144,7 @@
       <div v-loading="contentLoading" style="max-height: 70vh; overflow-y: auto;">
         <template v-if="!contentLoading && contentText">
           <div v-if="isPreviewPlaceholder" class="content-unavailable">
-            <el-icon :size="48" color="#C9CDD4"><WarningFilled /></el-icon>
+            <el-icon :size="48" color="#C4BAB0"><WarningFilled /></el-icon>
             <p>{{ contentText }}</p>
           </div>
           <pre v-else class="content-preview">{{ contentText }}</pre>
@@ -271,22 +271,27 @@ function formatSize(bytes) { if (!bytes) return '-'; if (bytes < 1024) return by
 </script>
 
 <style scoped>
-.knowledge-page { max-width: 1200px; }
+.knowledge-page { max-width: 1260px; }
 
-.page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
-.page-header h3 { font-size: 22px; font-weight: 700; color: var(--color-text); }
-.page-desc { font-size: 13px; color: var(--color-text-muted); margin-top: 4px; }
-.header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; flex-wrap: wrap; gap: 14px; }
+.page-header h3 { font-size: 24px; font-weight: 700; color: var(--color-text); letter-spacing: -0.01em; }
+.page-desc { font-size: 14px; color: var(--color-text-muted); margin-top: 4px; }
+.header-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
-.search-bar { margin-bottom: 20px; }
-.search-input { width: 360px; }
+.search-bar { margin-bottom: 22px; }
+.search-input { width: 400px; }
 
 .kb-table { border-radius: var(--radius-lg); overflow: hidden; }
-.file-name-cell { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-.file-icon { font-size: 16px; flex-shrink: 0; }
+.kb-table :deep(.el-table__body tr:hover > td) { background: var(--color-bg-hover) !important; }
+.file-name-cell { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.file-icon { font-size: 18px; flex-shrink: 0; }
 .text-muted { color: var(--color-text-placeholder); }
 
-.content-unavailable { text-align: center; padding: 40px 20px; color: var(--color-text-muted); }
-.content-unavailable p { margin-top: 16px; font-size: 14px; }
-.content-preview { background: var(--color-bg); padding: 20px; border-radius: var(--radius-md); font-size: 13px; line-height: 1.8; white-space: pre-wrap; word-break: break-all; max-height: 60vh; overflow-y: auto; }
+.content-unavailable { text-align: center; padding: 48px 20px; color: var(--color-text-muted); }
+.content-unavailable p { margin-top: 18px; font-size: 14px; }
+.content-preview {
+  background: var(--color-bg); padding: 24px; border-radius: var(--radius-md);
+  font-size: 14px; line-height: 1.9; white-space: pre-wrap; word-break: break-all;
+  max-height: 60vh; overflow-y: auto;
+}
 </style>

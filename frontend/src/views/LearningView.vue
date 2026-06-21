@@ -81,9 +81,9 @@ import { Delete, Check } from '@element-plus/icons-vue';
 const paths = ref([]);
 const loading = ref(false);
 const progressGradient = [
-  { color: '#FF9500', percentage: 30 },
-  { color: '#5B6AF0', percentage: 60 },
-  { color: '#34C759', percentage: 100 },
+  { color: '#C1803A', percentage: 30 },
+  { color: '#B5651D', percentage: 60 },
+  { color: '#5B8C5A', percentage: 100 },
 ];
 
 onMounted(() => loadPaths());
@@ -106,93 +106,65 @@ async function removePath(id) {
 </script>
 
 <style scoped>
-.learning-page { max-width: 860px; }
+.learning-page { max-width: 880px; margin: 0 auto; }
 
 .page-header { margin-bottom: 28px; }
-.page-header h3 { font-size: 22px; font-weight: 700; color: var(--color-text); }
-.page-desc { font-size: 13px; color: var(--color-text-muted); margin-top: 4px; }
+.page-header h3 { font-size: 24px; font-weight: 700; color: var(--color-text); letter-spacing: -0.01em; }
+.page-desc { font-size: 14px; color: var(--color-text-muted); margin-top: 4px; }
 
-.paths-list { display: flex; flex-direction: column; gap: 20px; }
+.paths-list { display: flex; flex-direction: column; gap: 24px; }
 
 .path-card {
-  background: var(--color-bg-card);
-  border-radius: var(--radius-xl);
-  padding: 28px;
-  box-shadow: var(--shadow-card);
-  transition: all var(--transition-base);
+  background: var(--color-bg-card); border-radius: var(--radius-xl);
+  padding: 28px 32px; box-shadow: var(--shadow-card);
+  transition: all 0.25s ease; border: 1px solid transparent;
 }
-.path-card:hover { box-shadow: var(--shadow-md); }
+.path-card:hover { box-shadow: var(--shadow-md); border-color: var(--color-border); }
 
-.path-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 20px;
-}
-.path-info h4 { font-size: 18px; font-weight: 700; color: var(--color-text); margin-bottom: 6px; }
-.path-info p { font-size: 13px; color: var(--color-text-muted); line-height: 1.5; }
-.path-meta { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.path-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 22px; }
+.path-info h4 { font-size: 20px; font-weight: 700; color: var(--color-text); margin-bottom: 8px; letter-spacing: -0.01em; }
+.path-info p { font-size: 14px; color: var(--color-text-muted); line-height: 1.6; }
+.path-meta { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
 .path-progress {
-  background: var(--color-bg);
-  border-radius: var(--radius-lg);
-  padding: 16px 20px;
-  margin-bottom: 24px;
+  background: var(--color-bg); border-radius: 12px;
+  padding: 18px 22px; margin-bottom: 26px;
 }
-.progress-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-.progress-text { font-size: 12px; color: var(--color-text-muted); font-weight: 500; }
-.progress-num { font-size: 13px; color: var(--color-text-secondary); font-weight: 600; }
+.progress-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.progress-text { font-size: 13px; color: var(--color-text-muted); font-weight: 500; }
+.progress-num { font-size: 14px; color: var(--color-text-secondary); font-weight: 700; }
 
 .steps-timeline { display: flex; flex-direction: column; }
 
 .step-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 14px;
-  padding: 12px 14px;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all var(--transition-fast);
+  display: flex; align-items: flex-start; gap: 16px;
+  padding: 14px 16px; border-radius: 10px;
+  cursor: pointer; transition: all 0.2s ease;
 }
 .step-item:hover { background: var(--color-bg-hover); }
-.step-item.step-done { opacity: 0.65; }
+.step-item.step-done { opacity: 0.6; }
 
 .step-indicator {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding-top: 3px;
-  flex-shrink: 0;
+  display: flex; flex-direction: column; align-items: center;
+  padding-top: 4px; flex-shrink: 0;
 }
 .step-dot {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: all var(--transition-fast);
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: all 0.2s ease;
 }
-.dot-empty { width: 10px; height: 10px; border-radius: 50%; border: 2px solid #D0D5DD; }
-.dot-active { width: 10px; height: 10px; border-radius: 50%; background: var(--color-primary); box-shadow: 0 0 0 4px rgba(91,106,240,0.15); }
+.dot-empty { width: 12px; height: 12px; border-radius: 50%; border: 2px solid #D4CCC2; }
+.dot-active { width: 12px; height: 12px; border-radius: 50%; background: var(--color-primary); box-shadow: 0 0 0 5px rgba(181,101,29,0.12); }
 .step-done .step-dot { background: var(--color-success); color: #fff; }
 
-.step-connector {
-  width: 2px;
-  flex: 1;
-  min-height: 20px;
-  background: #E8ECF3;
-  margin-top: 4px;
-  transition: background var(--transition-base);
-}
+.step-connector { width: 2px; flex: 1; min-height: 22px; background: #E9E3DA; margin-top: 4px; transition: background 0.3s ease; }
 .connector-done { background: var(--color-success); }
 
 .step-content { flex: 1; min-width: 0; }
-.step-order { font-size: 10px; color: var(--color-text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3px; }
-.step-title { font-size: 14px; font-weight: 600; color: var(--color-text); margin-bottom: 3px; }
-.step-done .step-title { text-decoration: line-through; }
-.step-desc { font-size: 12px; color: var(--color-text-muted); line-height: 1.5; }
+.step-order { font-size: 11px; color: var(--color-text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.step-title { font-size: 15px; font-weight: 600; color: var(--color-text); margin-bottom: 4px; }
+.step-done .step-title { text-decoration: line-through; color: var(--color-text-muted); }
+.step-desc { font-size: 13px; color: var(--color-text-muted); line-height: 1.6; }
 
-.step-status-badge { flex-shrink: 0; padding-top: 2px; }
+.step-status-badge { flex-shrink: 0; padding-top: 3px; }
 </style>

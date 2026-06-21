@@ -2,44 +2,48 @@
   <div class="course-detail-page">
     <div class="back-nav">
       <el-button text @click="$router.push('/courses')" class="back-btn">
-        <el-icon :size="16"><ArrowLeft /></el-icon>
+        <el-icon :size="18"><ArrowLeft /></el-icon>
         <span>返回课程中心</span>
       </el-button>
     </div>
 
     <div v-if="course" v-loading="loading">
-      <!-- 课程信息 -->
       <div class="info-card">
-        <div class="info-cover" :style="{ background: 'linear-gradient(135deg, #5B6AF0, #A78BFA)' }">
+        <div class="info-cover" :style="{ background: 'linear-gradient(135deg, #8B5E3C, #C1783A)' }">
+          <div class="cover-pattern"></div>
           <div class="info-tags">
-            <el-tag :type="difficultyType" effect="dark">{{ difficultyText }}</el-tag>
-            <el-tag :type="course.status === 1 ? 'success' : 'info'" effect="dark">{{ course.status === 1 ? '已发布' : '草稿' }}</el-tag>
+            <el-tag :type="difficultyType" effect="dark" class="info-tag">{{ difficultyText }}</el-tag>
+            <el-tag :type="course.status === 1 ? 'success' : 'info'" effect="dark" class="info-tag">{{ course.status === 1 ? '已发布' : '草稿' }}</el-tag>
+          </div>
+          <div class="cover-title-area">
+            <div class="info-category">{{ course.category || '未分类' }}</div>
+            <h2>{{ course.title }}</h2>
           </div>
         </div>
         <div class="info-body">
-          <div class="info-category">{{ course.category || '未分类' }}</div>
-          <h2>{{ course.title }}</h2>
           <p class="info-desc">{{ course.description || '暂无描述' }}</p>
           <div class="info-meta">
             <div class="meta-item">
-              <el-icon :size="16"><UserFilled /></el-icon>
-              <span>授课教师：{{ course.teacherName || '-' }}</span>
+              <div class="meta-icon"><el-icon :size="16"><UserFilled /></el-icon></div>
+              <div class="meta-text">
+                <span class="meta-label">授课教师</span>
+                <span class="meta-value">{{ course.teacherName || '-' }}</span>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- 辅助资料 -->
       <div class="files-section">
-        <div class="section-header">
+        <div class="section-header-row">
           <h3>辅助资料</h3>
           <el-tag size="small" round effect="plain">{{ knowledgeList.length }} 个文件</el-tag>
         </div>
         <el-table :data="knowledgeList" v-loading="kbLoading" stripe empty-text="暂无辅助资料" class="files-table">
-          <el-table-column prop="name" label="文件名" min-width="200">
+          <el-table-column prop="name" label="文件名" min-width="220">
             <template #default="{ row }">
               <div class="file-name-cell">
-                <el-icon :size="16" color="#5B6AF0"><Document /></el-icon>
+                <span class="file-icon">📄</span>
                 <span>{{ row.name }}</span>
               </div>
             </template>
@@ -66,12 +70,11 @@
 
     <el-empty v-else-if="!loading" description="课程不存在" :image-size="100" />
 
-    <!-- 内容预览弹窗 -->
     <el-dialog v-model="showContentDialog" :title="'查看内容: ' + contentName" width="800px" top="3vh">
       <div v-loading="contentLoading" style="max-height: 70vh; overflow-y: auto;">
         <template v-if="!contentLoading && contentText">
           <div v-if="isPreviewPlaceholder" class="content-unavailable">
-            <el-icon :size="48" color="#C9CDD4"><WarningFilled /></el-icon>
+            <el-icon :size="48" color="#C4BAB0"><WarningFilled /></el-icon>
             <p>{{ contentText }}</p>
           </div>
           <pre v-else class="content-preview">{{ contentText }}</pre>
@@ -89,7 +92,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { courseApi, knowledgeApi } from '@/api';
-import { ArrowLeft, UserFilled, Document, WarningFilled } from '@element-plus/icons-vue';
+import { ArrowLeft, UserFilled, WarningFilled } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
 const route = useRoute();
@@ -130,33 +133,53 @@ function formatSize(bytes) { if (!bytes) return '-'; if (bytes < 1024) return by
 </script>
 
 <style scoped>
-.course-detail-page { max-width: 900px; }
+.course-detail-page { max-width: 920px; margin: 0 auto; }
 
-.back-nav { margin-bottom: 20px; }
-.back-btn { color: var(--color-text-muted); font-size: 13px; }
-.back-btn:hover { color: var(--color-primary); }
+.back-nav { margin-bottom: 22px; }
+.back-btn { color: var(--color-text-muted); font-size: 14px; padding: 6px 12px; border-radius: 8px; }
+.back-btn:hover { color: var(--color-primary); background: var(--color-bg-hover); }
 
 .info-card {
-  background: var(--color-bg-card);
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-  box-shadow: var(--shadow-card);
-  margin-bottom: 24px;
+  background: var(--color-bg-card); border-radius: var(--radius-xl);
+  overflow: hidden; box-shadow: var(--shadow-card); margin-bottom: 28px;
 }
-.info-cover { height: 100px; display: flex; align-items: flex-start; justify-content: flex-end; padding: 16px; }
-.info-tags { display: flex; gap: 8px; }
-.info-body { padding: 20px 28px 28px; }
-.info-category { font-size: 11px; color: var(--color-primary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
-.info-body h2 { font-size: 24px; font-weight: 700; color: var(--color-text); margin-bottom: 12px; }
-.info-desc { font-size: 14px; color: var(--color-text-secondary); line-height: 1.8; margin-bottom: 16px; }
-.info-meta { display: flex; gap: 24px; }
-.meta-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--color-text-muted); }
+.info-cover {
+  min-height: 140px; display: flex; flex-direction: column;
+  justify-content: space-between; padding: 20px 28px; position: relative;
+  overflow: hidden;
+}
+.cover-pattern {
+  position: absolute; inset: 0; opacity: 0.04;
+  background-image: repeating-linear-gradient(45deg, #fff 0px, #fff 2px, transparent 2px, transparent 20px);
+}
+.info-tags { display: flex; gap: 10px; position: relative; z-index: 1; }
+.info-tag { backdrop-filter: blur(4px); }
+.cover-title-area { position: relative; z-index: 1; }
+.info-category {
+  font-size: 11px; color: rgba(255,255,255,0.7); font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;
+}
+.cover-title-area h2 { font-size: 28px; font-weight: 700; color: #fff; letter-spacing: -0.01em; }
+
+.info-body { padding: 24px 28px 28px; }
+.info-desc { font-size: 15px; color: var(--color-text-secondary); line-height: 1.8; margin-bottom: 20px; }
+.info-meta { display: flex; gap: 32px; }
+.meta-item { display: flex; align-items: center; gap: 12px; }
+.meta-icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: var(--color-bg); display: flex; align-items: center; justify-content: center;
+  color: var(--color-text-muted);
+}
+.meta-text { display: flex; flex-direction: column; }
+.meta-label { font-size: 11px; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.meta-value { font-size: 14px; font-weight: 600; color: var(--color-text); margin-top: 1px; }
 
 .files-section { margin-top: 8px; }
-.section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.section-header h3 { font-size: 17px; font-weight: 700; color: var(--color-text); }
+.section-header-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.section-header-row h3 { font-size: 18px; font-weight: 700; color: var(--color-text); }
 .files-table { border-radius: var(--radius-lg); overflow: hidden; }
-.file-name-cell { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.file-name-cell { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.file-icon { font-size: 18px; flex-shrink: 0; }
 
 .content-unavailable { text-align: center; padding: 40px 20px; color: var(--color-text-muted); }
 .content-unavailable p { margin-top: 16px; font-size: 14px; }

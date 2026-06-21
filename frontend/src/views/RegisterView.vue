@@ -8,9 +8,9 @@
         <div class="auth-brand">
           <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" class="brand-logo">
             <rect width="48" height="48" rx="14" fill="url(#rg)"/>
-            <path d="M24 11l10 7.5v13L24 39l-10-7.5v-13L24 11z" fill="white" opacity="0.95"/>
+            <path d="M24 11l10 7.5v13L24 39l-10-7.5v-13L24 11z" fill="#FFF" opacity="0.95"/>
             <circle cx="24" cy="23" r="7" fill="url(#rg)"/>
-            <defs><linearGradient id="rg" x1="0" y1="0" x2="48" y2="48"><stop stop-color="#34C759"/><stop offset="1" stop-color="#30D158"/></linearGradient></defs>
+            <defs><linearGradient id="rg" x1="0" y1="0" x2="48" y2="48"><stop stop-color="#6B8C5A"/><stop offset="1" stop-color="#5B8C5A"/></linearGradient></defs>
           </svg>
           <h1>加入 EduAgent</h1>
           <p>开启你的智能学习之旅</p>
@@ -132,84 +132,66 @@ async function handleRegister() {
 
 <style scoped>
 .register-bg {
-  background: linear-gradient(135deg, #0d1b2a 0%, #1b2838 40%, #1a3a2a 100%);
+  background: linear-gradient(160deg, #141910 0%, #1A1F18 45%, #1A2218 100%);
+  display: flex; align-items: center; justify-content: center;
 }
 
 .auth-particles { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .particle {
-  position: absolute;
-  border-radius: 50%;
-  background: rgba(52,199,89,0.10);
+  position: absolute; border-radius: 50%;
+  background: rgba(107,140,90,0.10);
   animation: floatUp 8s infinite ease-in-out;
 }
 @keyframes floatUp {
-  0%, 100% { transform: translateY(0) scale(1); opacity: 0.3; }
-  50% { transform: translateY(-40px) scale(1.5); opacity: 0.06; }
+  0%, 100% { transform: translateY(0) scale(1); opacity: 0.25; }
+  50% { transform: translateY(-50px) scale(1.6); opacity: 0.04; }
 }
 
 .auth-container {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  width: 920px;
-  max-width: 95vw;
-  min-height: 620px;
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-  background: rgba(255,255,255,0.03);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255,255,255,0.08);
+  position: relative; z-index: 1; display: flex;
+  width: 980px; max-width: 96vw; min-height: 640px;
+  border-radius: 24px; overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0,0,0,0.40);
+  background: rgba(255,250,245,0.015);
+  backdrop-filter: blur(28px);
+  border: 1px solid rgba(255,255,255,0.05);
 }
 
 .auth-left {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 48px;
-  background: linear-gradient(135deg, rgba(52,199,89,0.12), rgba(48,209,88,0.08));
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 56px 48px;
+  background: linear-gradient(160deg, rgba(91,140,90,0.12), rgba(107,140,90,0.04));
 }
 .auth-brand { text-align: center; }
-.brand-logo { width: 64px; height: 64px; margin-bottom: 20px; }
+.brand-logo { width: 72px; height: 72px; margin-bottom: 24px; filter: drop-shadow(0 8px 24px rgba(91,140,90,0.25)); }
 .auth-brand h1 {
-  font-size: 28px;
-  font-weight: 700;
-  color: #fff;
-  margin-bottom: 8px;
-  letter-spacing: -0.02em;
+  font-size: 32px; font-weight: 700; color: #EBF2E8;
+  margin-bottom: 10px; letter-spacing: -0.02em;
 }
 .auth-brand p {
-  font-size: 14px;
-  color: rgba(255,255,255,0.55);
-  line-height: 1.6;
+  font-size: 15px; color: rgba(235,242,232,0.40); line-height: 1.7;
+  max-width: 260px; margin: 0 auto;
 }
 
 .auth-right {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  overflow-y: auto;
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 32px; overflow-y: auto;
 }
 .auth-card {
-  width: 100%;
-  max-width: 380px;
-  background: rgba(255,255,255,0.95) !important;
-  backdrop-filter: blur(20px);
-  border-radius: var(--radius-xl) !important;
-  padding: 4px;
+  width: 100%; max-width: 400px;
+  background: rgba(255,255,255,0.96) !important;
+  backdrop-filter: blur(20px); border-radius: 20px !important; padding: 4px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.08) !important;
 }
-.auth-card :deep(.el-card__body) { padding: 20px 24px; }
+.auth-card :deep(.el-card__body) { padding: 28px 32px; }
 
-.auth-header { text-align: center; margin-bottom: 24px; }
-.auth-header h2 { font-size: 22px; font-weight: 700; color: var(--color-text); margin-bottom: 6px; }
-.auth-header p { font-size: 13px; color: var(--color-text-muted); }
+.auth-header { text-align: center; margin-bottom: 28px; }
+.auth-header h2 { font-size: 24px; font-weight: 700; color: var(--color-text); margin-bottom: 8px; letter-spacing: -0.01em; }
+.auth-header p { font-size: 14px; color: var(--color-text-muted); }
 
-.submit-btn { width: 100%; border-radius: var(--radius-md) !important; height: 44px; font-size: 15px; font-weight: 600; }
+.submit-btn { width: 100%; border-radius: 12px !important; height: 48px; font-size: 16px; font-weight: 600; margin-top: 4px; }
 
-.auth-footer { text-align: center; margin-top: 20px; font-size: 13px; color: var(--color-text-muted); }
-.auth-footer a { color: var(--color-success); font-weight: 600; text-decoration: none; margin-left: 4px; }
+.auth-footer { text-align: center; margin-top: 24px; font-size: 14px; color: var(--color-text-muted); }
+.auth-footer a { color: var(--color-success); font-weight: 600; text-decoration: none; margin-left: 6px; }
 .auth-footer a:hover { text-decoration: underline; }
 </style>

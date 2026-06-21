@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="mistake-book-page">
     <div class="page-header">
       <h2>错题本 & 智能复习</h2>
@@ -8,8 +8,8 @@
     <!-- 统计卡片 -->
     <el-row :gutter="20" class="stats-row">
       <el-col :span="6"><el-card shadow="hover"><div class="stat-num">{{ stats.total_mistakes || 0 }}</div><div class="stat-label">总错题数</div></el-card></el-col>
-      <el-col :span="6"><el-card shadow="hover"><div class="stat-num" style="color:#e6a23c">{{ stats.due_reviews || 0 }}</div><div class="stat-label">待复习</div></el-card></el-col>
-      <el-col :span="6"><el-card shadow="hover"><div class="stat-num" style="color:#409eff">{{ stats.upcoming_reviews_7d || 0 }}</div><div class="stat-label">7日内复习</div></el-card></el-col>
+      <el-col :span="6"><el-card shadow="hover"><div class="stat-num" style="color:#C1803A">{{ stats.due_reviews || 0 }}</div><div class="stat-label">待复习</div></el-card></el-col>
+      <el-col :span="6"><el-card shadow="hover"><div class="stat-num" style="color:#5B8BA8">{{ stats.upcoming_reviews_7d || 0 }}</div><div class="stat-label">7日内复习</div></el-card></el-col>
       <el-col :span="6"><el-card shadow="hover"><div class="stat-label">主要错误类型</div><div class="stat-type">{{ errorTypeLabel(stats.primary_error_type) }}</div></el-card></el-col>
     </el-row>
 
@@ -92,7 +92,7 @@
             <el-card>
               <p><strong>{{ n.title }}</strong></p>
               <p>{{ n.message }}</p>
-              <p style="color:#909399;font-size:12px">知识点：{{ n.knowledge_name }} | {{ errorTypeLabel(n.error_category) }}</p>
+              <p style="color:var(--color-text-muted);font-size:12px">知识点：{{ n.knowledge_name }} | {{ errorTypeLabel(n.error_category) }}</p>
             </el-card>
           </el-timeline-item>
         </el-timeline>
@@ -210,14 +210,21 @@ onMounted(loadData)
 </script>
 
 <style scoped>
-.mistake-book-page { padding: 20px; }
-.page-header { margin-bottom: 20px; }
-.page-header h2 { font-size: 24px; margin: 0 0 8px 0; }
-.subtitle { color: #909399; font-size: 14px; margin: 0; }
-.stats-row { margin-bottom: 20px; }
-.stat-num { font-size: 32px; font-weight: bold; color: #303133; text-align: center; }
-.stat-label { text-align: center; color: #909399; font-size: 13px; margin-top: 4px; }
-.stat-type { text-align: center; font-size: 18px; font-weight: bold; color: #409eff; margin-top: 4px; }
-.content-tabs { margin-top: 10px; }
-.diagnosis-card, .practice-card { margin-top: 20px; max-width: 600px; }
+.mistake-book-page { padding: 4px 0; max-width: 1200px; }
+.page-header { margin-bottom: 24px; }
+.page-header h2 { font-size: 24px; font-weight: 700; color: var(--color-text); margin: 0 0 6px 0; letter-spacing: -0.01em; }
+.subtitle { color: var(--color-text-muted); font-size: 14px; margin: 0; }
+
+.stats-row { margin-bottom: 24px; }
+.stats-row .el-card { border-radius: var(--radius-lg) !important; padding: 8px; }
+.stats-row .el-card :deep(.el-card__body) { padding: 20px 16px !important; }
+.stat-num { font-size: 34px; font-weight: 700; color: var(--color-text); text-align: center; letter-spacing: -0.02em; }
+.stat-label { text-align: center; color: var(--color-text-muted); font-size: 13px; margin-top: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+.stat-type { text-align: center; font-size: 18px; font-weight: 700; color: var(--color-primary); margin-top: 4px; }
+
+.content-tabs { margin-top: 12px; }
+.content-tabs :deep(.el-tabs__item) { font-weight: 600; font-size: 14px; }
+
+.diagnosis-card, .practice-card { margin-top: 24px; max-width: 640px; border-radius: var(--radius-lg) !important; }
+.diagnosis-card p, .practice-card p { margin-bottom: 8px; line-height: 1.7; }
 </style>

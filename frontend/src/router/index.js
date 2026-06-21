@@ -1,5 +1,7 @@
-import { createRouter, createWebHistory } from 'vue-router';
+﻿import { createRouter, createWebHistory } from 'vue-router';
 import MistakeBookView from '@/views/MistakeBookView.vue';
+
+const ChatView = () => import('@/views/ChatView.vue');
 
 const routes = [
   { path: '/', redirect: '/dashboard' },
@@ -24,13 +26,13 @@ const routes = [
   {
     path: '/chat',
     name: 'Chat',
-    component: () => import('@/views/ChatView.vue'),
+    component: ChatView,
     meta: { requiresAuth: true },
   },
   {
     path: '/chat/:sessionId',
     name: 'ChatSession',
-    component: () => import('@/views/ChatView.vue'),
+    component: ChatView,
     meta: { requiresAuth: true },
   },
   {
@@ -52,7 +54,7 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
-        path: '/learning',
+    path: '/learning',
     name: 'Learning',
     component: () => import('@/views/LearningView.vue'),
     meta: { requiresAuth: true },

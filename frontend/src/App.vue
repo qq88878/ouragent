@@ -1,17 +1,16 @@
-<template>
+﻿<template>
   <div v-if="isAuthPage" class="auth-wrapper">
     <router-view />
   </div>
   <el-container v-else class="app-layout">
-    <!-- 侧边栏 -->
     <el-aside width="240px" class="app-sidebar">
       <div class="sidebar-brand">
         <div class="brand-icon">
           <svg viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect width="36" height="36" rx="10" fill="url(#lg)"/>
-            <path d="M18 8L26 14v10l-8 6-8-6V14l8-6z" fill="white" opacity="0.9"/>
+            <path d="M18 8L26 14v10l-8 6-8-6V14l8-6z" fill="#FFF" opacity="0.92"/>
             <circle cx="18" cy="17" r="5" fill="url(#lg)"/>
-            <defs><linearGradient id="lg" x1="0" y1="0" x2="36" y2="36"><stop stop-color="#5B6AF0"/><stop offset="1" stop-color="#7C5CFC"/></linearGradient></defs>
+            <defs><linearGradient id="lg" x1="0" y1="0" x2="36" y2="36"><stop stop-color="#C1783A"/><stop offset="1" stop-color="#B5651D"/></linearGradient></defs>
           </svg>
         </div>
         <span class="brand-text">EduAgent</span>
@@ -23,7 +22,7 @@
           :default-active="activeMenu"
           router
           background-color="transparent"
-          text-color="rgba(255,255,255,0.70)"
+          text-color="rgba(255,255,255,0.65)"
           active-text-color="#fff"
         >
           <el-menu-item index="/dashboard">
@@ -58,7 +57,7 @@
           :default-active="activeMenu"
           router
           background-color="transparent"
-          text-color="rgba(255,255,255,0.70)"
+          text-color="rgba(255,255,255,0.65)"
           active-text-color="#fff"
         >
           <el-menu-item index="/schedule">
@@ -92,7 +91,7 @@
           :default-active="activeMenu"
           router
           background-color="transparent"
-          text-color="rgba(255,255,255,0.70)"
+          text-color="rgba(255,255,255,0.65)"
           active-text-color="#fff"
         >
           <el-menu-item index="/knowledge">
@@ -119,14 +118,14 @@
           :default-active="activeMenu"
           router
           background-color="transparent"
-          text-color="rgba(255,255,255,0.70)"
+          text-color="rgba(255,255,255,0.65)"
           active-text-color="#fff"
         >
           <el-menu-item index="/admin">
             <template #title>
               <div class="menu-item-inner">
                 <div class="menu-icon-box"><el-icon :size="18"><Setting /></el-icon></div>
-                <span>管理后台</span>
+                <span>系统概览</span>
               </div>
             </template>
           </el-menu-item>
@@ -143,32 +142,30 @@
 
       <div class="sidebar-footer">
         <div class="sidebar-user">
-          <div class="user-avatar">{{ (userDisplay || '?')[0] }}</div>
+          <div class="user-avatar">{{ (user?.nickname || user?.username || '?')[0] }}</div>
           <div class="user-detail">
-            <div class="user-name">{{ userDisplay }}</div>
+            <div class="user-name">{{ user?.nickname || user?.username }}</div>
             <div class="user-role">{{ roleLabel }}</div>
           </div>
         </div>
       </div>
     </el-aside>
 
-    <!-- 主内容区 -->
     <el-container class="main-area">
-      <el-header class="app-header">
+      <el-header class="app-header" height="60px">
         <div class="header-left">
           <div class="breadcrumb">
             <span class="breadcrumb-item">{{ pageTitle }}</span>
           </div>
         </div>
         <div class="header-right">
-          <el-tag :type="roleTagType" size="small" effect="plain" round>{{ roleLabel }}</el-tag>
-          <el-divider direction="vertical" />
-          <el-button text class="logout-btn" @click="handleLogout">
+          <el-button class="logout-btn" text @click="handleLogout">
             <el-icon :size="16"><SwitchButton /></el-icon>
             <span>退出</span>
           </el-button>
         </div>
       </el-header>
+
       <el-main class="app-main">
         <router-view v-slot="{ Component }">
           <transition name="fade-slide" mode="out-in">
@@ -181,45 +178,42 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import {
-  HomeFilled, ChatDotRound, Reading, TrendCharts,
-  Document, User, Setting, Avatar, Calendar, WarningFilled, SwitchButton,
+  HomeFilled, ChatDotRound, Reading, Calendar, WarningFilled,
+  TrendCharts, Document, User, Setting, Avatar, SwitchButton
 } from '@element-plus/icons-vue';
 
 const route = useRoute();
 const router = useRouter();
 const authStore = useAuthStore();
 
-const isAuthPage = computed(() => ['/login', '/register'].includes(route.path));
-const isAdmin = computed(() => authStore.user?.role === 'ADMIN');
-const isStudent = computed(() => authStore.user?.role === 'STUDENT');
-const userDisplay = computed(() => authStore.user?.nickname || authStore.user?.username || '');
+const user = computed(() => authStore.user);
+
+const isAuthPage = computed(() => {
+  return route.path === '/login' || route.path === '/register';
+});
+
+const isStudent = computed(() => user.value?.role === 'STUDENT');
+const isAdmin = computed(() => user.value?.role === 'ADMIN');
+
+const roleLabel = computed(() => {
+  switch (user.value?.role) { case 'ADMIN': return '管理员'; case 'TEACHER': return '教师'; case 'STUDENT': return '学生'; default: return ''; }
+});
+
 const activeMenu = computed(() => {
   if (route.path.startsWith('/admin/users')) return '/admin/users';
   if (route.path.startsWith('/admin')) return '/admin';
-  if (route.path.startsWith('/courses/')) return '/courses';
-  if (route.path.startsWith('/chat/')) return '/chat';
-  return route.path;
-});
-
-const roleLabel = computed(() => {
-  switch (authStore.user?.role) {
-    case 'ADMIN': return '管理员';
-    case 'TEACHER': return '教师';
-    case 'STUDENT': return '学生';
-    default: return '';
-  }
-});
-const roleTagType = computed(() => {
-  switch (authStore.user?.role) {
-    case 'ADMIN': return 'danger';
-    case 'TEACHER': return 'warning';
-    case 'STUDENT': return 'success';
-    default: return 'info';
-  }
+  if (route.path.startsWith('/chat')) return '/chat';
+  if (route.path.startsWith('/courses')) return '/courses';
+  if (route.path.startsWith('/schedule')) return '/schedule';
+  if (route.path.startsWith('/mistake-book')) return '/mistake-book';
+  if (route.path.startsWith('/learning')) return '/learning';
+  if (route.path.startsWith('/knowledge')) return '/knowledge';
+  if (route.path.startsWith('/profile')) return '/profile';
+  return '/dashboard';
 });
 
 const pageTitles = {
@@ -227,7 +221,7 @@ const pageTitles = {
   '/chat': '智能对话',
   '/courses': '课程中心',
   '/schedule': '课表',
-    '/mistake-book': '错题本',
+  '/mistake-book': '错题本',
   '/learning': '学习路径',
   '/knowledge': '知识库',
   '/profile': '个人资料',
@@ -257,12 +251,10 @@ async function handleLogout() {
 </script>
 
 <style>
-/* === 布局 === */
 .app-layout { height: 100vh; overflow: hidden; }
 
-/* === 侧边栏 === */
 .app-sidebar {
-  background: linear-gradient(180deg, #1E2235 0%, #252A3E 100%);
+  background: linear-gradient(180deg, #1E1610 0%, #241C15 50%, #2A2018 100%);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -281,7 +273,7 @@ async function handleLogout() {
 .brand-text {
   font-size: 20px;
   font-weight: 700;
-  color: #fff;
+  color: #F0E6D8;
   letter-spacing: -0.02em;
 }
 
@@ -295,7 +287,7 @@ async function handleLogout() {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: rgba(255,255,255,0.30);
+  color: rgba(255,255,255,0.25);
   padding: 16px 24px 6px;
 }
 
@@ -313,11 +305,11 @@ async function handleLogout() {
   transition: all 0.2s ease;
 }
 .app-sidebar .el-menu-item:hover {
-  background: rgba(255,255,255,0.06) !important;
+  background: rgba(255,255,255,0.04) !important;
 }
 .app-sidebar .el-menu-item.is-active {
-  background: rgba(91,106,240,0.25) !important;
-  color: #fff !important;
+  background: rgba(181,101,29,0.30) !important;
+  color: #F0E6D8 !important;
 }
 .app-sidebar .el-menu-item.is-active .menu-icon-box {
   background: var(--color-primary);
@@ -334,11 +326,8 @@ async function handleLogout() {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.06);
   transition: background 0.2s ease;
-}
-.app-sidebar .el-menu-item.is-active .menu-icon-box {
-  background: var(--color-primary);
 }
 
 .sidebar-footer {
@@ -354,7 +343,7 @@ async function handleLogout() {
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, #5B6AF0, #7C5CFC);
+  background: linear-gradient(135deg, #C1783A, #B5651D);
   color: #fff;
   font-weight: 700;
   font-size: 15px;
@@ -369,7 +358,7 @@ async function handleLogout() {
 }
 .user-name {
   font-size: 13px;
-  color: #fff;
+  color: #F0E6D8;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -377,11 +366,10 @@ async function handleLogout() {
 }
 .user-role {
   font-size: 11px;
-  color: rgba(255,255,255,0.45);
+  color: rgba(255,255,255,0.35);
   margin-top: 1px;
 }
 
-/* === 主区域 === */
 .main-area { background: var(--color-bg); }
 
 .app-header {
@@ -406,11 +394,6 @@ async function handleLogout() {
   align-items: center;
   gap: 8px;
 }
-.header-right .el-divider--vertical {
-  height: 16px;
-  margin: 0 4px;
-  border-color: var(--color-border);
-}
 .logout-btn {
   color: var(--color-text-muted);
   font-size: 13px;
@@ -422,14 +405,12 @@ async function handleLogout() {
   background: var(--color-danger-light);
 }
 
-/* === 内容区 === */
 .app-main {
   padding: 24px 28px;
   overflow-y: auto;
   height: calc(100vh - 60px);
 }
 
-/* === 路由过渡动画 === */
 .fade-slide-enter-active,
 .fade-slide-leave-active {
   transition: all 0.25s ease;
@@ -443,7 +424,6 @@ async function handleLogout() {
   transform: translateY(-8px);
 }
 
-/* === 认证页面容器 === */
 .auth-wrapper {
   min-height: 100vh;
   background: var(--color-bg);

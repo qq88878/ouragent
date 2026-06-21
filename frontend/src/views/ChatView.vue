@@ -109,7 +109,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { chatApi, courseApi } from '@/api';
 import { useChatStore } from '@/stores/chat';
@@ -151,6 +151,15 @@ onUnmounted(() => {
   if (abortController) abortController.abort();
 });
 
+watch(() => route.params.sessionId, (newId) => {
+  if (newId) {
+    selectSession(Number(newId));
+  } else {
+    currentSessionId.value = null;
+    messages.value = [];
+  }
+});
+
 async function loadSessions() { try { const r = await chatApi.listSessions(); if (r.code === 200) sessions.value = r.data || []; } catch {} }
 async function loadCourses() { try { const r = await courseApi.list({ page: 1, size: 200 }); if (r.code === 200) courses.value = r.data?.records || []; } catch {} }
 function onCourseChange() { if (selectedCourseId.value) { localStorage.setItem('chatCourseId', String(selectedCourseId.value)); } else { localStorage.removeItem('chatCourseId'); } }
@@ -168,7 +177,7 @@ async function selectSession(id) {
   router.replace('/chat/' + id);
   try {
     const res = await chatApi.getMessages(id);
-    messages.value = (res.data || []).map(m => ({ ...m, streaming: false }));
+    messages.value = (res.data?.records || []).map(m => ({ ...m, streaming: false }));
     await nextTick();
     scrollToBottom();
   } catch { messages.value = []; }

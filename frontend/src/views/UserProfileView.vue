@@ -51,7 +51,7 @@
       <el-col :span="8">
         <div v-if="!emailVerified" class="verify-card">
           <div class="verify-icon">
-            <el-icon :size="28" color="#FF9500"><Message /></el-icon>
+            <el-icon :size="28" color="#C1803A"><Message /></el-icon>
           </div>
           <h4>邮箱验证</h4>
           <p>验证邮箱以解锁全部功能</p>
@@ -65,7 +65,7 @@
         </div>
         <div v-else class="verify-card verified">
           <div class="verify-icon">
-            <el-icon :size="28" color="#34C759"><CircleCheckFilled /></el-icon>
+            <el-icon :size="28" color="#5B8C5A"><CircleCheckFilled /></el-icon>
           </div>
           <h4>邮箱已验证</h4>
           <p>您的账户已完全激活</p>
@@ -122,58 +122,44 @@ function formatTime(t) { if (!t) return ''; return new Date(t).toLocaleString('z
 </script>
 
 <style scoped>
-.profile-page { max-width: 900px; }
+.profile-page { max-width: 920px; margin: 0 auto; }
 
-.page-header { margin-bottom: 24px; }
-.page-header h3 { font-size: 22px; font-weight: 700; color: var(--color-text); }
-.page-desc { font-size: 13px; color: var(--color-text-muted); margin-top: 4px; }
+.page-header { margin-bottom: 28px; }
+.page-header h3 { font-size: 24px; font-weight: 700; color: var(--color-text); letter-spacing: -0.01em; }
+.page-desc { font-size: 14px; color: var(--color-text-muted); margin-top: 4px; }
 
 .profile-card {
-  background: var(--color-bg-card);
-  border-radius: var(--radius-xl);
-  overflow: hidden;
-  box-shadow: var(--shadow-card);
-  margin-bottom: 24px;
+  background: var(--color-bg-card); border-radius: var(--radius-xl);
+  overflow: hidden; box-shadow: var(--shadow-card); margin-bottom: 24px;
 }
 .profile-cover {
-  background: linear-gradient(135deg, #5B6AF0 0%, #7C5CFC 100%);
-  padding: 28px 32px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
+  background: linear-gradient(135deg, #8B5E3C 0%, #C1783A 100%);
+  padding: 32px 36px; display: flex; align-items: center; gap: 16px;
 }
 .profile-avatar {
-  width: 52px;
-  height: 52px;
-  border-radius: var(--radius-md);
-  background: rgba(255,255,255,0.2);
-  color: #fff;
-  font-size: 22px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 60px; height: 60px; border-radius: 16px;
+  background: rgba(255,255,255,0.18); color: #fff;
+  font-size: 26px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
   backdrop-filter: blur(10px);
 }
-.profile-name { font-size: 18px; font-weight: 700; color: #fff; flex: 1; }
-.profile-form { padding: 28px 32px; }
+.profile-name { font-size: 20px; font-weight: 700; color: #fff; flex: 1; letter-spacing: -0.01em; }
+.profile-form { padding: 28px 36px; }
+.profile-form :deep(.el-form-item__label) { font-weight: 600; color: var(--color-text-secondary); }
 
-.info-text { color: var(--color-text-muted); font-size: 13px; }
+.info-text { color: var(--color-text-muted); font-size: 14px; }
 
 .verify-card {
-  background: var(--color-bg-card);
-  border-radius: var(--radius-xl);
-  padding: 28px 24px;
-  text-align: center;
-  box-shadow: var(--shadow-card);
-  border: 1px solid #FFE8C0;
+  background: var(--color-bg-card); border-radius: var(--radius-xl);
+  padding: 32px 28px; text-align: center;
+  box-shadow: var(--shadow-card); border: 1px solid #F0D4B0;
 }
-.verify-card.verified { border-color: #D4F5E0; }
-.verify-icon { margin-bottom: 12px; }
-.verify-card h4 { font-size: 16px; font-weight: 700; color: var(--color-text); margin-bottom: 4px; }
-.verify-card p { font-size: 12px; color: var(--color-text-muted); margin-bottom: 16px; }
-.verify-input { margin-bottom: 12px; }
-.verify-actions { display: flex; gap: 8px; justify-content: center; }
+.verify-card.verified { border-color: #D4ECD4; }
+.verify-icon { margin-bottom: 14px; }
+.verify-card h4 { font-size: 18px; font-weight: 700; color: var(--color-text); margin-bottom: 6px; }
+.verify-card p { font-size: 13px; color: var(--color-text-muted); margin-bottom: 20px; }
+.verify-input { margin-bottom: 14px; }
+.verify-actions { display: flex; gap: 10px; justify-content: center; }
 
-.questionnaire-section { margin-top: 32px; }
+.questionnaire-section { margin-top: 36px; }
 </style>
