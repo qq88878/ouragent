@@ -228,6 +228,13 @@ export const agentApi = {
         }
     },
     getStats() { return agentHttp.get('/stats'); },
+    generateLearningPathFromChat(messages, courseId = null, courseTitle = '') {
+        return agentHttp.post('/chat/learning-path', {
+            messages,
+            course_id: courseId,
+            course_title: courseTitle,
+        });
+    },
 };
 
 export default http;

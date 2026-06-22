@@ -98,6 +98,18 @@
           <div class="input-options">
             <el-switch v-model="deepMode" active-text="深度答疑" inactive-text="快速对话" size="small" />
             <span v-if="deepMode" class="deep-mode-hint">AI 将自动检查回答质量</span>
+            <el-button
+              type="warning"
+              size="small"
+              plain
+              :icon="MapLocation"
+              :loading="pathLoading"
+              :disabled="messages.length === 0"
+              @click="generateLearningPath"
+              style="margin-left: auto;"
+            >
+              生成学习路径
+            </el-button>
           </div>
           <div class="input-wrapper">
             <el-input
@@ -117,6 +129,78 @@
         </div>
       </template>
     </div>
+
+    <!-- 学习路径弹窗 -->
+    <el-dialog v-model="pathDialogVisible" title="基于对话的个性化学习路径" width="680px" top="5vh" destroy-on-close>
+      <div v-if="pathLoading" class="path-loading">
+        <el-skeleton :rows="6" animated />
+      </div>
+      <div v-else-if="pathData" class="path-content">
+        <div class="path-header">
+          <h3>{{ pathData.title }}</h3>
+          <p>{{ pathData.description }}</p>
+        </div>
+
+        <!-- 已讨论知识点 -->
+        <div v-if="pathData.discussed_topics?.length" class="path-section">
+          <h4 class="section-title">
+            <el-icon><ChatDotRound /></el-icon>
+            已讨论的知识点（{{ pathData.discussed_topics.length }}）
+          </h4>
+          <div class="discussed-tags">
+            <el-tag v-for="(t, i) in pathData.discussed_topics" :key="i" type="success" effect="plain" size="default">
+              {{ t.topic }}
+              <span class="tag-count">({{ t.message_count || 0 }}次)</span>
+            </el-tag>
+          </div>
+        </div>
+
+        <!-- 学习步骤时间线 -->
+        <div class="path-section">
+          <h4 class="section-title">
+            <el-icon><MapLocation /></el-icon>
+            学习路径（{{ pathData.total_steps || pathData.steps?.length || 0 }}步）
+          </h4>
+          <div class="path-timeline">
+            <div v-for="(step, idx) in pathData.steps" :key="idx" class="timeline-item" :class="{ completed: step.status === 'completed' }">
+              <div class="timeline-dot" :class="{ completed: step.status === 'completed' }">
+                <span v-if="step.status === 'completed'">✓</span>
+                <span v-else>{{ step.order || idx + 1 }}</span>
+              </div>
+              <div class="timeline-line" v-if="idx < pathData.steps.length - 1"></div>
+              <div class="timeline-content">
+                <div class="step-header">
+                  <span class="step-title">{{ step.title }}</span>
+                  <el-tag v-if="step.status === 'completed'" type="success" size="small" effect="plain">已讨论</el-tag>
+                  <el-tag v-else type="info" size="small" effect="plain">待学习</el-tag>
+                  <span v-if="step.estimated_hours" class="step-hours">{{ step.estimated_hours }}h</span>
+                </div>
+                <p class="step-desc">{{ step.description }}</p>
+                <div v-if="step.checkpoint" class="step-checkpoint">
+                  <strong>检验方式：</strong>{{ step.checkpoint }}
+                </div>
+                <!-- 关联知识库内容 -->
+                <el-collapse v-if="step.knowledge_items?.length" class="step-knowledge">
+                  <el-collapse-item :title="`关联知识库内容（${step.knowledge_items.length}条）`">
+                    <div v-for="(ki, kiIdx) in step.knowledge_items" :key="kiIdx" class="knowledge-item">
+                      <div class="ki-source">{{ ki.source || `知识片段 #${ki.id}` }}</div>
+                      <div class="ki-content">{{ ki.content }}</div>
+                    </div>
+                  </el-collapse-item>
+                </el-collapse>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="path-footer">
+          <span class="path-meta">共检索到 {{ pathData.knowledge_items_count || 0 }} 条知识库内容</span>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="pathDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -127,7 +211,7 @@ import { chatApi, courseApi, agentApi } from '@/api';
 import { useChatStore } from '@/stores/chat';
 import { useAuthStore } from '@/stores/auth';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Delete, ChatDotRound, Plus, Promotion } from '@element-plus/icons-vue';
+import { Delete, ChatDotRound, Plus, Promotion, MapLocation } from '@element-plus/icons-vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -149,6 +233,11 @@ const messagesArea = ref(null);
 const courses = ref([]);
 const selectedCourseId = ref(null);
 const deepMode = ref(false);
+
+// 学习路径
+const pathDialogVisible = ref(false);
+const pathLoading = ref(false);
+const pathData = ref(null);
 
 let abortController = null;
 
@@ -338,6 +427,30 @@ async function deleteSession(id) {
   try { await ElMessageBox.confirm('确定删除这个对话吗？', '提示', { type: 'warning' }); await chatApi.deleteSession(id); if (currentSessionId.value === id) { currentSessionId.value = null; messages.value = []; router.replace('/chat'); } await loadSessions(); ElMessage.success('已删除'); } catch {}
 }
 
+async function generateLearningPath() {
+  if (messages.value.length === 0) return;
+  pathDialogVisible.value = true;
+  pathLoading.value = true;
+  pathData.value = null;
+
+  const currentCourse = courses.value.find(c => c.id === selectedCourseId.value);
+  const chatMessages = messages.value.map(m => ({ role: m.role, content: m.content }));
+
+  try {
+    const res = await agentApi.generateLearningPathFromChat(
+      chatMessages,
+      selectedCourseId.value ? String(selectedCourseId.value) : null,
+      currentCourse?.title || '',
+    );
+    pathData.value = res;
+  } catch (e) {
+    ElMessage.error('生成学习路径失败: ' + (e.response?.data?.detail || e.message || '网络错误'));
+    pathDialogVisible.value = false;
+  } finally {
+    pathLoading.value = false;
+  }
+}
+
 function handleKeydown(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
 function scrollToBottom() { if (messagesArea.value) { messagesArea.value.scrollTop = messagesArea.value.scrollHeight; } }
 
@@ -436,4 +549,46 @@ function formatMsgTime(time) {
 .deep-mode-hint { font-size: 12px; color: var(--color-primary); }
 
 .quality-badge { display: flex; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--color-border-light); }
+
+/* 学习路径弹窗 */
+.path-loading { padding: 16px 0; }
+.path-header { margin-bottom: 20px; }
+.path-header h3 { font-size: 18px; font-weight: 700; color: var(--color-text); margin-bottom: 6px; }
+.path-header p { font-size: 13px; color: var(--color-text-muted); line-height: 1.6; }
+
+.path-section { margin-bottom: 20px; }
+.section-title { font-size: 14px; font-weight: 600; color: var(--color-text); margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+
+.discussed-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.discussed-tags .el-tag { font-size: 13px; }
+.tag-count { font-size: 11px; opacity: 0.7; margin-left: 2px; }
+
+.path-timeline { position: relative; padding-left: 8px; }
+.timeline-item { display: flex; position: relative; padding-bottom: 20px; }
+.timeline-item:last-child { padding-bottom: 0; }
+.timeline-dot {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: #fff;
+  background: var(--color-primary); z-index: 1;
+}
+.timeline-dot.completed { background: var(--color-success); }
+.timeline-line {
+  position: absolute; left: 13px; top: 28px; width: 2px;
+  height: calc(100% - 28px); background: var(--color-border);
+}
+.timeline-content { flex: 1; margin-left: 12px; min-width: 0; }
+.step-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.step-title { font-size: 14px; font-weight: 600; color: var(--color-text); }
+.step-hours { font-size: 11px; color: var(--color-text-muted); margin-left: auto; }
+.step-desc { font-size: 13px; color: var(--color-text-secondary); line-height: 1.6; margin-bottom: 6px; }
+.step-checkpoint { font-size: 12px; color: var(--color-text-muted); padding: 6px 10px; background: var(--color-bg); border-radius: var(--radius-sm); }
+.step-knowledge { margin-top: 8px; }
+.step-knowledge :deep(.el-collapse-item__header) { font-size: 12px; height: 32px; }
+.knowledge-item { padding: 8px; background: var(--color-bg); border-radius: var(--radius-sm); margin-bottom: 6px; }
+.ki-source { font-size: 11px; color: var(--color-primary); font-weight: 600; margin-bottom: 4px; }
+.ki-content { font-size: 12px; color: var(--color-text-secondary); line-height: 1.5; }
+
+.path-footer { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--color-border); }
+.path-meta { font-size: 12px; color: var(--color-text-muted); }
 </style>

@@ -36,6 +36,7 @@ services:
       - "9001:9000"
     environment:
       - SPRING_PROFILES_ACTIVE=prod
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/edu_agent?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&connectTimeout=10000
       - JAVA_OPTS=${JAVA_OPTS:--Xms256m -Xmx512m -Djava.net.preferIPv4Stack=true}
       - DB_HOST=mysql
       - DB_USER=root

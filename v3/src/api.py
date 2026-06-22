@@ -143,6 +143,12 @@ class DiagnosePracticeRequest(BaseModel):
     course_id: Optional[int] = Field(None, gt=0)
 
 
+class ChatPathRequest(BaseModel):
+    messages: List[Dict[str, str]] = Field(..., min_length=1, max_length=100)
+    course_id: Optional[str] = None
+    course_title: str = Field(default="", max_length=200)
+
+
 class ToolRequest(BaseModel):
     tool_name: str = Field(..., min_length=1, max_length=50)
     parameters: Dict[str, Any] = {}
@@ -570,6 +576,28 @@ async def diagnose_and_practice(request: DiagnosePracticeRequest, _: dict = Depe
             student_answer=request.student_answer,
             correct_answer=request.correct_answer,
             course_id=request.course_id,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/agent/chat/learning-path")
+async def generate_chat_learning_path(request: ChatPathRequest, user: dict = Depends(get_current_user)):
+    """
+    基于对话历史生成关联知识库的学习路径
+
+    分析对话内容，提取已讨论知识点，检索知识库，规划后续学习路径
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    try:
+        result = await orchestrator.generate_path_from_chat(
+            messages=request.messages,
+            course_id=request.course_id,
+            course_title=request.course_title,
+            user_id=str(user.get("sub", user.get("id", ""))),
         )
         return result
     except Exception as e:

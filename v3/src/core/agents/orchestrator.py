@@ -23,6 +23,7 @@ from .planner_agent import PlannerAgent
 from .resource_agent import ResourceAgent
 from .evaluator_agent import EvaluatorAgent
 from .event_bus import AgentEventBus
+from ..utils import parse_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,7 @@ class Orchestrator:
         self.event_bus.on("quality.checked", self._on_quality_checked)
         self.event_bus.on("mistake.recorded", self._on_mistake_recorded)
         self.event_bus.on("practice.generated", self._on_practice_generated)
+        self.event_bus.on("learning_path.generated", self._on_learning_path_generated)
 
     async def _on_quality_checked(self, data: Dict[str, Any]) -> None:
         """质检完成事件处理 - 统计通过率"""
@@ -104,6 +106,11 @@ class Orchestrator:
     async def _on_practice_generated(self, data: Dict[str, Any]) -> None:
         """练习生成事件处理 - 记录日志"""
         logger.info("练习已生成: user=%s, count=%s", data.get("user_id"), data.get("question_count"))
+
+    async def _on_learning_path_generated(self, data: Dict[str, Any]) -> None:
+        """学习路径生成事件处理 - 记录日志"""
+        logger.info("学习路径已生成: user=%s, topics=%s, steps=%s",
+                     data.get("user_id"), data.get("topics_count"), data.get("steps_count"))
 
     async def _ensure_redis(self) -> RedisClient:
         """懒初始化 Redis 连接"""
@@ -1188,3 +1195,143 @@ class Orchestrator:
                 "steps": workflow.steps,
             },
         }
+
+    async def generate_path_from_chat(
+        self,
+        messages: List[Dict[str, str]],
+        course_id: Optional[str] = None,
+        course_title: str = "",
+        user_id: str = "",
+    ) -> Dict[str, Any]:
+        """
+        基于对话历史生成关联知识库的学习路径
+
+        流程：
+        1. 从对话历史提取已讨论的知识主题
+        2. RAG 检索相关知识库内容
+        3. 获取学生画像
+        4. 调用 PlannerAgent 生成学习路径
+        5. 标记已讨论的知识点
+        """
+        await self._ensure_redis()
+
+        # Step 1: 从对话历史提取已讨论的知识主题
+        chat_text = "\n".join(
+            f"{'用户' if m.get('role') == 'user' else 'AI'}: {m.get('content', '')[:200]}"
+            for m in messages[-20:]  # 最近20条消息
+        )
+
+        extract_prompt = f"""分析以下对话历史，提取用户讨论过的所有知识主题。
+
+对话内容：
+{chat_text}
+
+请以 JSON 格式输出：
+{{
+  "topics": [
+    {{"topic": "知识主题名称", "keywords": ["关键词1", "关键词2"], "message_count": 涉及的消息数}}
+  ]
+}}
+
+只输出 JSON，不要其他内容。"""
+
+        try:
+            extract_resp = await self.llm.chat([{"role": "user", "content": extract_prompt}])
+            discussed = parse_llm_json(extract_resp, fallback={"topics": []})
+        except Exception as e:
+            logger.warning("提取对话主题失败: %s", e)
+            discussed = {"topics": []}
+
+        discussed_topics = discussed.get("topics", [])
+
+        # Step 2: RAG 检索相关知识库内容
+        all_queries = [t["topic"] for t in discussed_topics]
+        if not all_queries:
+            # 从最近的用户消息中提取 query
+            user_msgs = [m["content"] for m in messages if m.get("role") == "user"]
+            all_queries = user_msgs[-3:] if user_msgs else ["学习"]
+
+        knowledge_items = []
+        seen_ids = set()
+        knowledge_ids_filter = [int(course_id)] if course_id and course_id.isdigit() else None
+
+        for query in all_queries[:5]:
+            try:
+                retrieved = await self.rag.retrieve(
+                    query=query, top_k=5, knowledge_ids=knowledge_ids_filter,
+                )
+                for r in retrieved:
+                    kid = r.get("knowledge_id")
+                    if kid and kid not in seen_ids:
+                        seen_ids.add(kid)
+                        knowledge_items.append({
+                            "id": kid,
+                            "content": r["content"][:300],
+                            "source": r.get("source", ""),
+                            "score": r.get("score", 0),
+                        })
+            except Exception as e:
+                logger.warning("RAG 检索失败 (query=%s): %s", query, e)
+
+        # Step 3: 获取学生画像
+        student_profile = {}
+        if user_id:
+            try:
+                student_profile = await self.analyze_profile(
+                    user_id=user_id, course_id=course_id,
+                )
+                if "error" in student_profile:
+                    student_profile = {}
+            except Exception:
+                pass
+
+        # Step 4: 组装 PlannerAgent 所需的 course_knowledge
+        course_knowledge = [
+            {
+                "id": item["id"],
+                "title": item.get("source", f"知识片段-{item['id']}"),
+                "content": item["content"],
+            }
+            for item in knowledge_items
+        ]
+
+        goal = "掌握对话中涉及的知识点，并规划后续学习方向"
+        if not course_title:
+            course_title = "基于对话的个性化学习"
+
+        # Step 5: 调用 PlannerAgent 生成学习路径
+        path_result = await self.generate_learning_path(
+            student_profile=student_profile,
+            course_title=course_title,
+            course_knowledge=course_knowledge,
+            goal=goal,
+        )
+
+        # Step 6: 标记已讨论的知识点
+        discussed_set = {t["topic"].lower() for t in discussed_topics}
+        for step in path_result.get("steps", []):
+            step_title_lower = step.get("title", "").lower()
+            # 检查步骤标题是否与已讨论主题匹配
+            if any(dt in step_title_lower or step_title_lower in dt for dt in discussed_set):
+                step["status"] = "completed"
+            else:
+                step["status"] = "pending"
+
+            # 附加知识库内容到步骤
+            step_kids = step.get("knowledge_ids", [])
+            step["knowledge_items"] = [
+                ki for ki in knowledge_items if ki["id"] in step_kids
+            ]
+
+        path_result["discussed_topics"] = discussed_topics
+        path_result["knowledge_items_count"] = len(knowledge_items)
+
+        # 触发事件
+        await self.event_bus.emit("learning_path.generated", {
+            "user_id": user_id,
+            "course_id": course_id,
+            "topics_count": len(discussed_topics),
+            "steps_count": len(path_result.get("steps", [])),
+        })
+
+        return path_result
