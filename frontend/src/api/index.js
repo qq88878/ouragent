@@ -182,8 +182,52 @@ export const mistakeBookApi = {
     dueReviews(userId, limit = 20) { return agentHttp.get(`/mistake-book/due/${userId}`, { params: { limit } }); },
     diagnose(data) { return agentHttp.post('/mistake-book/diagnose', data); },
     practice(data) { return agentHttp.post('/mistake-book/practice', data); },
+    diagnoseAndPractice(data) { return agentHttp.post('/mistake-book/diagnose-practice', data); },
     dailyReview(userId) { return agentHttp.post('/mistake-book/daily-review', new URLSearchParams({ user_id: userId })); },
     notifications(userId, limit = 10) { return agentHttp.get(`/mistake-book/notifications/${userId}`, { params: { limit } }); },
+};
+
+// Agent 服务 API
+export const agentApi = {
+    chatWithQualityCheck(message, context = {}, sessionId = null) {
+        return agentHttp.post('/chat/quality-check', {
+            message,
+            context,
+            session_id: sessionId,
+        });
+    },
+    async *streamChatWithQualityCheck(message, context = {}, sessionId = null, signal = null) {
+        const token = localStorage.getItem('accessToken');
+        const response = await fetch('/agent/chat/stream-quality-check', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: 'Bearer ' + token } : {}),
+            },
+            body: JSON.stringify({ message, context, session_id: sessionId }),
+            signal,
+        });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                if (line.startsWith('data:')) {
+                    const data = line.slice(line.charAt(5) === ' ' ? 6 : 5).trim();
+                    if (data) {
+                        try { yield JSON.parse(data); } catch { /* skip */ }
+                    }
+                }
+            }
+        }
+    },
+    getStats() { return agentHttp.get('/stats'); },
 };
 
 export default http;

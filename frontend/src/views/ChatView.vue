@@ -73,6 +73,14 @@
                     <span v-if="msg.streaming" class="cursor">|</span>
                   </template>
                 </div>
+                <div v-if="msg.quality" class="quality-badge">
+                  <el-tag :type="msg.quality.score >= 70 ? 'success' : msg.quality.score >= 50 ? 'warning' : 'danger'" size="small" effect="plain">
+                    质量评分: {{ msg.quality.score }}分
+                  </el-tag>
+                  <el-tag v-if="msg.workflow?.retries > 0" type="info" size="small" effect="plain">
+                    优化 {{ msg.workflow.retries }} 次
+                  </el-tag>
+                </div>
               </div>
             </div>
 
@@ -87,6 +95,10 @@
         </div>
 
         <div class="input-area">
+          <div class="input-options">
+            <el-switch v-model="deepMode" active-text="深度答疑" inactive-text="快速对话" size="small" />
+            <span v-if="deepMode" class="deep-mode-hint">AI 将自动检查回答质量</span>
+          </div>
           <div class="input-wrapper">
             <el-input
               v-model="inputMessage"
@@ -111,7 +123,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { chatApi, courseApi } from '@/api';
+import { chatApi, courseApi, agentApi } from '@/api';
 import { useChatStore } from '@/stores/chat';
 import { useAuthStore } from '@/stores/auth';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -136,6 +148,7 @@ const sending = ref(false);
 const messagesArea = ref(null);
 const courses = ref([]);
 const selectedCourseId = ref(null);
+const deepMode = ref(false);
 
 let abortController = null;
 
@@ -190,11 +203,39 @@ async function sendMessage() {
 
   const msgId = Date.now();
   messages.value.push({ id: msgId, role: 'user', content: text, streaming: false, createTime: new Date().toISOString() });
-  const assistantMsg = { id: msgId + 1, role: 'assistant', content: '', streaming: true };
+  const assistantMsg = { id: msgId + 1, role: 'assistant', content: '', streaming: true, quality: null };
   messages.value.push(assistantMsg);
   await nextTick();
   scrollToBottom();
   sending.value = true;
+
+  // 深度答疑模式：流式调用 quality-check 端点
+  if (deepMode.value) {
+    abortController = new AbortController();
+    try {
+      for await (const event of agentApi.streamChatWithQualityCheck(text, {}, currentSessionId.value, abortController.signal)) {
+        if (event.type === 'text') {
+          assistantMsg.content += event.content;
+          scrollToBottom();
+        } else if (event.type === 'quality_check') {
+          assistantMsg.quality = event.quality;
+        } else if (event.type === 'error') {
+          assistantMsg.content += '\n\n[错误] ' + event.error;
+        }
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        assistantMsg.content = assistantMsg.content || '请求失败：' + (e.message || '网络错误');
+      }
+    }
+    assistantMsg.streaming = false;
+    assistantMsg.createTime = new Date().toISOString();
+    sending.value = false;
+    abortController = null;
+    loadSessions();
+    nextTick().then(scrollToBottom);
+    return;
+  }
 
   // 准备 AbortController 用于取消
   abortController = new AbortController();
@@ -390,4 +431,9 @@ function formatMsgTime(time) {
 .chat-input { flex: 1; }
 .chat-input :deep(.el-textarea__inner) { border-radius: var(--radius-lg) !important; padding: 10px 16px; line-height: 1.5; font-size: 14px; resize: none; }
 .send-btn { width: 42px; height: 42px; border-radius: var(--radius-md) !important; padding: 0 !important; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+.input-options { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.deep-mode-hint { font-size: 12px; color: var(--color-primary); }
+
+.quality-badge { display: flex; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--color-border-light); }
 </style>

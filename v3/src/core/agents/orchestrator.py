@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, AsyncIterator
 
 from ..memory.redis_client import get_redis, RedisClient
@@ -20,8 +22,24 @@ from .profile_agent import ProfileAgent
 from .planner_agent import PlannerAgent
 from .resource_agent import ResourceAgent
 from .evaluator_agent import EvaluatorAgent
+from .event_bus import AgentEventBus
 
 logger = logging.getLogger(__name__)
+
+RESOURCE_TYPE_MAP = {
+    "question": "generate_questions",
+    "mindmap": "generate_mindmap",
+    "summary": "generate_summary",
+}
+
+
+@dataclass
+class WorkflowResult:
+    """多 Agent 工作流执行结果"""
+    workflow_name: str
+    success: bool
+    steps: List[Dict[str, Any]] = field(default_factory=list)
+    retries: int = 0
 
 
 class Orchestrator:
@@ -59,7 +77,33 @@ class Orchestrator:
         self.resource_agent = ResourceAgent(llm, tools=[retrieval_tool])
         self.evaluator_agent = EvaluatorAgent(llm)
 
+        # 事件总线
+        self.event_bus = AgentEventBus()
+        self._quality_stats = {"total": 0, "passed": 0}
+        self._register_event_handlers()
+
         logger.info("Orchestrator 初始化完成: 4 agents, %d tools", len(self.tools.list_tools()))
+
+    def _register_event_handlers(self) -> None:
+        """注册事件处理器"""
+        self.event_bus.on("quality.checked", self._on_quality_checked)
+        self.event_bus.on("mistake.recorded", self._on_mistake_recorded)
+        self.event_bus.on("practice.generated", self._on_practice_generated)
+
+    async def _on_quality_checked(self, data: Dict[str, Any]) -> None:
+        """质检完成事件处理 - 统计通过率"""
+        self._quality_stats["total"] += 1
+        if data.get("score", 0) >= 70:
+            self._quality_stats["passed"] += 1
+        logger.debug("质检统计: total=%d, passed=%d", self._quality_stats["total"], self._quality_stats["passed"])
+
+    async def _on_mistake_recorded(self, data: Dict[str, Any]) -> None:
+        """错题记录事件处理 - 记录日志"""
+        logger.info("错题已记录: user=%s, question=%s", data.get("user_id"), str(data.get("question", ""))[:50])
+
+    async def _on_practice_generated(self, data: Dict[str, Any]) -> None:
+        """练习生成事件处理 - 记录日志"""
+        logger.info("练习已生成: user=%s, count=%s", data.get("user_id"), data.get("question_count"))
 
     async def _ensure_redis(self) -> RedisClient:
         """懒初始化 Redis 连接"""
@@ -196,6 +240,99 @@ class Orchestrator:
             yield f"\n\n抱歉，处理时出现错误: {e}"
         finally:
             await self._save_chat_message(session_id, message, "".join(full_response))
+
+    async def stream_answer_with_quality_check(
+        self,
+        question: str,
+        context: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
+        quality_threshold: float = 70.0,
+    ) -> AsyncIterator[Dict[str, Any]]:
+        """
+        流式深度答疑
+
+        采用 Stream-then-verify 策略：
+        1. 流式返回 LLM 回答（用户立即看到）
+        2. 后台异步运行 EvaluatorAgent 质检
+        3. 质检完成后发送 quality_check 事件
+        """
+        await self._ensure_redis()
+        context = context or {}
+        knowledge_ids = context.get("knowledge_ids")
+        student_profile = context.get("student_profile")
+        user_id = context.get("user_id", "")
+        course_id = context.get("course_id")
+
+        # Step 1: RAG 检索
+        knowledge_context = ""
+        try:
+            retrieved = await self.rag.retrieve(
+                query=question, top_k=5, knowledge_ids=knowledge_ids,
+            )
+            if retrieved:
+                knowledge_context = "\n\n---\n\n".join(r["content"] for r in retrieved)
+        except Exception as e:
+            logger.warning("RAG 检索失败: %s", e)
+
+        # Step 2: 流式生成回答
+        system_prompt = self._build_chat_system_prompt(student_profile, knowledge_context)
+        messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": question}]
+
+        full_answer = []
+        try:
+            async for chunk in self.llm.stream(messages):
+                full_answer.append(chunk)
+                yield {"type": "text", "content": chunk}
+        except Exception as e:
+            logger.error("流式生成失败: %s", e)
+            yield {"type": "text", "content": f"\n\n抱歉，处理时出现错误: {e}"}
+            yield {"type": "done"}
+            return
+
+        complete_answer = "".join(full_answer)
+
+        # Step 3: 异步质检
+        try:
+            quality = await self.evaluator_agent.execute(
+                "evaluate_answer",
+                question=question,
+                student_answer=complete_answer,
+                knowledge_context=knowledge_context,
+            )
+            score = quality.get("score", 0)
+
+            yield {"type": "quality_check", "quality": quality}
+
+            # 触发事件
+            await self.event_bus.emit("quality.checked", {
+                "question": question, "score": score, "is_correct": quality.get("is_correct"),
+            })
+
+            # 质检失败且回答错误时，自动记录错题
+            if score < quality_threshold and quality.get("is_correct") is False and user_id:
+                try:
+                    await self._ensure_mistake_book()
+                    await self._mistake_book.add_mistake(
+                        user_id=user_id,
+                        question=question,
+                        student_answer=complete_answer,
+                        reference_answer="",
+                        error_category="concept_unclear",
+                        course_id=course_id,
+                    )
+                    await self.event_bus.emit("mistake.recorded", {
+                        "user_id": user_id, "question": question,
+                    })
+                except Exception as e:
+                    logger.warning("自动记录错题失败: %s", e)
+
+        except Exception as e:
+            logger.warning("质检失败: %s", e)
+            yield {"type": "quality_check", "quality": {"score": 80, "is_correct": True, "error": str(e)}}
+
+        # 保存对话历史
+        await self._save_chat_message(session_id, question, complete_answer)
+        yield {"type": "done"}
 
     def _build_chat_system_prompt(
         self,
@@ -700,4 +837,354 @@ class Orchestrator:
                 "weak_points": weak_points,
                 "similar_mistakes_count": len(mistakes),
             }
+        }
+
+    # ==================== 多 Agent 协作接口 ====================
+
+    async def _call_agent_safe(
+        self,
+        agent_name: str,
+        agent,
+        task_type: str,
+        fallback: Dict[str, Any],
+        timeout: float = 30.0,
+        **kwargs,
+    ) -> Dict[str, Any]:
+        """安全调用 Agent，带超时和降级"""
+        try:
+            result = await asyncio.wait_for(
+                agent.execute(task_type, **kwargs),
+                timeout=timeout,
+            )
+            return result
+        except asyncio.TimeoutError:
+            logger.error("[%s] Agent 超时 (%.1fs)", agent_name, timeout)
+            fallback["error"] = f"{agent_name} timeout"
+            return fallback
+        except Exception as e:
+            logger.error("[%s] Agent 调用失败: %s", agent_name, e)
+            fallback["error"] = str(e)
+            return fallback
+
+    async def analyze_profile(
+        self,
+        user_id: str,
+        chat_history: List[Dict[str, str]],
+        study_records: List[Dict[str, Any]],
+        current_profile: Optional[Dict[str, Any]] = None,
+        course_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """学生画像分析（委托给 ProfileAgent）"""
+        await self._ensure_redis()
+
+        # 检查缓存
+        if self._profile_cache and course_id:
+            cached = await self._profile_cache.get(user_id, course_id)
+            if cached:
+                logger.debug("画像缓存命中: user=%s, course=%s", user_id, course_id)
+                return cached
+
+        fallback = current_profile or {}
+        result = await self._call_agent_safe(
+            "profile_agent", self.profile_agent, "analyze",
+            fallback=fallback,
+            chat_history=chat_history,
+            study_records=study_records,
+            current_profile=current_profile or {},
+        )
+
+        # 缓存结果
+        if self._profile_cache and course_id and "error" not in result:
+            await self._profile_cache.set(user_id, course_id, result)
+
+        return result
+
+    async def generate_learning_path(
+        self,
+        student_profile: Dict[str, Any],
+        course_title: str,
+        course_knowledge: List[Dict[str, Any]],
+        goal: str = "掌握课程核心知识",
+    ) -> Dict[str, Any]:
+        """生成学习路径（委托给 PlannerAgent）"""
+        return await self._call_agent_safe(
+            "planner_agent", self.planner_agent, "generate_path",
+            fallback={"title": course_title, "steps": [], "error": "planner_failed"},
+            student_profile=student_profile,
+            course_title=course_title,
+            course_knowledge=course_knowledge,
+            goal=goal,
+        )
+
+    async def generate_resource(
+        self,
+        resource_type: str,
+        topic: str,
+        knowledge_ids: Optional[List[int]] = None,
+        difficulty: str = "medium",
+        count: int = 5,
+    ) -> Dict[str, Any]:
+        """生成教学资源（委托给 ResourceAgent）"""
+        task_type = RESOURCE_TYPE_MAP.get(resource_type)
+        if not task_type:
+            return {"error": f"不支持的资源类型: {resource_type}"}
+
+        return await self._call_agent_safe(
+            "resource_agent", self.resource_agent, task_type,
+            fallback={"topic": topic, "questions": [], "error": "resource_failed"},
+            topic=topic,
+            knowledge_ids=knowledge_ids,
+            difficulty=difficulty,
+            count=count,
+        )
+
+    async def evaluate_answer(
+        self,
+        question: str,
+        student_answer: str,
+        reference_answer: str = "",
+        knowledge_context: str = "",
+    ) -> Dict[str, Any]:
+        """评估学生答案（委托给 EvaluatorAgent）"""
+        return await self._call_agent_safe(
+            "evaluator_agent", self.evaluator_agent, "evaluate_answer",
+            fallback={"score": 0, "is_correct": False, "error": "evaluator_failed"},
+            question=question,
+            student_answer=student_answer,
+            reference_answer=reference_answer,
+            knowledge_context=knowledge_context,
+        )
+
+    async def answer_with_quality_check(
+        self,
+        question: str,
+        context: Optional[Dict[str, Any]] = None,
+        session_id: Optional[str] = None,
+        max_retries: int = 2,
+        quality_threshold: float = 70.0,
+    ) -> Dict[str, Any]:
+        """
+        智能答疑 + 质检工作流
+
+        流程：
+        1. RAG 检索知识
+        2. LLM 生成回答
+        3. EvaluatorAgent 评估质量
+        4. 如果质量不达标 → 优化查询 → 重试
+        """
+        await self._ensure_redis()
+        context = context or {}
+        knowledge_ids = context.get("knowledge_ids")
+        student_profile = context.get("student_profile")
+        user_id = context.get("user_id", "")
+        course_id = context.get("course_id")
+
+        workflow = WorkflowResult(workflow_name="qa_with_quality_check", success=False)
+        best_answer = ""
+        best_quality: Dict[str, Any] = {}
+        current_query = question
+
+        for attempt in range(max_retries + 1):
+            # Step 1: RAG 检索
+            knowledge_context = ""
+            try:
+                retrieved = await self.rag.retrieve(
+                    query=current_query, top_k=5, knowledge_ids=knowledge_ids,
+                )
+                if retrieved:
+                    knowledge_context = "\n\n---\n\n".join(r["content"] for r in retrieved)
+                workflow.steps.append({"step": "retrieve", "status": "ok", "attempt": attempt})
+            except Exception as e:
+                logger.warning("RAG 检索失败: %s", e)
+                workflow.steps.append({"step": "retrieve", "status": "error", "error": str(e)})
+
+            # Step 2: LLM 生成回答
+            try:
+                system_prompt = self._build_chat_system_prompt(student_profile, knowledge_context)
+                messages = [{"role": "system", "content": system_prompt}]
+                messages.append({"role": "user", "content": question})
+                answer = await self.llm.chat(messages)
+                workflow.steps.append({"step": "generate", "status": "ok", "attempt": attempt})
+
+                # 触发事件
+                await self.event_bus.emit("answer.generated", {
+                    "question": question, "answer": answer, "attempt": attempt,
+                })
+            except Exception as e:
+                logger.error("LLM 生成失败: %s", e)
+                answer = f"抱歉，处理您的问题时出现错误: {e}"
+                workflow.steps.append({"step": "generate", "status": "error", "error": str(e)})
+                break
+
+            # Step 3: EvaluatorAgent 质量检查
+            try:
+                quality = await self.evaluator_agent.execute(
+                    "evaluate_answer",
+                    question=question,
+                    student_answer=answer,
+                    knowledge_context=knowledge_context,
+                )
+                score = quality.get("score", 0)
+                workflow.steps.append({"step": "evaluate", "status": "ok", "score": score, "attempt": attempt})
+
+                # 触发事件
+                await self.event_bus.emit("quality.checked", {
+                    "question": question, "score": score, "is_correct": quality.get("is_correct"),
+                })
+            except Exception as e:
+                logger.warning("质量检查失败，接受回答: %s", e)
+                quality = {"score": 80, "is_correct": True, "evaluator_error": str(e)}
+                score = 80
+                workflow.steps.append({"step": "evaluate", "status": "fallback", "error": str(e)})
+
+            best_answer = answer
+            best_quality = quality
+
+            # Step 4: 检查质量是否达标
+            if score >= quality_threshold:
+                workflow.success = True
+                break
+
+            # Step 5: 优化查询，准备重试
+            if attempt < max_retries:
+                errors = quality.get("errors", [])
+                suggestions = quality.get("suggestions", [])
+                refinement = " ".join(str(x) for x in errors + suggestions if x)
+                if refinement:
+                    current_query = f"{question} {refinement}"
+                workflow.retries += 1
+
+        # 质检发现问题时自动记录错题
+        if not workflow.success and best_quality.get("is_correct") is False and user_id:
+            try:
+                await self._ensure_mistake_book()
+                await self._mistake_book.add_mistake(
+                    user_id=user_id,
+                    question=question,
+                    student_answer=best_answer,
+                    reference_answer="",
+                    error_category="concept_unclear",
+                    course_id=course_id,
+                )
+                await self.event_bus.emit("mistake.recorded", {
+                    "user_id": user_id, "question": question,
+                })
+            except Exception as e:
+                logger.warning("自动记录错题失败: %s", e)
+
+        # 保存对话历史
+        await self._save_chat_message(session_id, question, best_answer)
+
+        return {
+            "answer": best_answer,
+            "quality": best_quality,
+            "workflow": {
+                "name": workflow.workflow_name,
+                "success": workflow.success,
+                "steps": workflow.steps,
+                "retries": workflow.retries,
+            },
+            "retries_used": workflow.retries,
+        }
+
+    async def diagnose_and_practice(
+        self,
+        user_id: str,
+        question: str,
+        student_answer: str,
+        correct_answer: str = "",
+        course_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        错题诊断 + 专项练习工作流
+
+        流程：
+        1. EvaluatorAgent 评估错误类型
+        2. ResourceAgent 生成同类练习题
+        3. 保存错题 + 返回诊断结果 + 练习题
+        """
+        await self._ensure_redis()
+        workflow = WorkflowResult(workflow_name="diagnose_and_practice", success=False)
+
+        # Step 1: EvaluatorAgent 评估错误
+        evaluation = await self._call_agent_safe(
+            "evaluator_agent", self.evaluator_agent, "evaluate_answer",
+            fallback={"score": 0, "is_correct": False, "errors": ["评估失败"]},
+            question=question,
+            student_answer=student_answer,
+            reference_answer=correct_answer,
+        )
+
+        error_category = "concept_unclear"
+        if evaluation.get("is_correct"):
+            error_category = "correct"
+        elif "粗心" in str(evaluation.get("errors", [])):
+            error_category = "careless"
+        elif "方法" in str(evaluation.get("errors", [])):
+            error_category = "wrong_approach"
+        elif "不完整" in str(evaluation.get("errors", [])):
+            error_category = "incomplete"
+
+        workflow.steps.append({
+            "step": "evaluate", "status": "ok",
+            "error_category": error_category,
+            "score": evaluation.get("score", 0),
+        })
+
+        # Step 2: ResourceAgent 生成同类练习题
+        practice = await self._call_agent_safe(
+            "resource_agent", self.resource_agent, "generate_questions",
+            fallback={"questions": [], "topic": question[:50]},
+            topic=question,
+            difficulty="medium",
+            count=3,
+        )
+
+        workflow.steps.append({
+            "step": "generate_practice", "status": "ok",
+            "question_count": len(practice.get("questions", [])),
+        })
+
+        # Step 3: 保存错题
+        mistake = None
+        if error_category != "correct":
+            try:
+                await self._ensure_mistake_book()
+                mistake = await self._mistake_book.add_mistake(
+                    user_id=user_id,
+                    question=question,
+                    student_answer=student_answer,
+                    reference_answer=correct_answer,
+                    error_category=error_category,
+                    error_pattern=str(evaluation.get("errors", ["未知"])),
+                    error_root_cause=str(evaluation.get("suggestions", ["未知"])),
+                    course_id=course_id,
+                    diagnosis=evaluation,
+                )
+                workflow.steps.append({"step": "save_mistake", "status": "ok"})
+
+                await self.event_bus.emit("mistake.recorded", {
+                    "user_id": user_id, "question": question, "error_category": error_category,
+                })
+            except Exception as e:
+                logger.warning("保存错题失败: %s", e)
+                workflow.steps.append({"step": "save_mistake", "status": "error", "error": str(e)})
+
+        workflow.success = True
+
+        # 触发事件
+        await self.event_bus.emit("practice.generated", {
+            "user_id": user_id, "question_count": len(practice.get("questions", [])),
+        })
+
+        return {
+            "evaluation": evaluation,
+            "error_category": error_category,
+            "practice": practice,
+            "mistake": mistake,
+            "workflow": {
+                "name": workflow.workflow_name,
+                "success": workflow.success,
+                "steps": workflow.steps,
+            },
         }

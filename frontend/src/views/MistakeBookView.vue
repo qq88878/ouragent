@@ -37,8 +37,9 @@
           <el-table-column label="复习轮次" width="90">
             <template #default="{row}">第{{ row.review_stage + 1 }}轮</template>
           </el-table-column>
-          <el-table-column label="操作" width="240">
+          <el-table-column label="操作" width="300">
             <template #default="{row}">
+              <el-button size="small" type="primary" plain @click="doDiagnoseAndPractice(row)">AI诊断</el-button>
               <el-button size="small" type="danger" plain @click="doDelete(row)">删除</el-button>
               <el-button size="small" type="success" plain @click="doReview(row, true)" :disabled="row.mastered">记得</el-button>
               <el-button size="small" type="warning" plain @click="doReview(row, false)" :disabled="row.mastered">忘了</el-button>
@@ -53,7 +54,10 @@
           <el-form-item label="题目"><el-input v-model="diagForm.question" type="textarea" rows="2" /></el-form-item>
           <el-form-item label="我的答案"><el-input v-model="diagForm.student_answer" /></el-form-item>
           <el-form-item label="正确答案"><el-input v-model="diagForm.correct_answer" /></el-form-item>
-          <el-form-item><el-button type="primary" @click="doDiagnose" :loading="diagnosing">开始诊断</el-button></el-form-item>
+          <el-form-item>
+            <el-button type="primary" @click="doDiagnose" :loading="diagnosing">开始诊断</el-button>
+            <el-button type="success" @click="doDiagnoseAndPracticeFromForm" :loading="diagnosingWithPractice" style="margin-left:12px">一键诊断+生成练习</el-button>
+          </el-form-item>
         </el-form>
         <el-card v-if="diagnosisResult" class="diagnosis-card">
           <template #header>诊断结果</template>
@@ -61,6 +65,15 @@
           <p><strong>错误模式：</strong>{{ diagnosisResult.error_pattern }}</p>
           <p><strong>根因：</strong>{{ diagnosisResult.error_root_cause }}</p>
           <p><strong>建议：</strong>{{ diagnosisResult.suggestion }}</p>
+        </el-card>
+        <el-card v-if="practiceFromDiagnosis" class="practice-card" style="margin-top:16px">
+          <template #header>专项练习</template>
+          <p><strong>目标技能：</strong>{{ practiceFromDiagnosis.target_skill }}</p>
+          <div v-for="(q, idx) in (practiceFromDiagnosis.questions || [])" :key="idx" class="practice-q" style="margin-top:12px;padding:12px;background:#f5f7fa;border-radius:8px">
+            <p><strong>题目{{ idx + 1 }}：</strong>{{ q.question }}</p>
+            <p><strong>答案：</strong>{{ q.answer }}</p>
+            <p v-if="q.hint"><strong>提示：</strong>{{ q.hint }}</p>
+          </div>
         </el-card>
       </el-tab-pane>
 
@@ -117,8 +130,10 @@ const userId = computed(() => String(authStore.user?.id || '1'))
 
 // 诊断
 const diagnosing = ref(false)
+const diagnosingWithPractice = ref(false)
 const diagForm = reactive({ question: '', student_answer: '', correct_answer: '' })
 const diagnosisResult = ref(null)
+const practiceFromDiagnosis = ref(null)
 
 // 练习
 const generating = ref(false)
@@ -168,6 +183,46 @@ const doDiagnose = async () => {
     await loadData()
   } catch (e) { ElMessage.error('诊断失败: ' + (e.response?.data?.detail || e.message)) }
   finally { diagnosing.value = false }
+}
+
+const doDiagnoseAndPractice = async (row) => {
+  diagnosingWithPractice.value = true
+  diagnosisResult.value = null
+  practiceFromDiagnosis.value = null
+  activeTab.value = 'diagnose'
+  diagForm.question = row.question
+  diagForm.student_answer = row.student_answer
+  diagForm.correct_answer = row.reference_answer || ''
+  try {
+    const res = await mistakeBookApi.diagnoseAndPractice({
+      user_id: userId.value,
+      question: row.question,
+      student_answer: row.student_answer,
+      correct_answer: row.reference_answer || '',
+    })
+    diagnosisResult.value = res.evaluation
+    practiceFromDiagnosis.value = res.practice
+    ElMessage.success('诊断完成，已生成专项练习')
+    await loadData()
+  } catch (e) { ElMessage.error('诊断失败: ' + (e.response?.data?.detail || e.message)) }
+  finally { diagnosingWithPractice.value = false }
+}
+
+const doDiagnoseAndPracticeFromForm = async () => {
+  diagnosingWithPractice.value = true
+  diagnosisResult.value = null
+  practiceFromDiagnosis.value = null
+  try {
+    const res = await mistakeBookApi.diagnoseAndPractice({
+      user_id: userId.value,
+      ...diagForm,
+    })
+    diagnosisResult.value = res.evaluation
+    practiceFromDiagnosis.value = res.practice
+    ElMessage.success('诊断完成，已生成专项练习')
+    await loadData()
+  } catch (e) { ElMessage.error('诊断失败: ' + (e.response?.data?.detail || e.message)) }
+  finally { diagnosingWithPractice.value = false }
 }
 
 const doGeneratePractice = async () => {

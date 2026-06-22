@@ -127,6 +127,22 @@ class EvaluateRequest(BaseModel):
     knowledge_context: str = Field(default="", max_length=10000)
 
 
+class QAWithCheckRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=10000)
+    context: Dict[str, Any] = Field(default_factory=dict)
+    session_id: Optional[str] = Field(None, pattern=r"^[a-f0-9\-]{36}$")
+    max_retries: int = Field(default=2, ge=0, le=5)
+    quality_threshold: float = Field(default=70.0, ge=0, le=100)
+
+
+class DiagnosePracticeRequest(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=100)
+    question: str = Field(..., min_length=1, max_length=5000)
+    student_answer: str = Field(..., min_length=1, max_length=5000)
+    correct_answer: str = Field(default="", max_length=5000)
+    course_id: Optional[int] = Field(None, gt=0)
+
+
 class ToolRequest(BaseModel):
     tool_name: str = Field(..., min_length=1, max_length=50)
     parameters: Dict[str, Any] = {}
@@ -331,6 +347,27 @@ async def chat_stream(request: ChatRequest, _: dict = Depends(get_current_user))
     return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
+@app.post("/agent/chat/stream-quality-check")
+async def stream_chat_with_quality_check(request: QAWithCheckRequest, _: dict = Depends(get_current_user)):
+    """流式深度答疑 — 先流式返回回答，后台异步质检"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    async def event_generator():
+        try:
+            async for event in orchestrator.stream_answer_with_quality_check(
+                question=request.message,
+                context=request.context,
+                session_id=request.session_id,
+                quality_threshold=request.quality_threshold,
+            ):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
+
+
 # ==================== 知识库接口 ====================
 
 
@@ -491,6 +528,71 @@ async def evaluate_answer(request: EvaluateRequest, _: dict = Depends(get_curren
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/agent/chat/quality-check")
+async def chat_with_quality_check(request: QAWithCheckRequest, _: dict = Depends(get_current_user)):
+    """
+    智能答疑 + 质检工作流
+
+    多 Agent 协作：RAG 检索 → LLM 生成 → EvaluatorAgent 质检 → 不达标则重试
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    try:
+        result = await orchestrator.answer_with_quality_check(
+            question=request.message,
+            context=request.context,
+            session_id=request.session_id,
+            max_retries=request.max_retries,
+            quality_threshold=request.quality_threshold,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/agent/mistake-book/diagnose-practice")
+async def diagnose_and_practice(request: DiagnosePracticeRequest, _: dict = Depends(get_current_user)):
+    """
+    错题诊断 + 专项练习工作流
+
+    多 Agent 协作：EvaluatorAgent 评估 → ResourceAgent 生成练习 → 保存错题
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    try:
+        result = await orchestrator.diagnose_and_practice(
+            user_id=request.user_id,
+            question=request.question,
+            student_answer=request.student_answer,
+            correct_answer=request.correct_answer,
+            course_id=request.course_id,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/agent/events")
+async def get_event_history(limit: int = 50, event: Optional[str] = None):
+    """获取 Agent 事件历史（调试用）"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+    return {"events": orchestrator.event_bus.get_history(limit=limit, event=event)}
+
+
+@app.get("/agent/stats")
+async def get_agent_stats():
+    """获取 Agent 统计数据"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+    return {
+        "quality_stats": orchestrator._quality_stats,
+        "subscribed_events": orchestrator.event_bus.get_subscribed_events(),
+    }
 
 
 # ==================== 工具接口 ====================
