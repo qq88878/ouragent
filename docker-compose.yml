@@ -1,4 +1,4 @@
-﻿# ============================================================
+# ============================================================
 # Docker Compose - education system service orchestration
 # Java backend + Python Agent + Vue frontend (Nginx) + MySQL + Redis
 #
@@ -39,6 +39,7 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:mysql://mysql:3306/edu_agent?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&connectTimeout=10000
       - JAVA_OPTS=${JAVA_OPTS:--Xms256m -Xmx512m -Djava.net.preferIPv4Stack=true}
       - DB_HOST=mysql
+      - DB_NAME=${DB_NAME:-edu_agent}
       - DB_USER=root
       - DB_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - REDIS_HOST=redis

@@ -33,6 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.ArrayList;
 import java.util.stream.Collectors;
 
 @Service
@@ -52,22 +53,35 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
 
     @Override
     @Transactional
-    public KnowledgeDTO uploadKnowledge(MultipartFile file, KnowledgeUploadDTO dto) {
+    public List<KnowledgeDTO> uploadKnowledgeBatch(List<MultipartFile> files, KnowledgeUploadDTO dto) {
         LoginUser loginUser = getCurrentLoginUser();
         if (!"TEACHER".equals(loginUser.getUser().getRole()) && !"ADMIN".equals(loginUser.getUser().getRole())) {
-            throw new BizException(ResultCode.FORBIDDEN, "只有教师可以上传知识库文件");
+            throw new BizException(ResultCode.FORBIDDEN, "Only teachers or admins can upload knowledge files");
         }
-
         if (dto.getCourseId() != null) {
             Course course = courseMapper.selectById(dto.getCourseId());
             if (course == null) {
-                throw new BizException(ResultCode.NOT_FOUND, "课程不存在");
+                throw new BizException(ResultCode.NOT_FOUND, "Course not found");
             }
             if (!course.getTeacherId().equals(loginUser.getUser().getId()) && !"ADMIN".equals(loginUser.getUser().getRole())) {
-                throw new BizException(ResultCode.FORBIDDEN, "只能给自己创建的课程上传辅材");
+                throw new BizException(ResultCode.FORBIDDEN, "Can only upload to your own courses");
             }
         }
+        List<KnowledgeDTO> results = new ArrayList<>();
+        for (MultipartFile file : files) {
+            if (file == null || file.isEmpty()) continue;
+            results.add(doUploadSingle(file, dto, loginUser));
+        }
+        return results;
+    }
 
+    @Override
+    @Transactional
+    public KnowledgeDTO uploadKnowledge(MultipartFile file, KnowledgeUploadDTO dto) {
+        return doUploadSingle(file, dto, getCurrentLoginUser());
+    }
+
+    private KnowledgeDTO doUploadSingle(MultipartFile file, KnowledgeUploadDTO dto, LoginUser loginUser) {
         String originalFilename = file.getOriginalFilename();
         String fileType = getFileExtension(originalFilename);
         String storedFilename = UUID.randomUUID() + "." + fileType;

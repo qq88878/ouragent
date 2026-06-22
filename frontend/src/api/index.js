@@ -125,6 +125,14 @@ export const knowledgeApi = {
         if (description) formData.append('description', description);
         return http.post('/knowledge/upload', formData);
     },
+    uploadBatch(files, courseId, name, description) {
+        const formData = new FormData();
+        files.forEach(file => formData.append('files', file));
+        if (courseId != null) formData.append('courseId', courseId);
+        if (name) formData.append('name', name);
+        if (description) formData.append('description', description);
+        return http.post('/knowledge/upload-batch', formData);
+    },
     list(courseId) { return http.get('/knowledge', { params: { courseId } }); },
     listAll() { return http.get('/knowledge/all'); },
     listPending() { return http.get('/knowledge/pending'); },

@@ -101,10 +101,19 @@
           <el-input v-model="uploadForm.description" placeholder="文件描述（选填）" />
         </el-form-item>
         <el-form-item label="文件">
-          <el-upload :auto-upload="false" :on-change="handleFileChange" :limit="1" drag style="width: 100%;">
+          <el-upload :auto-upload="false" :on-change="handleFileAdd" multiple drag style="width: 100%;">
             <el-icon :size="32" color="#C4BAB0"><UploadFilled /></el-icon>
-            <div style="margin-top: 6px; font-size: 13px;">拖拽或点击选择文件</div>
+            <div style="margin-top: 6px; font-size: 13px;">拖拽或点击选择文件（可多选）</div>
           </el-upload>
+          <div v-if="uploadForm.files.length > 0" class="file-list">
+            <div v-for="(f, idx) in uploadForm.files" :key="idx" class="file-item">
+              <span class="file-item-name">{{ f.name }}</span>
+              <span class="file-item-size">{{ formatSize(f.size) }}</span>
+              <el-button text type="danger" size="small" @click="removeFile(idx)">
+                <el-icon :size="14"><Delete /></el-icon>
+              </el-button>
+            </div>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -174,7 +183,7 @@ const selectedIds = ref([]);
 const courses = ref([]);
 
 const showUploadDialog = ref(false);
-const uploadForm = reactive({ courseId: null, file: null, name: '', description: '' });
+const uploadForm = reactive({ courseId: null, files: [], name: '', description: '' });
 const uploading = ref(false);
 
 const showApproveDialog = ref(false);
@@ -233,15 +242,28 @@ async function viewContent(id) {
   catch { ElMessage.error('加载内容失败'); } finally { contentLoading.value = false; }
 }
 
-function handleFileChange(file) { uploadForm.file = file.raw; }
+function handleFileAdd(file) {
+  const f = file.raw;
+  if (!uploadForm.files.some(existing => existing.name === f.name && existing.size === f.size)) {
+    uploadForm.files.push(f);
+  }
+}
+function removeFile(idx) { uploadForm.files.splice(idx, 1); }
 
-function openUploadDialog() { Object.assign(uploadForm, { courseId: null, file: null, name: '', description: '' }); showUploadDialog.value = true; }
+function openUploadDialog() { Object.assign(uploadForm, { courseId: null, files: [], name: '', description: '' }); showUploadDialog.value = true; }
 
 async function doUpload() {
-  if (!uploadForm.file) { ElMessage.warning('请选择文件'); return; }
+  if (uploadForm.files.length === 0) { ElMessage.warning('请选择文件'); return; }
   uploading.value = true;
-  try { const res = await knowledgeApi.upload(uploadForm.file, uploadForm.courseId || null, uploadForm.name, uploadForm.description); if (res.code === 200) { ElMessage.success('上传成功'); showUploadDialog.value = false; await loadKnowledge(); } }
-  catch { ElMessage.error('上传失败'); } finally { uploading.value = false; }
+  try {
+    const res = await knowledgeApi.uploadBatch(uploadForm.files, uploadForm.courseId || null, uploadForm.name, uploadForm.description);
+    if (res.code === 200) {
+      const count = res.data ? res.data.length : uploadForm.files.length;
+      ElMessage.success(`成功上传 ${count} 个文件`);
+      showUploadDialog.value = false;
+      await loadKnowledge();
+    }
+  } catch { ElMessage.error('上传失败'); } finally { uploading.value = false; }
 }
 
 async function remove(id) {
@@ -294,4 +316,9 @@ function formatSize(bytes) { if (!bytes) return '-'; if (bytes < 1024) return by
   font-size: 14px; line-height: 1.9; white-space: pre-wrap; word-break: break-all;
   max-height: 60vh; overflow-y: auto;
 }
+
+.file-list { margin-top: 10px; max-height: 160px; overflow-y: auto; }
+.file-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--color-bg); border-radius: 6px; margin-bottom: 4px; font-size: 13px; }
+.file-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text); }
+.file-item-size { color: var(--color-text-muted); font-size: 12px; flex-shrink: 0; }
 </style>

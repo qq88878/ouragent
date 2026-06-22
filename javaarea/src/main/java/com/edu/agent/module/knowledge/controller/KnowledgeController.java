@@ -43,6 +43,22 @@ public class KnowledgeController {
         return Result.success(knowledgeService.uploadKnowledge(file, dto));
     }
 
+    @PostMapping(value = "/upload-batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
+    public Result<List<KnowledgeDTO>> uploadBatch(@RequestPart("files") List<MultipartFile> files,
+                                                   @RequestParam(required = false) Long courseId,
+                                                   @RequestParam(required = false) String name,
+                                                   @RequestParam(required = false) String description) {
+        if (files == null || files.isEmpty()) {
+            return Result.fail(400, "No files selected");
+        }
+        KnowledgeUploadDTO dto = new KnowledgeUploadDTO();
+        dto.setCourseId(courseId);
+        dto.setName(name);
+        dto.setDescription(description);
+        return Result.success(knowledgeService.uploadKnowledgeBatch(files, dto));
+    }
+
     @GetMapping("/all")
     public Result<List<KnowledgeDTO>> listAll() {
         return Result.success(knowledgeService.listAll());

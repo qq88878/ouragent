@@ -8,6 +8,11 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 public interface KnowledgeService {
+    /**
+     * Upload multiple knowledge files in batch.
+     */
+    List<KnowledgeDTO> uploadKnowledgeBatch(List<MultipartFile> files, KnowledgeUploadDTO dto);
+
 
     KnowledgeDTO uploadKnowledge(MultipartFile file, KnowledgeUploadDTO dto);
 
