@@ -11,6 +11,7 @@ from ..memory.redis_client import get_redis, RedisClient
 from ..memory.session_manager import SessionManager
 from ..memory.conversation_memory import ConversationMemory
 from ..memory.profile_cache import ProfileCache, RAGCache
+from ..memory.chat_signals import ChatSignalExtractor, ChatSignalsCache
 from ..memory.learning_progress import LearningProgress
 from ..rag.rag_pipeline import RAGPipeline
 from ..tools.base import ToolRegistry
@@ -64,6 +65,8 @@ class Orchestrator:
         self._profile_cache: Optional[ProfileCache] = None
         self._rag_cache: Optional[RAGCache] = None
         self._learning_progress: Optional[LearningProgress] = None
+        self._signals_cache: Optional[ChatSignalsCache] = None
+        self._signal_extractor = ChatSignalExtractor()
 
         # 注册工具
         self.tools = ToolRegistry()
@@ -121,6 +124,7 @@ class Orchestrator:
             self._profile_cache = ProfileCache(self._redis_client)
             self._rag_cache = RAGCache(self._redis_client)
             self._learning_progress = LearningProgress(self._redis_client)
+            self._signals_cache = ChatSignalsCache(self._redis_client)
             logger.info("Redis 记忆系统初始化完成")
         return self._redis_client
 
@@ -143,11 +147,11 @@ class Orchestrator:
         message: str,
         context: Dict[str, Any],
         session_id: Optional[str],
-    ) -> list[dict]:
+    ) -> tuple[list[dict], str]:
         """
         准备对话消息列表（RAG 检索 + 历史加载 + prompt 构造）。
 
-        chat() 和 stream_chat() 共享此逻辑。
+        返回 (messages, user_id)，user_id 用于后续信号提取。
         """
         knowledge_ids = context.get("knowledge_ids")
         student_profile = context.get("student_profile")
@@ -156,15 +160,37 @@ class Orchestrator:
 
         # 获取对话历史（优先从 Redis）
         history = context.get("history")
+        session_user_id = ""
+        signals_profile: Dict[str, Any] = {}
         if session_id and self._session_manager:
             conv = ConversationMemory(self._redis_client, session_id)
             history = await conv.get_recent_context_for_llm(max_messages=10)
             await self._session_manager.touch_session(session_id)
 
+            # 加载会话级学习信号
+            session_meta = await self._session_manager.get_session(session_id)
+            if session_meta:
+                session_user_id = str(session_meta.get("user_id", ""))
+                if self._signals_cache and session_user_id:
+                    signals_profile = await self._signals_cache.get_signals(session_user_id, session_id)
+
+        # RAG query 增强：拼接 active_topics + gap_keywords
+        enhanced_query = message
+        if signals_profile:
+            query_parts = []
+            active_topics = signals_profile.get("active_topics", [])[:3]
+            gap_kws = signals_profile.get("gap_keywords", [])[:2]
+            if active_topics:
+                query_parts.extend(active_topics)
+            if gap_kws:
+                query_parts.extend(gap_kws)
+            if query_parts:
+                enhanced_query = " ".join(query_parts) + " " + message
+
         # RAG 检索（带缓存）
         knowledge_context = ""
         if self._rag_cache:
-            cached_results = await self._rag_cache.get_results(message, knowledge_ids)
+            cached_results = await self._rag_cache.get_results(enhanced_query, knowledge_ids)
             if cached_results:
                 knowledge_context = "\n\n---\n\n".join(r["content"] for r in cached_results)
                 logger.debug("RAG 缓存命中")
@@ -172,23 +198,25 @@ class Orchestrator:
         if not knowledge_context:
             try:
                 retrieved = await self.rag.retrieve(
-                    query=message, top_k=5, knowledge_ids=knowledge_ids,
+                    query=enhanced_query, top_k=5, knowledge_ids=knowledge_ids,
                 )
                 if retrieved:
                     knowledge_context = "\n\n---\n\n".join(r["content"] for r in retrieved)
                     if self._rag_cache:
-                        await self._rag_cache.set_results(message, retrieved, knowledge_ids)
+                        await self._rag_cache.set_results(enhanced_query, retrieved, knowledge_ids)
             except Exception as e:
                 logger.warning("RAG 检索失败，降级为纯 LLM 对话: %s", e)
 
-        # 构造个性化 prompt
+        # 构造个性化 prompt（注入学习信号）
         schedule = context.get("schedule")
-        system_prompt = self._build_chat_system_prompt(student_profile, knowledge_context, schedule)
+        system_prompt = self._build_chat_system_prompt(
+            student_profile, knowledge_context, schedule, signals_profile,
+        )
         messages = [{"role": "system", "content": system_prompt}]
         if history:
             messages.extend(history[-10:])
         messages.append({"role": "user", "content": message})
-        return messages
+        return messages, session_user_id
 
     async def _save_chat_message(
         self, session_id: Optional[str], message: str, response: str,
@@ -201,6 +229,23 @@ class Orchestrator:
                 await conv.add_message("assistant", response)
             except Exception as e:
                 logger.warning("保存对话历史失败: %s", e)
+
+    async def _extract_and_update_signals(
+        self,
+        user_id: str,
+        session_id: str,
+        user_message: str,
+        assistant_response: str,
+    ) -> None:
+        """从本轮对话提取学习信号并更新 Redis 画像"""
+        if not self._signals_cache or not user_id:
+            return
+        try:
+            delta = self._signal_extractor.extract(user_message, assistant_response)
+            if delta:
+                await self._signals_cache.update_signals(user_id, session_id, delta)
+        except Exception as e:
+            logger.debug("信号提取失败（非致命）: %s", e)
 
     async def chat(
         self,
@@ -217,11 +262,12 @@ class Orchestrator:
             session_id: 会话ID（用于记忆对话历史）
         """
         context = context or {}
-        messages = await self._prepare_chat_messages(message, context, session_id)
+        messages, user_id = await self._prepare_chat_messages(message, context, session_id)
 
         try:
             response = await self.llm.chat(messages)
             await self._save_chat_message(session_id, message, response)
+            await self._extract_and_update_signals(user_id, session_id or "", message, response)
             return response
         except Exception as e:
             logger.error("对话失败: %s", e)
@@ -235,7 +281,7 @@ class Orchestrator:
     ) -> AsyncIterator[str]:
         """流式 RAG 增强对话 — 逐块 yield"""
         context = context or {}
-        messages = await self._prepare_chat_messages(message, context, session_id)
+        messages, user_id = await self._prepare_chat_messages(message, context, session_id)
 
         full_response = []
         try:
@@ -246,7 +292,9 @@ class Orchestrator:
             logger.error("流式对话失败: %s", e)
             yield f"\n\n抱歉，处理时出现错误: {e}"
         finally:
-            await self._save_chat_message(session_id, message, "".join(full_response))
+            response_text = "".join(full_response)
+            await self._save_chat_message(session_id, message, response_text)
+            await self._extract_and_update_signals(user_id, session_id or "", message, response_text)
 
     async def stream_answer_with_quality_check(
         self,
@@ -346,6 +394,7 @@ class Orchestrator:
         student_profile: Optional[Dict[str, Any]],
         knowledge_context: str,
         schedule: Optional[Dict[str, Any]] = None,
+        signals_profile: Optional[Dict[str, Any]] = None,
     ) -> str:
         now = datetime.now()
         weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
@@ -461,6 +510,21 @@ class Orchestrator:
             parts.append("")
             parts.append("当前课表信息：")
             parts.append(str(schedule))
+
+        # 注入实时学习信号（对话过程中自动提取）
+        if signals_profile:
+            difficulty = signals_profile.get("difficulty_distribution", {})
+            total = sum(difficulty.values()) if difficulty else 0
+            if total > 0:
+                dominant = max(difficulty, key=difficulty.get)
+                level_map = {"beginner": "初学者", "neutral": "中等", "advanced": "进阶"}
+                parts.append(f"- 当前对话难度感知：{level_map.get(dominant, '中等')}")
+            gaps = signals_profile.get("gap_keywords", [])
+            if gaps:
+                parts.append(f"- 学生近期困惑点：{', '.join(gaps[:3])}")
+            active = signals_profile.get("active_topics", [])
+            if active:
+                parts.append(f"- 当前讨论知识点：{', '.join(active[:5])}")
 
         return "\n".join(parts)
 

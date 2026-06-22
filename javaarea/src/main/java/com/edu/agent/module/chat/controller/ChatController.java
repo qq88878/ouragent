@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/chat")
@@ -63,5 +64,10 @@ public class ChatController {
                                         @Valid @RequestBody ChatRequest request) {
         LoginUser loginUser = (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         return chatService.sendMessageStream(id, loginUser.getUser().getId(), request);
+    }
+
+    @GetMapping("/sessions/{id}/signals")
+    public Result<Map<String, Object>> getChatSignals(@PathVariable Long id) {
+        return Result.success(chatService.getChatSignals(id));
     }
 }

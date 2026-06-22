@@ -125,13 +125,12 @@ services:
     container_name: edu-mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-edu}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-edu_agent}
     ports:
       - "3308:3306"
     volumes:
       - mysql-data:/var/lib/mysql
       - ./javaarea/src/main/resources/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-      - ./javaarea/src/main/resources/db/migration_001_add_education.sql:/docker-entrypoint-initdb.d/04-migration.sql:ro
       - ./v3/config/mysql-init.sql:/docker-entrypoint-initdb.d/02-agent.sql:ro
       - ./javaarea/src/main/resources/db/seed.sql:/docker-entrypoint-initdb.d/03-seed.sql:ro
     healthcheck:

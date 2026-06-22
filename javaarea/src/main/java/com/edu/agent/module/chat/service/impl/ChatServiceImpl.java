@@ -406,6 +406,11 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
         log.info("会话删除成功: id={}", sessionId);
     }
 
+    @Override
+    public Map<String, Object> getChatSignals(Long sessionId) {
+        return agentServiceClient.getChatSignals(String.valueOf(sessionId));
+    }
+
     /**
      * Format period indexes into readable string, e.g., [0,1] -> "?1-2?"
      */

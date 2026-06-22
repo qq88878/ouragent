@@ -33,9 +33,40 @@
           <span>点击上方按钮创建新对话</span>
         </div>
       </div>
-    </div>
 
-    <!-- 主区域 -->
+      <!-- 学习画像面板 -->
+      <div v-if="currentSessionId && signals" class="signals-panel">
+        <div class="signals-header">学习画像</div>
+
+        <div v-if="signals.active_topics?.length" class="signals-section">
+          <div class="signals-label">讨论知识点</div>
+          <div class="signals-tags">
+            <el-tag v-for="(t, i) in signals.active_topics.slice(0, 6)" :key="i" size="small" effect="plain" type="primary">{{ t }}</el-tag>
+          </div>
+        </div>
+
+        <div v-if="signals.difficulty_distribution" class="signals-section">
+          <div class="signals-label">难度感知</div>
+          <div class="signals-difficulty">
+            <span class="difficulty-bar">
+              <span class="difficulty-fill beginner" :style="{ width: difficultyPercent('beginner') }"></span>
+              <span class="difficulty-fill neutral" :style="{ width: difficultyPercent('neutral') }"></span>
+              <span class="difficulty-fill advanced" :style="{ width: difficultyPercent('advanced') }"></span>
+            </span>
+            <span class="difficulty-text">{{ difficultyLabel }}</span>
+          </div>
+        </div>
+
+        <div v-if="signals.gap_keywords?.length" class="signals-section">
+          <div class="signals-label">困惑点</div>
+          <div class="signals-tags">
+            <el-tag v-for="(g, i) in signals.gap_keywords.slice(0, 3)" :key="i" size="small" effect="plain" type="warning">{{ g }}</el-tag>
+          </div>
+        </div>
+
+        <div class="signals-meta">已对话 {{ signals.exchange_count || 0 }} 轮</div>
+      </div>
+    </div>
     <div class="chat-main">
       <div v-if="!currentSessionId" class="chat-empty">
         <div class="empty-illustration">
@@ -219,6 +250,22 @@ const chatStore = useChatStore();
 const authStore = useAuthStore();
 
 const userInitial = computed(() => (authStore.user?.nickname || authStore.user?.username || '?')[0]);
+
+const difficultyPercent = (level) => {
+  const dist = signals.value?.difficulty_distribution || {};
+  const total = Object.values(dist).reduce((a, b) => a + b, 0);
+  return total > 0 ? Math.round((dist[level] || 0) / total * 100) + '%' : '33%';
+};
+const difficultyLabel = computed(() => {
+  const dist = signals.value?.difficulty_distribution || {};
+  const total = Object.values(dist).reduce((a, b) => a + b, 0);
+  if (total === 0) return '中等';
+  const max = Math.max(dist.beginner || 0, dist.neutral || 0, dist.advanced || 0);
+  if (max === (dist.beginner || 0)) return '入门水平';
+  if (max === (dist.advanced || 0)) return '进阶水平';
+  return '中等水平';
+});
+
 const currentSessionTitle = computed(() => {
   const s = sessions.value.find(s => s.id === currentSessionId.value);
   return s?.title || '对话';
@@ -233,6 +280,9 @@ const messagesArea = ref(null);
 const courses = ref([]);
 const selectedCourseId = ref(null);
 const deepMode = ref(false);
+
+// 实时学习画像
+const signals = ref(null);
 
 // 学习路径
 const pathDialogVisible = ref(false);
@@ -264,6 +314,13 @@ watch(() => route.params.sessionId, (newId) => {
 
 async function loadSessions() { try { const r = await chatApi.listSessions(); if (r.code === 200) sessions.value = r.data || []; } catch {} }
 async function loadCourses() { try { const r = await courseApi.list({ page: 1, size: 200 }); if (r.code === 200) courses.value = r.data?.records || []; } catch {} }
+async function loadSignals(sessionId) {
+  if (!sessionId) { signals.value = null; return; }
+  try {
+    const r = await chatApi.getSignals(sessionId);
+    signals.value = r.code === 200 ? r.data?.signals : null;
+  } catch { signals.value = null; }
+}
 function onCourseChange() { if (selectedCourseId.value) { localStorage.setItem('chatCourseId', String(selectedCourseId.value)); } else { localStorage.removeItem('chatCourseId'); } }
 
 async function createSession() {
@@ -282,6 +339,7 @@ async function selectSession(id) {
     messages.value = (res.data?.records || []).map(m => ({ ...m, streaming: false }));
     await nextTick();
     scrollToBottom();
+    loadSignals(id);
   } catch { messages.value = []; }
 }
 
@@ -322,6 +380,7 @@ async function sendMessage() {
     sending.value = false;
     abortController = null;
     loadSessions();
+    loadSignals(currentSessionId.value);
     nextTick().then(scrollToBottom);
     return;
   }
@@ -405,6 +464,7 @@ async function sendMessage() {
             sending.value = false;
             abortController = null;
             loadSessions();
+            loadSignals(currentSessionId.value);
             nextTick().then(scrollToBottom);
             resolve();
           }
@@ -591,4 +651,19 @@ function formatMsgTime(time) {
 
 .path-footer { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--color-border); }
 .path-meta { font-size: 12px; color: var(--color-text-muted); }
+
+/* 学习画像面板 */
+.signals-panel { padding: 12px 16px; border-top: 1px solid var(--color-border); background: var(--color-bg-card); font-size: 12px; }
+.signals-header { font-size: 13px; font-weight: 600; color: var(--color-text); margin-bottom: 10px; }
+.signals-section { margin-bottom: 8px; }
+.signals-label { color: var(--color-text-muted); margin-bottom: 4px; font-size: 11px; }
+.signals-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.signals-difficulty { display: flex; align-items: center; gap: 8px; }
+.difficulty-bar { display: flex; height: 6px; flex: 1; border-radius: 3px; overflow: hidden; background: var(--color-border); }
+.difficulty-fill { height: 100%; transition: width 0.3s; }
+.difficulty-fill.beginner { background: #67C23A; }
+.difficulty-fill.neutral { background: #E6A23C; }
+.difficulty-fill.advanced { background: #F56C6C; }
+.difficulty-text { font-size: 11px; color: var(--color-text-secondary); white-space: nowrap; }
+.signals-meta { color: var(--color-text-muted); font-size: 11px; margin-top: 4px; }
 </style>

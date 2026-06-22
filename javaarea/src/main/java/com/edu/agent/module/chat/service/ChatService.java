@@ -8,6 +8,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
+import java.util.Map;
 
 public interface ChatService {
 
@@ -22,4 +23,6 @@ public interface ChatService {
     SseEmitter sendMessageStream(Long sessionId, Long userId, ChatRequest request);
 
     void deleteSession(Long sessionId, Long userId);
+
+    Map<String, Object> getChatSignals(Long sessionId);
 }

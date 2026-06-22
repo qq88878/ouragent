@@ -93,6 +93,7 @@ export const chatApi = {
         }
     },
     deleteSession(sessionId) { return http.delete(`/chat/sessions/${sessionId}`); },
+    getSignals(sessionId) { return http.get(`/chat/sessions/${sessionId}/signals`); },
 };
 
 export const learningApi = {

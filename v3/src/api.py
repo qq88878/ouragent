@@ -756,6 +756,31 @@ async def list_user_sessions(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/agent/signals/{session_id}")
+async def get_chat_signals(
+    session_id: str,
+    _: dict = Depends(get_current_user),
+):
+    """获取当前会话的实时学习画像信号"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    try:
+        await orchestrator._ensure_redis()
+        session_meta = await orchestrator.session_manager.get_session(session_id)
+        if not session_meta:
+            return {"signals": None, "message": "会话不存在或已过期"}
+
+        user_id = str(session_meta.get("user_id", ""))
+        if not user_id or not orchestrator._signals_cache:
+            return {"signals": None}
+
+        signals = await orchestrator._signals_cache.get_signals(user_id, session_id)
+        return {"session_id": session_id, "signals": signals}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ==================== 学习进度接口 ====================
 
 

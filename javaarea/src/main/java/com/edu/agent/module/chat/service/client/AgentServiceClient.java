@@ -285,4 +285,25 @@ public class AgentServiceClient {
         }
     }
 
+    // ===== Phase 6: Chat Signals =====
+
+    /**
+     * 获取会话的实时学习画像信号
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getChatSignals(String sessionId) {
+        try {
+            HttpEntity<Void> request = new HttpEntity<>(createHeaders());
+            ResponseEntity<Map> response = restTemplate.exchange(
+                    agentServiceUrl + "/agent/signals/" + sessionId,
+                    HttpMethod.GET,
+                    request,
+                    new ParameterizedTypeReference<>() {});
+            return response.getBody() != null ? response.getBody() : new HashMap<>();
+        } catch (Exception e) {
+            log.error("获取会话画像信号失败: sessionId={}", sessionId, e);
+            return new HashMap<>();
+        }
+    }
+
 }
