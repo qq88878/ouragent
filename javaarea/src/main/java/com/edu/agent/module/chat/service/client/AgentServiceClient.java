@@ -149,15 +149,18 @@ public class AgentServiceClient {
 
     // ===== Phase 3: Enhanced AI =====
 
-    public String chatWithContext(String message, Map<String, Object> context) {
-        AgentChatResponse response = chatWithContextTyped(message, context);
+    public String chatWithContext(String message, Map<String, Object> context, Long sessionId) {
+        AgentChatResponse response = chatWithContextTyped(message, context, sessionId);
         return response.getResponse();
     }
 
-    public AgentChatResponse chatWithContextTyped(String message, Map<String, Object> context) {
+    public AgentChatResponse chatWithContextTyped(String message, Map<String, Object> context, Long sessionId) {
         Map<String, Object> body = new HashMap<>();
         body.put("message", message);
         body.put("context", context);
+        if (sessionId != null) {
+            body.put("session_id", String.valueOf(sessionId));
+        }
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, createHeaders());
         ResponseEntity<AgentChatResponse> response = restTemplate.exchange(
@@ -172,11 +175,15 @@ public class AgentServiceClient {
     // ===== Phase 4: Learning =====
 
     public AgentLearningPathResponse generateLearningPath(
-            Map<String, Object> studentProfile, Long courseId, String goal) {
+            Map<String, Object> studentProfile, Long courseId, String goal,
+            Map<String, Object> schedule) {
         Map<String, Object> body = new HashMap<>();
         body.put("student_profile", studentProfile);
         body.put("course_id", courseId);
         body.put("goal", goal);
+        if (schedule != null && !schedule.isEmpty()) {
+            body.put("schedule", schedule);
+        }
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, createHeaders());
         ResponseEntity<AgentLearningPathResponse> response = restTemplate.exchange(
@@ -206,12 +213,15 @@ public class AgentServiceClient {
      * 流式对话 — 读取 Python SSE 流，逐行转发给 SseEmitter
      * 注意：此方法会阻塞调用线程，应在独立线程中调用
      */
-    public void streamChatWithContext(String message, Map<String, Object> context,
+    public void streamChatWithContext(String message, Map<String, Object> context, Long sessionId,
                                       org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter,
                                       StringBuilder accumulator) {
         Map<String, Object> body = new HashMap<>();
         body.put("message", message);
         body.put("context", context);
+        if (sessionId != null) {
+            body.put("session_id", String.valueOf(sessionId));
+        }
 
         HttpHeaders headers = createHeaders();
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);

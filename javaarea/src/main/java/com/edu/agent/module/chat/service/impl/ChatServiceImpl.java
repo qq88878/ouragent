@@ -23,9 +23,6 @@ import com.edu.agent.module.learning.entity.StudentProfile;
 import com.edu.agent.module.learning.dto.QuestionnaireDTO;
 import com.edu.agent.module.learning.service.StudentProfileService;
 import com.edu.agent.module.learning.service.StudentProfileQuestionnaireService;
-import com.edu.agent.module.schedule.dto.ScheduleConfigDTO;
-import com.edu.agent.module.schedule.dto.ScheduleCourseDTO;
-import com.edu.agent.module.schedule.service.ScheduleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.context.SecurityContext;
@@ -50,17 +47,15 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
     private final CourseMapper courseMapper;
     private final StudentProfileService studentProfileService;
     private final StudentProfileQuestionnaireService questionnaireService;
-    private final ScheduleService scheduleService;
     private final TransactionTemplate transactionTemplate;
     private final ExecutorService streamExecutor = Executors.newCachedThreadPool();
-    public ChatServiceImpl(AgentServiceClient agentServiceClient, ChatMessageMapper messageMapper, KnowledgeMapper knowledgeMapper, CourseMapper courseMapper, StudentProfileService studentProfileService, StudentProfileQuestionnaireService questionnaireService, ScheduleService scheduleService, TransactionTemplate transactionTemplate) {
+    public ChatServiceImpl(AgentServiceClient agentServiceClient, ChatMessageMapper messageMapper, KnowledgeMapper knowledgeMapper, CourseMapper courseMapper, StudentProfileService studentProfileService, StudentProfileQuestionnaireService questionnaireService, TransactionTemplate transactionTemplate) {
         this.agentServiceClient = agentServiceClient;
         this.messageMapper = messageMapper;
         this.knowledgeMapper = knowledgeMapper;
         this.courseMapper = courseMapper;
         this.studentProfileService = studentProfileService;
         this.questionnaireService = questionnaireService;
-        this.scheduleService = scheduleService;
         this.transactionTemplate = transactionTemplate;
     }
 
@@ -156,7 +151,7 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
         // Call agent service
         String agentResponse;
         try {
-            agentResponse = agentServiceClient.chatWithContext(request.getMessage(), context);
+            agentResponse = agentServiceClient.chatWithContext(request.getMessage(), context, sessionId);
         } catch (Exception e) {
             log.error("调用 Agent 服务失败", e);
             agentResponse = "抱歉，AI 服务暂时不可用，请稍后再试。";
@@ -228,7 +223,7 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
             // Restore SecurityContext on worker thread
             SecurityContextHolder.setContext(secCtx);
             try {
-                agentServiceClient.streamChatWithContext(request.getMessage(), context, emitter, accumulator);
+                agentServiceClient.streamChatWithContext(request.getMessage(), context, sessionId, emitter, accumulator);
             } catch (Exception e) {
                 log.error("流式对话失败", e);
                 try {
@@ -272,6 +267,13 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
                     .collect(Collectors.toList());
             if (!knowledgeIds.isEmpty()) {
                 context.put("knowledge_ids", knowledgeIds);
+            }
+
+            // Tell the agent which course this chat is about
+            Course course = courseMapper.selectById(session.getCourseId());
+            if (course != null) {
+                context.put("course_id", session.getCourseId());
+                context.put("course_title", course.getTitle());
             }
         }
 
@@ -324,47 +326,6 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
             }
         }
 
-        // Schedule context
-        if (userId != null) {
-            try {
-                List<ScheduleCourseDTO> courses = scheduleService.listCourses(userId);
-                if (courses != null && !courses.isEmpty()) {
-                    // Fetch period config to map indexes to names
-                    ScheduleConfigDTO config = scheduleService.getConfig(userId);
-                    List<ScheduleConfigDTO.PeriodConfig> periods = config != null ? config.getPeriodConfig() : Collections.emptyList();
-                    String[] dayNames = {"", "周一", "周二", "周三", "周四", "周五", "周六", "周日"};
-
-                    // Build readable course descriptions grouped by day
-                    Map<String, List<String>> daySchedule = new LinkedHashMap<>();
-                    for (ScheduleCourseDTO c : courses) {
-                        // Format period range, e.g., "?1-2?"
-                        String periodStr = formatPeriodRange(c.getPeriodIndexes(), periods);
-                        // Format week range, e.g., "?1-16?"
-                        String weekStr = formatWeekRange(c.getWeekNumbers());
-                        // Format day(s)
-                        if (c.getDayOfWeeks() != null) {
-                            for (Integer dow : c.getDayOfWeeks()) {
-                                if (dow >= 1 && dow <= 7) {
-                                    String day = dayNames[dow];
-                                    String desc = c.getName() + "?" + periodStr;
-                                    if (!weekStr.isEmpty()) {
-                                        desc += "?" + weekStr;
-                                    }
-                                    desc += "?";
-                                    daySchedule.computeIfAbsent(day, k -> new ArrayList<>()).add(desc);
-                                }
-                            }
-                        }
-                    }
-                    if (!daySchedule.isEmpty()) {
-                        context.put("schedule", daySchedule);
-                        log.info("?????????: userId={}, courses={}", userId, courses.size());
-                    }
-                }
-            } catch (Exception e) {
-                log.debug("????????: userId={}", userId, e);
-            }
-        }
 
         return context;
     }
@@ -398,52 +359,6 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
     /**
      * Format period indexes into readable string, e.g., [0,1] -> "?1-2?"
      */
-    private String formatPeriodRange(List<Integer> indexes, List<ScheduleConfigDTO.PeriodConfig> periods) {
-        if (indexes == null || indexes.isEmpty()) return "";
-        if (indexes.size() == 1) {
-            int idx = indexes.get(0);
-            if (idx >= 0 && idx < periods.size()) {
-                return periods.get(idx).getName();
-            }
-            return "?" + (idx + 1) + "?";
-        }
-        // Sort and find continuous ranges or join all
-        List<Integer> sorted = new ArrayList<>(indexes);
-        Collections.sort(sorted);
-        int first = sorted.get(0);
-        int last = sorted.get(sorted.size() - 1);
-        if (first >= 0 && first < periods.size() && last >= 0 && last < periods.size()) {
-            return periods.get(first).getName() + "-" + periods.get(last).getName();
-        }
-        return "?" + (first + 1) + "-" + (last + 1) + "?";
-    }
-
-    /**
-     * Format week numbers into readable string, handling gaps.
-     * e.g., [1,2,3,4,5,7,8,9] -> "?1-5,7-9?"
-     */
-    private String formatWeekRange(List<Integer> weeks) {
-        if (weeks == null || weeks.isEmpty()) return "";
-        List<Integer> sorted = new ArrayList<>(weeks);
-        Collections.sort(sorted);
-        if (sorted.size() == 1) return "?" + sorted.get(0) + "?";
-
-        List<String> ranges = new ArrayList<>();
-        int start = sorted.get(0);
-        int prev = start;
-        for (int i = 1; i < sorted.size(); i++) {
-            int curr = sorted.get(i);
-            if (curr != prev + 1) {
-                // Gap found, close previous range
-                ranges.add(start == prev ? "?" + start + "?" : "?" + start + "-" + prev + "?");
-                start = curr;
-            }
-            prev = curr;
-        }
-        // Close last range
-        ranges.add(start == prev ? "?" + start + "?" : "?" + start + "-" + prev + "?");
-        return String.join(",", ranges);
-    }
 
     private ChatSessionDTO toSessionDTO(ChatSession session, ChatMessage lastMessage,
                                          Map<Long, Course> courseMap) {

@@ -155,6 +155,7 @@ class Orchestrator:
         """
         knowledge_ids = context.get("knowledge_ids")
         basic_profile = context.get("basic_profile")
+        course_title = context.get("course_title", "")
 
         await self._ensure_redis()
 
@@ -210,7 +211,7 @@ class Orchestrator:
         # 构造个性化 prompt（注入学习信号）
         schedule = context.get("schedule")
         system_prompt = self._build_chat_system_prompt(
-            basic_profile, knowledge_context, schedule, signals_profile,
+            basic_profile, knowledge_context, schedule, signals_profile, course_title,
         )
         messages = [{"role": "system", "content": system_prompt}]
         if history:
@@ -222,11 +223,14 @@ class Orchestrator:
         self, session_id: Optional[str], message: str, response: str,
     ) -> None:
         """保存对话消息到 Redis。"""
-        if session_id and self._session_manager and response:
+        if session_id and self._session_manager:
             try:
                 conv = ConversationMemory(self._redis_client, session_id)
+                # Always save the user message
                 await conv.add_message("user", message)
-                await conv.add_message("assistant", response)
+                # Only save assistant message if there is a response
+                if response:
+                    await conv.add_message("assistant", response)
             except Exception as e:
                 logger.warning("保存对话历史失败: %s", e)
 
@@ -264,8 +268,12 @@ class Orchestrator:
         context = context or {}
         messages, user_id = await self._prepare_chat_messages(message, context, session_id)
 
+
+        # Save user message immediately so history survives errors
+        await self._save_chat_message(session_id, message, "")
         try:
             response = await self.llm.chat(messages)
+
             await self._save_chat_message(session_id, message, response)
             await self._extract_and_update_signals(user_id, session_id or "", message, response)
             return response
@@ -315,6 +323,7 @@ class Orchestrator:
         context = context or {}
         knowledge_ids = context.get("knowledge_ids")
         basic_profile = context.get("basic_profile")
+        course_title = context.get("course_title", "")
         user_id = context.get("user_id", "")
         course_id = context.get("course_id")
 
@@ -395,6 +404,7 @@ class Orchestrator:
         knowledge_context: str,
         schedule: Optional[Dict[str, Any]] = None,
         signals_profile: Optional[Dict[str, Any]] = None,
+        course_title: str = "",
     ) -> str:
         now = datetime.now()
         weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
@@ -402,132 +412,95 @@ class Orchestrator:
 
         parts = [
             f"今天是{today_str}。",
-            "你是我们的AI学习助手，请根据学生的情况提供个性化、友好的学习辅导。",
             "",
-            "回答要求：",
-            "- 回答要简洁清晰，控制在1-2段以内",
-            "- 如果学生有具体的学习风格或薄弱点，请针对性调整回答方式",
-            "- 优先基于提供的知识库内容回答",
-            "- 如涉及课程安排，请结合课表信息给出建议",
+            "你是一位经验丰富的学习顾问，正在和一位学生聊天。",
+            "",
+            f"你正在辅导的课程是：{course_title}，请围绕这门课展开对话。" if course_title else "",
+            "",
+            "- 通过自然的对话了解这位学生，帮他弄清自己想学什么、为什么学、怎么学最有效",
+            "- 当你觉得已经足够了解他了，可以温柔地建议他点击「生成学习路径」——但不要第一次就说，等聊到位了再提",
+            "",
+            "对话风格：",
+            "- 随性、真诚、像在咖啡馆聊天，不是在调查问卷",
+            "- 问题要自然地从上下文中引出，不要列清单式提问",
+            "- 每次回复不要太长，2-4句就好",
+            "- 记住学生说过的信息，别重复问",
+            "",
+            "如果学生问具体的学术问题，先回答，然后自然地把话题引回了解他的学习状况。",
         ]
 
+        # Known profile: tell the agent what's already known so it doesn't re-ask
         if basic_profile:
-            parts.append("")
-            parts.append("当前学生画像信息（请据此调整教学策略）：")
-            # 学习风格
+            known = []
             style = basic_profile.get("learning_style", "")
             if style:
-                style_map = {
-                    "VISUAL": "视觉型",
-                    "AUDITORY": "听觉型",
-                    "READING": "阅读型",
-                    "KINESTHETIC": "动手型",
-                }
-                if style in style_map:
-                    parts.append(f"- 学习风格：{style_map[style]}")
-
-            # 优势与劣势
+                style_map = {"VISUAL": "视觉型", "AUDITORY": "听觉型", "READING": "阅读型", "KINESTHETIC": "动手型"}
+                known.append(f"学习风格: {style_map.get(style, style)}")
             strengths = basic_profile.get("strengths", "")
-            weaknesses = basic_profile.get("weaknesses", "")
             if strengths:
-                parts.append(f"- 优势领域：{strengths}")
+                known.append(f"优势: {strengths}")
+            weaknesses = basic_profile.get("weaknesses", "")
             if weaknesses:
-                parts.append(f"- 薄弱领域：{weaknesses}")
-
+                known.append(f"薄弱: {weaknesses}")
             interests = basic_profile.get("interests", "")
             if interests:
-                parts.append(f"- 兴趣爱好：{interests}")
-
-            # 问卷信息
+                known.append(f"兴趣: {interests}")
             q = basic_profile.get("questionnaire")
             if q:
                 major = q.get("major_direction", "")
                 if major:
-                    parts.append(f"- 专业方向：{major}")
-
+                    known.append(f"专业方向: {major}")
                 education = q.get("education_level", "")
                 if education:
-                    edu_map = {
-                        "HIGH_SCHOOL": "高中", "ASSOCIATE": "大专", "BACHELOR": "本科",
-                        "MASTER": "硕士", "PHD": "博士", "OTHER": "其他"
-                    }
-                    parts.append(f"- 学历水平：{edu_map.get(education, education)}")
-
+                    edu_map = {"HIGH_SCHOOL": "高中", "ASSOCIATE": "大专", "BACHELOR": "本科", "MASTER": "硕士", "PHD": "博士", "OTHER": "其他"}
+                    known.append(f"学历: {edu_map.get(education, education)}")
                 goals = q.get("learning_goals", [])
                 if goals:
-                    goal_map = {
-                        "EXAM": "应试备考", "INTEREST": "兴趣学习", "EMPLOYMENT": "求职就业",
-                        "PROMOTION": "职场晋升", "SELF_IMPROVEMENT": "自我提升", "OTHER": "其他"
-                    }
-                    goals_cn = [goal_map.get(g, g) for g in goals]
-                    parts.append(f"- 学习目标：{', '.join(goals_cn)}")
-
-                motivation = q.get("motivation_level", "")
-                if motivation:
-                    mot_map = {"STRONG": "强", "MODERATE": "中等", "WEAK": "弱"}
-                    parts.append(f"- 学习动机：{mot_map.get(motivation, motivation)}")
-
+                    goal_map = {"EXAM": "应试", "INTEREST": "兴趣", "EMPLOYMENT": "就业", "PROMOTION": "晋升", "SELF_IMPROVEMENT": "自我提升", "OTHER": "其他"}
+                    known.append(f"目标: {', '.join(goal_map.get(g, g) for g in goals)}")
                 subj_level = q.get("subject_level", "")
                 if subj_level:
                     lvl_map = {"ZERO_BASIC": "零基础", "BEGINNER": "初级", "INTERMEDIATE": "中级", "ADVANCED": "高级"}
-                    parts.append(f"- 学科水平：{lvl_map.get(subj_level, subj_level)}")
-
+                    known.append(f"学科水平: {lvl_map.get(subj_level, subj_level)}")
                 self_strengths = q.get("self_strengths", [])
                 if self_strengths:
-                    parts.append(f"- 自我优势：{', '.join(self_strengths)}")
-
+                    known.append(f"自认优势: {', '.join(self_strengths)}")
                 self_weaknesses = q.get("self_weaknesses", [])
                 if self_weaknesses:
-                    parts.append(f"- 自我不足：{', '.join(self_weaknesses)}")
-
-                learning_methods = q.get("learning_methods", [])
-                if learning_methods:
-                    method_map = {
-                        "VIDEO": "视频学习", "READING": "阅读教材", "HANDS_ON": "动手实践",
-                        "DISCUSSION": "讨论交流", "LECTURE": "听讲座", "QUIZ": "刷题练习"
-                    }
-                    methods_cn = [method_map.get(m, m) for m in learning_methods]
-                    parts.append(f"- 偏好学习方式：{', '.join(methods_cn)}")
-
+                    known.append(f"自认不足: {', '.join(self_weaknesses)}")
+                methods = q.get("learning_methods", [])
+                if methods:
+                    method_map = {"VIDEO": "视频", "READING": "阅读", "HANDS_ON": "实践", "DISCUSSION": "讨论", "LECTURE": "听讲", "QUIZ": "刷题"}
+                    known.append(f"偏好方式: {', '.join(method_map.get(m, m) for m in methods)}")
                 session_dur = q.get("session_duration", "")
                 if session_dur:
-                    dur_map = {
-                        "LESS_30MIN": "少于30分钟", "30_60MIN": "30-60分钟", "1_2HOURS": "1-2小时",
-                        "2_4HOURS": "2-4小时", "MORE_4HOURS": "4小时以上"
-                    }
-                    parts.append(f"- 单次学习时长：{dur_map.get(session_dur, session_dur)}")
-
+                    dur_map = {"LESS_30MIN": "<30min", "30_60MIN": "30-60min", "1_2HOURS": "1-2h", "2_4HOURS": "2-4h", "MORE_4HOURS": ">4h"}
+                    known.append(f"单次时长: {dur_map.get(session_dur, session_dur)}")
                 focus = q.get("focus_level", "")
                 if focus:
-                    f_map = {"VERY_HIGH": "非常高", "HIGH": "较高", "MODERATE": "中等", "LOW": "较低", "VERY_LOW": "非常低"}
-                    parts.append(f"- 专注力水平：{f_map.get(focus, focus)}")
+                    f_map = {"VERY_HIGH": "很高", "HIGH": "较高", "MODERATE": "中等", "LOW": "较低", "VERY_LOW": "很低"}
+                    known.append(f"专注力: {f_map.get(focus, focus)}")
+            if known:
+                parts.append("")
+                parts.append("已知的学生信息（不要重复询问）：")
+                for item in known:
+                    parts.append(f"  {item}")
 
+        # Knowledge base context (for answering factual questions)
         if knowledge_context:
             parts.append("")
-            parts.append("相关知识库内容（优先基于此回答）：\n" + str(knowledge_context))
+            parts.append("参考资料：")
+            parts.append(str(knowledge_context))
 
-        if schedule:
-            parts.append("")
-            parts.append("当前课表信息：")
-            parts.append(str(schedule))
-
-        # 注入实时学习信号（对话过程中自动提取）
+        # Signals from conversation analysis (supplementary, don't over-rely)
         if signals_profile:
-            difficulty = signals_profile.get("difficulty_distribution", {})
-            total = sum(difficulty.values()) if difficulty else 0
-            if total > 0:
-                dominant = max(difficulty, key=difficulty.get)
-                level_map = {"beginner": "初学者", "neutral": "中等", "advanced": "进阶"}
-                parts.append(f"- 当前对话难度感知：{level_map.get(dominant, '中等')}")
             gaps = signals_profile.get("gap_keywords", [])
             if gaps:
-                parts.append(f"- 学生近期困惑点：{', '.join(gaps[:3])}")
-            active = signals_profile.get("active_topics", [])
-            if active:
-                parts.append(f"- 当前讨论知识点：{', '.join(active[:5])}")
+                parts.append("")
+                parts.append(f"学生近期困惑: {', '.join(gaps[:3])}")
 
+        # Schedule is intentionally NOT included here
         return "\n".join(parts)
-
     def get_status(self) -> Dict[str, Any]:
         return {
             "agents": [
@@ -975,6 +948,7 @@ class Orchestrator:
         course_title: str,
         course_knowledge: List[Dict[str, Any]],
         goal: str = "掌握课程核心知识",
+        schedule: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """生成学习路径（委托给 PlannerAgent）"""
         return await self._call_agent_safe(
@@ -985,6 +959,7 @@ class Orchestrator:
             course_title=course_title,
             course_knowledge=course_knowledge,
             goal=goal,
+            schedule=schedule,
         )
 
     async def generate_resource(
@@ -1047,6 +1022,7 @@ class Orchestrator:
         context = context or {}
         knowledge_ids = context.get("knowledge_ids")
         basic_profile = context.get("basic_profile")
+        course_title = context.get("course_title", "")
         user_id = context.get("user_id", "")
         course_id = context.get("course_id")
 

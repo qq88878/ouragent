@@ -20,14 +20,14 @@ import com.edu.agent.module.learning.mapper.LearningPathStepMapper;
 import com.edu.agent.module.learning.mapper.StudentProfileQuestionnaireMapper;
 import com.edu.agent.module.learning.service.LearningPathService;
 import com.edu.agent.module.learning.service.StudentProfileService;
+import com.edu.agent.module.schedule.dto.ScheduleConfigDTO;
+import com.edu.agent.module.schedule.dto.ScheduleCourseDTO;
+import com.edu.agent.module.schedule.service.ScheduleService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -40,12 +40,14 @@ public class LearningPathServiceImpl
     private final AgentServiceClient agentServiceClient;
     private final StudentProfileService studentProfileService;
     private final CourseMapper courseMapper;
+    private final ScheduleService scheduleService;
     private final StudentProfileQuestionnaireMapper questionnaireMapper;
-    public LearningPathServiceImpl(LearningPathStepMapper stepMapper, AgentServiceClient agentServiceClient, StudentProfileService studentProfileService, CourseMapper courseMapper, StudentProfileQuestionnaireMapper questionnaireMapper) {
+    public LearningPathServiceImpl(LearningPathStepMapper stepMapper, AgentServiceClient agentServiceClient, StudentProfileService studentProfileService, CourseMapper courseMapper, ScheduleService scheduleService, StudentProfileQuestionnaireMapper questionnaireMapper) {
         this.stepMapper = stepMapper;
         this.agentServiceClient = agentServiceClient;
         this.studentProfileService = studentProfileService;
         this.courseMapper = courseMapper;
+        this.scheduleService = scheduleService;
         this.questionnaireMapper = questionnaireMapper;
     }
 
@@ -74,11 +76,46 @@ public class LearningPathServiceImpl
         profileMap.put("interests", profile.getInterests());
         profileMap.put("gradeLevel", profile.getGradeLevel());
 
+        // Build schedule context for the planner agent
+        Map<String, Object> scheduleContext = null;
+        try {
+            List<ScheduleCourseDTO> courses = scheduleService.listCourses(userId);
+            if (courses != null && !courses.isEmpty()) {
+                ScheduleConfigDTO config = scheduleService.getConfig(userId);
+                List<ScheduleConfigDTO.PeriodConfig> periods = config != null ? config.getPeriodConfig() : Collections.emptyList();
+                String[] dayNames = {"", "周一", "周二", "周三", "周四", "周五", "周六", "周日"};
+
+                Map<String, List<String>> daySchedule = new LinkedHashMap<>();
+                for (ScheduleCourseDTO c : courses) {
+                    String periodStr = formatPeriodRange(c.getPeriodIndexes(), periods);
+                    String weekStr = formatWeekRange(c.getWeekNumbers());
+                    if (c.getDayOfWeeks() != null) {
+                        for (Integer dow : c.getDayOfWeeks()) {
+                            if (dow >= 1 && dow <= 7) {
+                                String day = dayNames[dow];
+                                String desc = c.getName() + " " + periodStr;
+                                if (!weekStr.isEmpty()) {
+                                    desc += " " + weekStr;
+                                }
+                                daySchedule.computeIfAbsent(day, k -> new ArrayList<>()).add(desc);
+                            }
+                        }
+                    }
+                }
+                if (!daySchedule.isEmpty()) {
+                    scheduleContext = new HashMap<>(daySchedule);
+                }
+            }
+        } catch (Exception e) {
+            log.debug("获取课表信息失败: userId={}", userId, e);
+        }
+
         AgentLearningPathResponse agentResponse;
         try {
             agentResponse = agentServiceClient.generateLearningPath(
                     profileMap, request.getCourseId(),
-                    request.getGoal() != null ? request.getGoal() : "掌握课程核心知识");
+                    request.getGoal() != null ? request.getGoal() : "掌握课程核心知识",
+                    scheduleContext);
         } catch (Exception e) {
             log.error("调用 Agent 生成学习路径失败", e);
             agentResponse = generateDefaultPath(course.getTitle());
@@ -326,4 +363,38 @@ public class LearningPathServiceImpl
         dto.setEstimatedHours(step.getEstimatedHours());
         return dto;
     }
+
+
+    private String formatPeriodRange(List<Integer> indexes, List<ScheduleConfigDTO.PeriodConfig> periods) {
+        if (indexes == null || indexes.isEmpty()) return "";
+        if (indexes.size() == 1) {
+            int idx = indexes.get(0);
+            if (idx >= 0 && idx < periods.size()) {
+                return "\u7b2c" + periods.get(idx).getName() + "\u8282";
+            }
+            return "\u7b2c" + (idx + 1) + "\u8282";
+        }
+        List<Integer> sorted = new ArrayList<>(indexes);
+        Collections.sort(sorted);
+        int first = sorted.get(0);
+        int last = sorted.get(sorted.size() - 1);
+        String firstName = (first >= 0 && first < periods.size()) ? periods.get(first).getName() : String.valueOf(first + 1);
+        String lastName = (last >= 0 && last < periods.size()) ? periods.get(last).getName() : String.valueOf(last + 1);
+        if (first == last) {
+            return "\u7b2c" + firstName + "\u8282";
+        }
+        return "\u7b2c" + firstName + "-" + lastName + "\u8282";
+    }
+
+    private String formatWeekRange(List<Integer> weeks) {
+        if (weeks == null || weeks.isEmpty()) return "";
+        if (weeks.size() == 1) return "\u7b2c" + weeks.get(0) + "\u5468";
+        List<Integer> sorted = new ArrayList<>(weeks);
+        Collections.sort(sorted);
+        int first = sorted.get(0);
+        int last = sorted.get(sorted.size() - 1);
+        if (first == last) return "\u7b2c" + first + "\u5468";
+        return "\u7b2c" + first + "-" + last + "\u5468";
+    }
+
 }
