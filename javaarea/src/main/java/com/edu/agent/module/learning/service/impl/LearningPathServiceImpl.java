@@ -57,12 +57,12 @@ public class LearningPathServiceImpl
             throw new BizException(ResultCode.NOT_FOUND, "课程不存在");
         }
 
-        // 检查问卷完成状态
+        // 检查问卷完成状态（仅记录日志，不阻塞生成）
         LambdaQueryWrapper<StudentProfileQuestionnaire> qWrapper = new LambdaQueryWrapper<>();
         qWrapper.eq(StudentProfileQuestionnaire::getUserId, userId);
         StudentProfileQuestionnaire questionnaire = questionnaireMapper.selectOne(qWrapper);
         if (questionnaire == null || questionnaire.getIsCompleted() == null || questionnaire.getIsCompleted() == 0) {
-            throw new BizException(ResultCode.BAD_REQUEST, "请先完成学习画像问卷，以获得更精准的个性化学习路径");
+            log.warn("用户 {} 未完成问卷，使用默认画像生成路径", userId);
         }
 
         StudentProfile profile = studentProfileService.getProfile(userId);
