@@ -419,7 +419,7 @@ async def stream_chat_with_quality_check(request: QAWithCheckRequest, _: dict = 
 async def ingest_knowledge(
     file: UploadFile = File(...),
     knowledge_id: int = Form(...),
-    course_id: int = Form(...),
+    course_id: int = Form(0),
     _: dict = Depends(get_current_user),
 ):
     """
@@ -439,7 +439,7 @@ async def ingest_knowledge(
             extra_metadata={"course_id": course_id},
         )
         return {
-            "knowledge_id": knowledge_id,
+            "knowledgeId": knowledge_id,
             "chunks": chunks,
             "status": "indexed" if chunks > 0 else "failed",
         }

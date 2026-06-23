@@ -46,7 +46,8 @@ services:
       - REDIS_PASSWORD=
       - AGENT_SERVICE_URL=http://agent-service:8000
       - AGENT_SERVICE_KEY=${AGENT_SERVICE_KEY:-internal-agent-key-2024}
-      - AGENT_TIMEOUT=${AGENT_TIMEOUT:-120000}
+      - FILE_UPLOAD_PATH=/data/uploads
+      - AGENT_SERVICE_TIMEOUT=300000
       - JWT_SECRET=${JWT_SECRET:-change-this-in-production}
     volumes:
       - java-uploads:/data/uploads

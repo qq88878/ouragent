@@ -158,23 +158,30 @@ class Orchestrator:
         course_title = context.get("course_title", "")
         course_catalog = context.get("course_catalog")
 
-        await self._ensure_redis()
+        # Redis 初始化（失败不阻断对话，降级为无状态模式）
+        try:
+            await self._ensure_redis()
+        except Exception as e:
+            logger.warning("Redis 初始化失败，降级为无状态对话: %s", e)
 
         # 获取对话历史（优先从 Redis）
         history = context.get("history")
         session_user_id = ""
         signals_profile: Dict[str, Any] = {}
         if session_id and self._session_manager:
-            conv = ConversationMemory(self._redis_client, session_id)
-            history = await conv.get_recent_context_for_llm(max_messages=10)
-            await self._session_manager.touch_session(session_id)
+            try:
+                conv = ConversationMemory(self._redis_client, session_id)
+                history = await conv.get_recent_context_for_llm(max_messages=10)
+                await self._session_manager.touch_session(session_id)
 
-            # 加载会话级学习信号
-            session_meta = await self._session_manager.get_session(session_id)
-            if session_meta:
-                session_user_id = str(session_meta.get("user_id", ""))
-                if self._signals_cache and session_user_id:
-                    signals_profile = await self._signals_cache.get_signals(session_user_id, session_id)
+                # 加载会话级学习信号
+                session_meta = await self._session_manager.get_session(session_id)
+                if session_meta:
+                    session_user_id = str(session_meta.get("user_id", ""))
+                    if self._signals_cache and session_user_id:
+                        signals_profile = await self._signals_cache.get_signals(session_user_id, session_id)
+            except Exception as e:
+                logger.warning("Redis 会话操作失败，使用无状态模式: %s", e)
 
         # RAG query 增强：拼接 active_topics + gap_keywords
         enhanced_query = message
@@ -192,10 +199,13 @@ class Orchestrator:
         # RAG 检索（带缓存）
         knowledge_context = ""
         if self._rag_cache:
-            cached_results = await self._rag_cache.get_results(enhanced_query, knowledge_ids)
-            if cached_results:
-                knowledge_context = "\n\n---\n\n".join(r["content"] for r in cached_results)
-                logger.debug("RAG 缓存命中")
+            try:
+                cached_results = await self._rag_cache.get_results(enhanced_query, knowledge_ids)
+                if cached_results:
+                    knowledge_context = "\n\n---\n\n".join(r["content"] for r in cached_results)
+                    logger.debug("RAG 缓存命中")
+            except Exception as e:
+                logger.debug("RAG 缓存读取失败，跳过缓存: %s", e)
 
         if not knowledge_context:
             try:
@@ -205,7 +215,10 @@ class Orchestrator:
                 if retrieved:
                     knowledge_context = "\n\n---\n\n".join(r["content"] for r in retrieved)
                     if self._rag_cache:
-                        await self._rag_cache.set_results(enhanced_query, retrieved, knowledge_ids)
+                        try:
+                            await self._rag_cache.set_results(enhanced_query, retrieved, knowledge_ids)
+                        except Exception as e:
+                            logger.debug("RAG 缓存写入失败: %s", e)
             except Exception as e:
                 logger.warning("RAG 检索失败，降级为纯 LLM 对话: %s", e)
 
@@ -268,12 +281,12 @@ class Orchestrator:
             session_id: 会话ID（用于记忆对话历史）
         """
         context = context or {}
-        messages, user_id = await self._prepare_chat_messages(message, context, session_id)
 
-
-        # Save user message immediately so history survives errors
-        await self._save_chat_message(session_id, message, "")
         try:
+            messages, user_id = await self._prepare_chat_messages(message, context, session_id)
+
+            # Save user message immediately so history survives errors
+            await self._save_chat_message(session_id, message, "")
             response = await self.llm.chat(messages)
 
             await self._save_chat_message(session_id, message, response)
@@ -291,7 +304,12 @@ class Orchestrator:
     ) -> AsyncIterator[str]:
         """流式 RAG 增强对话 — 逐块 yield"""
         context = context or {}
-        messages, user_id = await self._prepare_chat_messages(message, context, session_id)
+        try:
+            messages, user_id = await self._prepare_chat_messages(message, context, session_id)
+        except Exception as e:
+            logger.error("对话准备失败: %s", e)
+            yield f"抱歉，处理您的问题时出现错误: {e}"
+            return
 
         full_response = []
         try:
