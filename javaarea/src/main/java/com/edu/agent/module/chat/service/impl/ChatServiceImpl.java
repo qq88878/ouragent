@@ -301,42 +301,26 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
                 log.debug("获取学生画像失败: userId={}", userId, e);
             }
 
-            // Questionnaire data (7 dimensions)
+            // Questionnaire data (6 core fields)
             try {
                 QuestionnaireDTO questionnaire = questionnaireService.getQuestionnaire(userId);
                 if (questionnaire != null && Boolean.TRUE.equals(questionnaire.getIsCompleted())) {
                     Map<String, Object> qData = new HashMap<>();
                     if (questionnaire.getEducationLevel() != null) qData.put("education_level", questionnaire.getEducationLevel());
                     if (questionnaire.getMajorDirection() != null) qData.put("major_direction", questionnaire.getMajorDirection());
-                    if (questionnaire.getAgeRange() != null) qData.put("age_range", questionnaire.getAgeRange());
                     if (questionnaire.getLearningGoals() != null) qData.put("learning_goals", questionnaire.getLearningGoals());
-                    if (questionnaire.getGoalClarity() != null) qData.put("goal_clarity", questionnaire.getGoalClarity());
-                    if (questionnaire.getMotivationLevel() != null) qData.put("motivation_level", questionnaire.getMotivationLevel());
-                    if (questionnaire.getSubjectLevel() != null) qData.put("subject_level", questionnaire.getSubjectLevel());
+                    if (questionnaire.getLearningMethods() != null) qData.put("learning_methods", questionnaire.getLearningMethods());
                     if (questionnaire.getSelfStrengths() != null) qData.put("self_strengths", questionnaire.getSelfStrengths());
                     if (questionnaire.getSelfWeaknesses() != null) qData.put("self_weaknesses", questionnaire.getSelfWeaknesses());
-                    if (questionnaire.getLearningMethods() != null) qData.put("learning_methods", questionnaire.getLearningMethods());
-                    if (questionnaire.getStudyTimeSlots() != null) qData.put("study_time_slots", questionnaire.getStudyTimeSlots());
-                    if (questionnaire.getSessionDuration() != null) qData.put("session_duration", questionnaire.getSessionDuration());
-                    if (questionnaire.getPlanningHabit() != null) qData.put("planning_habit", questionnaire.getPlanningHabit());
-                    if (questionnaire.getFocusLevel() != null) qData.put("focus_level", questionnaire.getFocusLevel());
-                    if (questionnaire.getReviewHabit() != null) qData.put("review_habit", questionnaire.getReviewHabit());
-                    if (questionnaire.getDailyStudyHours() != null) qData.put("daily_study_hours", questionnaire.getDailyStudyHours());
-                    if (questionnaire.getDevices() != null) qData.put("devices", questionnaire.getDevices());
-                    if (questionnaire.getHasMentor() != null) qData.put("has_mentor", questionnaire.getHasMentor());
-                    if (questionnaire.getHasPastFailures() != null) qData.put("has_past_failures", questionnaire.getHasPastFailures());
-                    if (questionnaire.getMainBarriers() != null) qData.put("main_barriers", questionnaire.getMainBarriers());
-                    if (questionnaire.getConfidenceLevel() != null) qData.put("confidence_level", questionnaire.getConfidenceLevel());
                     profileData.put("questionnaire", qData);
-                    log.debug("问卷画像已注入: userId={}", userId);
+                    log.debug("问卷数据已注入: userId={}", userId);
                 }
             } catch (Exception e) {
                 log.debug("获取问卷数据失败: userId={}", userId, e);
             }
-
             if (!profileData.isEmpty()) {
-                context.put("student_profile", profileData);
-                log.info("学生画像已注入对话上下文: userId={}, fields={}", userId, profileData.size());
+                context.put("basic_profile", profileData);
+                log.info("基础画像已注入对话上下文: userId={}, fields={}", userId, profileData.size());
             }
         }
 

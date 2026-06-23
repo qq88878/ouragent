@@ -1,4 +1,4 @@
-﻿"""
+"""
 Agent 微服务 API - 供 Java 后端调用
 
 接口清单（对齐 Java AgentServiceClient）:
@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=10000, description="用户消息")
-    context: Dict[str, Any] = Field(default_factory=dict, description="上下文（knowledge_ids, student_profile 等）")
+    context: Dict[str, Any] = Field(default_factory=dict, description="上下文（knowledge_ids, basic_profile 等）")
     session_id: Optional[str] = Field(None, pattern=r"^[a-f0-9\-]{36}$", description="会话ID（UUID格式）")
 
     @field_validator("message")
@@ -97,16 +97,32 @@ class KnowledgeIngestResponse(BaseModel):
     status: str
 
 
+class BasicProfileRequest(BaseModel):
+    """基础画像分析请求 — 简洁问卷数据"""
+    user_id: str = Field(..., min_length=1, max_length=100)
+    education_level: str = Field(default="", max_length=50, description="学历阶段: HIGH_SCHOOL/ASSOCIATE/BACHELOR/MASTER/PHD/OTHER")
+    major_direction: str = Field(default="", max_length=100, description="专业/兴趣方向")
+    learning_goals: List[str] = Field(default_factory=list, max_length=10, description="学习目标")
+    subject_level: str = Field(default="", max_length=50, description="当前学科水平: ZERO_BASIC/BEGINNER/INTERMEDIATE/ADVANCED")
+    learning_methods: List[str] = Field(default_factory=list, max_length=10, description="偏好学习方式: VIDEO/READING/HANDS_ON/DISCUSSION/LECTURE/QUIZ")
+    session_duration: str = Field(default="", max_length=50, description="单次学习时长")
+    focus_level: str = Field(default="", max_length=50, description="专注力水平")
+    self_strengths: List[str] = Field(default_factory=list, max_length=10, description="自评优势")
+    self_weaknesses: List[str] = Field(default_factory=list, max_length=10, description="自评不足")
+    daily_study_hours: str = Field(default="", max_length=50, description="每日学习时间")
+
+
 class AnalyzeRequest(BaseModel):
+    """课程画像分析请求 — 基础画像 + 对话历史"""
     user_id: str = Field(..., min_length=1, max_length=100)
     course_id: Optional[int] = Field(None, gt=0)
+    basic_profile: Dict[str, Any] = Field(default_factory=dict, description="基础画像（来自问卷分析）")
     chat_history: List[Dict[str, str]] = Field(default_factory=list, max_length=100)
     study_records: List[Dict[str, Any]] = Field(default_factory=list, max_length=100)
-    current_profile: Optional[Dict[str, Any]] = None
 
 
 class PlanRequest(BaseModel):
-    student_profile: Dict[str, Any]
+    basic_profile: Dict[str, Any] = Field(default_factory=dict, description="基础画像（跨课程共享）")
     course_title: str = Field(..., min_length=1, max_length=200)
     course_knowledge: List[Dict[str, Any]] = Field(default_factory=list, max_length=500)
     goal: str = Field(default="掌握课程核心知识", max_length=500)
@@ -447,23 +463,55 @@ async def get_knowledge_status(_: dict = Depends(get_current_user)):
 # ==================== 多 Agent 接口 ====================
 
 
-@app.post("/agent/analyze")
-async def analyze_profile(request: AnalyzeRequest, _: dict = Depends(get_current_user)):
+@app.post("/agent/profile/basic")
+async def analyze_basic_profile(request: BasicProfileRequest, _: dict = Depends(get_current_user)):
     """
-    学生画像分析（带缓存）
+    基础画像分析（简洁问卷 → LLM → 持久化）
 
-    分析学生学习历史，返回学习风格、薄弱点等结构化画像。
-    结果会缓存到 Redis，相同 user_id + course_id 的请求会返回缓存结果。
+    接收简洁问卷数据，调用 LLM 分析生成基础画像。
+    基础画像跨课程共享，会缓存到 Redis。
     """
     if not orchestrator:
         raise HTTPException(status_code=503, detail="Agent 未初始化")
 
     try:
-        result = await orchestrator.analyze_profile(
+        result = await orchestrator.analyze_basic_profile(
             user_id=request.user_id,
+            questionnaire_data={
+                "education_level": request.education_level,
+                "major_direction": request.major_direction,
+                "learning_goals": request.learning_goals,
+                "subject_level": request.subject_level,
+                "learning_methods": request.learning_methods,
+                "session_duration": request.session_duration,
+                "focus_level": request.focus_level,
+                "self_strengths": request.self_strengths,
+                "self_weaknesses": request.self_weaknesses,
+                "daily_study_hours": request.daily_study_hours,
+            },
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/agent/profile/course")
+async def analyze_course_profile(request: AnalyzeRequest, _: dict = Depends(get_current_user)):
+    """
+    课程画像分析（基础画像 + 对话历史 → 不持久化）
+
+    结合基础画像和本课程的对话历史，动态构建课程特有的学生理解。
+    结果不持久化，每门课程的 Agent 独立调用。
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+
+    try:
+        result = await orchestrator.analyze_course_profile(
+            user_id=request.user_id,
+            basic_profile=request.basic_profile,
             chat_history=request.chat_history,
             study_records=request.study_records,
-            current_profile=request.current_profile,
             course_id=request.course_id,
         )
         return result
@@ -481,7 +529,7 @@ async def generate_plan(request: PlanRequest, _: dict = Depends(get_current_user
 
     try:
         result = await orchestrator.generate_learning_path(
-            student_profile=request.student_profile,
+            student_profile=request.basic_profile,
             course_title=request.course_title,
             course_knowledge=request.course_knowledge,
             goal=request.goal,
