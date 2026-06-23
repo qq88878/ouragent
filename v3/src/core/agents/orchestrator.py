@@ -154,7 +154,7 @@ class Orchestrator:
         返回 (messages, user_id)，user_id 用于后续信号提取。
         """
         knowledge_ids = context.get("knowledge_ids")
-        student_profile = context.get("student_profile")
+        basic_profile = context.get("basic_profile")
 
         await self._ensure_redis()
 
@@ -210,7 +210,7 @@ class Orchestrator:
         # 构造个性化 prompt（注入学习信号）
         schedule = context.get("schedule")
         system_prompt = self._build_chat_system_prompt(
-            student_profile, knowledge_context, schedule, signals_profile,
+            basic_profile, knowledge_context, schedule, signals_profile,
         )
         messages = [{"role": "system", "content": system_prompt}]
         if history:
@@ -258,7 +258,7 @@ class Orchestrator:
 
         Args:
             message: 用户消息
-            context: {"knowledge_ids": [1,2], "student_profile": {...}}
+            context: {"knowledge_ids": [1,2], "basic_profile": {...}}
             session_id: 会话ID（用于记忆对话历史）
         """
         context = context or {}
@@ -314,7 +314,7 @@ class Orchestrator:
         await self._ensure_redis()
         context = context or {}
         knowledge_ids = context.get("knowledge_ids")
-        student_profile = context.get("student_profile")
+        basic_profile = context.get("basic_profile")
         user_id = context.get("user_id", "")
         course_id = context.get("course_id")
 
@@ -330,7 +330,7 @@ class Orchestrator:
             logger.warning("RAG 检索失败: %s", e)
 
         # Step 2: 流式生成回答
-        system_prompt = self._build_chat_system_prompt(student_profile, knowledge_context)
+        system_prompt = self._build_chat_system_prompt(basic_profile, knowledge_context)
         messages = [{"role": "system", "content": system_prompt}, {"role": "user", "content": question}]
 
         full_answer = []
@@ -391,7 +391,7 @@ class Orchestrator:
 
     def _build_chat_system_prompt(
         self,
-        student_profile: Optional[Dict[str, Any]],
+        basic_profile: Optional[Dict[str, Any]],
         knowledge_context: str,
         schedule: Optional[Dict[str, Any]] = None,
         signals_profile: Optional[Dict[str, Any]] = None,
@@ -411,11 +411,11 @@ class Orchestrator:
             "- 如涉及课程安排，请结合课表信息给出建议",
         ]
 
-        if student_profile:
+        if basic_profile:
             parts.append("")
             parts.append("当前学生画像信息（请据此调整教学策略）：")
             # 学习风格
-            style = student_profile.get("learning_style", "")
+            style = basic_profile.get("learning_style", "")
             if style:
                 style_map = {
                     "VISUAL": "视觉型",
@@ -427,19 +427,19 @@ class Orchestrator:
                     parts.append(f"- 学习风格：{style_map[style]}")
 
             # 优势与劣势
-            strengths = student_profile.get("strengths", "")
-            weaknesses = student_profile.get("weaknesses", "")
+            strengths = basic_profile.get("strengths", "")
+            weaknesses = basic_profile.get("weaknesses", "")
             if strengths:
                 parts.append(f"- 优势领域：{strengths}")
             if weaknesses:
                 parts.append(f"- 薄弱领域：{weaknesses}")
 
-            interests = student_profile.get("interests", "")
+            interests = basic_profile.get("interests", "")
             if interests:
                 parts.append(f"- 兴趣爱好：{interests}")
 
             # 问卷信息
-            q = student_profile.get("questionnaire")
+            q = basic_profile.get("questionnaire")
             if q:
                 major = q.get("major_direction", "")
                 if major:
@@ -937,42 +937,41 @@ class Orchestrator:
             fallback["error"] = str(e)
             return fallback
 
-    async def analyze_profile(
+    async def analyze_basic_profile(
         self,
         user_id: str,
-        chat_history: List[Dict[str, str]],
-        study_records: List[Dict[str, Any]],
-        current_profile: Optional[Dict[str, Any]] = None,
-        course_id: Optional[int] = None,
+        questionnaire_data: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """学生画像分析（委托给 ProfileAgent）"""
-        await self._ensure_redis()
-
-        # 检查缓存
-        if self._profile_cache and course_id:
-            cached = await self._profile_cache.get(user_id, course_id)
-            if cached:
-                logger.debug("画像缓存命中: user=%s, course=%s", user_id, course_id)
-                return cached
-
-        fallback = current_profile or {}
+        """从简洁问卷生成基础画像（持久化，跨课程共享）"""
         result = await self._call_agent_safe(
-            "profile_agent", self.profile_agent, "analyze",
-            fallback=fallback,
-            chat_history=chat_history,
-            study_records=study_records,
-            current_profile=current_profile or {},
+            "profile_agent", self.profile_agent, "analyze_basic",
+            fallback={"learning_style": "VISUAL", "grade_level": "BEGINNER"},
+            questionnaire_data=questionnaire_data,
         )
-
-        # 缓存结果
-        if self._profile_cache and course_id and "error" not in result:
-            await self._profile_cache.set(user_id, course_id, result)
-
+        await self._ensure_redis()
+        if self._profile_cache and "error" not in result:
+            await self._profile_cache.set(user_id, result, course_id=None)
         return result
 
+    async def analyze_course_profile(
+        self,
+        user_id: str,
+        basic_profile: Dict[str, Any],
+        chat_history: List[Dict[str, str]],
+        study_records: List[Dict[str, Any]] | None = None,
+        course_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """构建课程画像（不持久化，每次从对话历史动态构建）"""
+        return await self._call_agent_safe(
+            "profile_agent", self.profile_agent, "analyze_course",
+            fallback={"course_strengths": [], "course_weaknesses": []},
+            basic_profile=basic_profile,
+            chat_history=chat_history,
+            study_records=study_records or [],
+        )
     async def generate_learning_path(
         self,
-        student_profile: Dict[str, Any],
+        basic_profile: Dict[str, Any],
         course_title: str,
         course_knowledge: List[Dict[str, Any]],
         goal: str = "掌握课程核心知识",
@@ -1046,7 +1045,7 @@ class Orchestrator:
         await self._ensure_redis()
         context = context or {}
         knowledge_ids = context.get("knowledge_ids")
-        student_profile = context.get("student_profile")
+        basic_profile = context.get("basic_profile")
         user_id = context.get("user_id", "")
         course_id = context.get("course_id")
 
@@ -1071,7 +1070,7 @@ class Orchestrator:
 
             # Step 2: LLM 生成回答
             try:
-                system_prompt = self._build_chat_system_prompt(student_profile, knowledge_context)
+                system_prompt = self._build_chat_system_prompt(basic_profile, knowledge_context)
                 messages = [{"role": "system", "content": system_prompt}]
                 messages.append({"role": "user", "content": question})
                 answer = await self.llm.chat(messages)
@@ -1341,7 +1340,7 @@ class Orchestrator:
         student_profile = {}
         if user_id:
             try:
-                student_profile = await self.analyze_profile(
+                student_profile = await self.analyze_basic_profile(
                     user_id=user_id, course_id=course_id,
                 )
                 if "error" in student_profile:

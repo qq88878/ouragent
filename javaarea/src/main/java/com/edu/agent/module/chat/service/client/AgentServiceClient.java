@@ -21,8 +21,10 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import com.edu.agent.module.learning.dto.QuestionnaireDTO;
 
 @Service
 public class AgentServiceClient {
@@ -257,6 +259,34 @@ public class AgentServiceClient {
                     return null;
                 }
         );
+    }
+
+    // ===== Profile Analysis =====
+
+    /**
+     * 基础画像分析 — 简洁问卷 → LLM
+     * POST /agent/profile/basic
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> analyzeBasicProfile(Long userId, QuestionnaireDTO questionnaire) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("user_id", String.valueOf(userId));
+        body.put("education_level", questionnaire.getEducationLevel() != null ? questionnaire.getEducationLevel() : "");
+        body.put("major_direction", questionnaire.getMajorDirection() != null ? questionnaire.getMajorDirection() : "");
+        body.put("learning_goals", questionnaire.getLearningGoals() != null ? questionnaire.getLearningGoals() : Collections.emptyList());
+        body.put("learning_methods", questionnaire.getLearningMethods() != null ? questionnaire.getLearningMethods() : Collections.emptyList());
+        body.put("self_strengths", questionnaire.getSelfStrengths() != null ? questionnaire.getSelfStrengths() : Collections.emptyList());
+        body.put("self_weaknesses", questionnaire.getSelfWeaknesses() != null ? questionnaire.getSelfWeaknesses() : Collections.emptyList());
+
+        try {
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, createHeaders());
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    agentServiceUrl + "/agent/profile/basic", request, Map.class);
+            return response.getBody() != null ? response.getBody() : new HashMap<>();
+        } catch (Exception e) {
+            log.error("调用基础画像分析失败: userId={}", userId, e);
+            return new HashMap<>();
+        }
     }
 
     // ===== Phase 5: Mistake Book =====
