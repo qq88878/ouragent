@@ -1,4 +1,4 @@
-# ============================================================
+﻿# ============================================================
 # Docker Compose - education system service orchestration
 # Java backend + Python Agent + Vue frontend (Nginx) + MySQL + Redis
 #
@@ -82,7 +82,7 @@ services:
       - PORT=8000
       - DB_HOST=mysql
       - DB_PORT=3306
-      - DB_NAME=${DB_NAME:-edu}
+      - DB_NAME=${DB_NAME:-edu_agent}
       - DB_USER=root
       - DB_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - DB_POOL_SIZE=${DB_POOL_SIZE:-10}

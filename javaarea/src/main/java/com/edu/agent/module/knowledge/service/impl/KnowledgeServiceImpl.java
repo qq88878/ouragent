@@ -58,15 +58,7 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         if (!"TEACHER".equals(loginUser.getUser().getRole()) && !"ADMIN".equals(loginUser.getUser().getRole())) {
             throw new BizException(ResultCode.FORBIDDEN, "Only teachers or admins can upload knowledge files");
         }
-        if (dto.getCourseId() != null) {
-            Course course = courseMapper.selectById(dto.getCourseId());
-            if (course == null) {
-                throw new BizException(ResultCode.NOT_FOUND, "Course not found");
-            }
-            if (!course.getTeacherId().equals(loginUser.getUser().getId()) && !"ADMIN".equals(loginUser.getUser().getRole())) {
-                throw new BizException(ResultCode.FORBIDDEN, "Can only upload to your own courses");
-            }
-        }
+        // Files go to public pool — course association removed
         List<KnowledgeDTO> results = new ArrayList<>();
         for (MultipartFile file : files) {
             if (file == null || file.isEmpty()) continue;
@@ -389,7 +381,23 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         log.info("知识库文件关联更新: knowledgeId={}, courseId={}", knowledgeId, courseId);
     }
 
-    private List<KnowledgeDTO> toDTOList(List<KnowledgeBase> entities) {
+    
+    @Override
+    @Transactional
+    public void updateRemark(Long id, String remark) {
+        KnowledgeBase knowledge = getById(id);
+        if (knowledge == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "知识库文件不存在");
+        }
+        LoginUser loginUser = getCurrentLoginUser();
+        if (!knowledge.getUploadedBy().equals(loginUser.getUser().getId()) && !"ADMIN".equals(loginUser.getUser().getRole())) {
+            throw new BizException(ResultCode.FORBIDDEN, "只能修改自己上传的文件备注");
+        }
+        knowledge.setRemark(remark);
+        updateById(knowledge);
+        log.info("备注更新成功: id={}", id);
+    }
+private List<KnowledgeDTO> toDTOList(List<KnowledgeBase> entities) {
         if (entities == null || entities.isEmpty()) {
             return Collections.emptyList();
         }
@@ -432,6 +440,7 @@ public class KnowledgeServiceImpl extends ServiceImpl<KnowledgeMapper, Knowledge
         dto.setStatus(knowledge.getStatus());
         dto.setApprovalStatus(knowledge.getApprovalStatus());
         dto.setApprovalRemark(knowledge.getApprovalRemark());
+        dto.setRemark(knowledge.getRemark());
         dto.setCreateTime(knowledge.getCreateTime());
 
         if (knowledge.getCourseId() != null && courseMap != null) {

@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 
 const http = axios.create({
     baseURL: '/api',
@@ -118,27 +118,14 @@ export const learningApi = {
 };
 
 export const knowledgeApi = {
-    upload(file, courseId, name, description) {
-        const formData = new FormData();
-        formData.append('file', file);
-        if (courseId != null) formData.append('courseId', courseId);
-        if (name) formData.append('name', name);
-        if (description) formData.append('description', description);
-        return http.post('/knowledge/upload', formData);
-    },
-    uploadBatch(files, courseId, name, description) {
-        const formData = new FormData();
-        files.forEach(file => formData.append('files', file));
-        if (courseId != null) formData.append('courseId', courseId);
-        if (name) formData.append('name', name);
-        if (description) formData.append('description', description);
-        return http.post('/knowledge/upload-batch', formData);
-    },
+    upload(file) { const formData = new FormData(); formData.append("file", file); return http.post("/knowledge/upload", formData, { headers: { "Content-Type": "multipart/form-data" } }); },
+    uploadBatch(files) { const formData = new FormData(); files.forEach(f => formData.append("files", f)); return http.post("/knowledge/upload-batch", formData, { headers: { "Content-Type": "multipart/form-data" } }); },
     list(courseId) { return http.get('/knowledge', { params: { courseId } }); },
     listAll() { return http.get('/knowledge/all'); },
     listPending() { return http.get('/knowledge/pending'); },
     getById(id) { return http.get(`/knowledge/${id}`); },
     assignToCourse(id, courseId) { return http.put(`/knowledge/${id}/assign`, null, { params: { courseId } }); },
+    updateRemark(id, remark) { return http.put(`/knowledge/${id}/remark`, null, { params: { remark } }); },
     delete(id) { return http.delete(`/knowledge/${id}`); },
     reprocess(id) { return http.post(`/knowledge/${id}/reprocess`); },
     search(keyword) { return http.get('/knowledge/search', { params: { keyword } }); },

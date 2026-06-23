@@ -1,8 +1,8 @@
--- ============================================================
+﻿-- ============================================================
 -- Migration: Fix logical delete + unique constraint for user table
 -- ============================================================
 
-USE edu;
+USE edu_agent;
 
 -- 1. Drop old unique indexes (ignore error if not exist)
 DROP INDEX uk_username ON `user`;

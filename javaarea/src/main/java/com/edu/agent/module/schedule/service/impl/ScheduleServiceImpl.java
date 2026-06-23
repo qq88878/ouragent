@@ -84,9 +84,7 @@ public class ScheduleServiceImpl implements ScheduleService {
             course.setWeekNumbers(objectMapper.writeValueAsString(request.getWeekNumbers()));
             course.setDayOfWeeks(objectMapper.writeValueAsString(request.getDayOfWeeks()));
             course.setPeriodIndexes(objectMapper.writeValueAsString(request.getPeriodIndexes()));
-            course.setLocation(request.getLocation());
-            course.setRemark(request.getRemark());
-        } catch (JsonProcessingException e) {
+                                } catch (JsonProcessingException e) {
             throw new BizException(ResultCode.INTERNAL_ERROR, "课程数据序列化失败");
         }
         courseMapper.insert(course);
@@ -105,9 +103,7 @@ public class ScheduleServiceImpl implements ScheduleService {
             course.setWeekNumbers(objectMapper.writeValueAsString(request.getWeekNumbers()));
             course.setDayOfWeeks(objectMapper.writeValueAsString(request.getDayOfWeeks()));
             course.setPeriodIndexes(objectMapper.writeValueAsString(request.getPeriodIndexes()));
-            course.setLocation(request.getLocation());
-            course.setRemark(request.getRemark());
-        } catch (JsonProcessingException e) {
+                                } catch (JsonProcessingException e) {
             throw new BizException(ResultCode.INTERNAL_ERROR, "课程数据序列化失败");
         }
         courseMapper.updateById(course);
@@ -172,8 +168,7 @@ public class ScheduleServiceImpl implements ScheduleService {
                 if (matched != null) {
                     slot.setCourseId(matched.getId());
                     slot.setCourseName(matched.getName());
-                    slot.setLocation(matched.getLocation());
-                }
+                                    }
                 slots.add(slot);
             }
 
@@ -262,8 +257,6 @@ public class ScheduleServiceImpl implements ScheduleService {
         dto.setWeekNumbers(parseJsonList(course.getWeekNumbers()));
         dto.setDayOfWeeks(parseJsonList(course.getDayOfWeeks()));
         dto.setPeriodIndexes(parseJsonList(course.getPeriodIndexes()));
-        dto.setLocation(course.getLocation());
-        dto.setRemark(course.getRemark());
-        return dto;
+                        return dto;
     }
 }

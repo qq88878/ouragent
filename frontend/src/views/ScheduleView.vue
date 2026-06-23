@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="schedule-page">
     <!-- ====== 初始配置 ====== -->
     <template v-if="!configured">
@@ -93,7 +93,6 @@
               <div class="course-list-meta">
                 <span>周{{ c.dayOfWeeks?.map(d => weekDayLabel(d)).join('、') || '-' }}</span>
                 <span>{{ c.periodIndexes?.map(i => displayPeriods[i]?.name || ('节次' + (i + 1))).join('、') || '-' }}</span>
-                <span v-if="c.location">📍{{ c.location }}</span>
                 <span>{{ formatWeekDisplay(c.weekNumbers) }}</span>
               </div>
             </div>
@@ -129,10 +128,6 @@
                 <template v-if="getCourseAt(day.value, pi)">
                   <div class="course-block" :style="{ background: getCourseBg(getCourseAt(day.value, pi).courseId), borderLeftColor: getCourseColor(getCourseAt(day.value, pi).courseId) }">
                     <div class="course-block-name">{{ getCourseAt(day.value, pi).courseName }}</div>
-                    <div v-if="getCourseAt(day.value, pi).location" class="course-block-loc">
-                      <el-icon :size="11"><LocationFilled /></el-icon>
-                      {{ getCourseAt(day.value, pi).location }}
-                    </div>
                   </div>
                 </template>
                 <template v-else>
@@ -185,12 +180,6 @@
             <div v-if="displayPeriods.length === 0" class="field-hint">暂无可选节次，请先在设置中配置时间段</div>
             <div v-else-if="courseForm.periodIndexes.length === 0" class="field-hint" style="color: var(--color-danger);">请至少选择一个节次</div>
           </el-form-item>
-          <el-form-item label="教室">
-            <el-input v-model="courseForm.location" placeholder="如：教学楼A101" />
-          </el-form-item>
-          <el-form-item label="备注">
-            <el-input v-model="courseForm.remark" type="textarea" :rows="2" placeholder="选填" />
-          </el-form-item>
         </el-form>
         <template #footer>
           <el-button @click="showCourseDialog = false">取消</el-button>
@@ -233,7 +222,7 @@
 import { ref, reactive, computed, onMounted } from 'vue';
 import { scheduleApi } from '@/api';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Plus, Delete, Edit, ArrowLeft, ArrowRight, Setting, FolderOpened, LocationFilled } from '@element-plus/icons-vue';
+import { Plus, Delete, Edit, ArrowLeft, ArrowRight, Setting, FolderOpened } from '@element-plus/icons-vue';
 
 // ---- State ----
 const configured = ref(false);
@@ -258,7 +247,7 @@ const configDialogForm = reactive({
 const showCourseDialog = ref(false);
 const editingCourse = ref(null);
 const savingCourse = ref(false);
-const courseForm = reactive({ name: '', weekNumbers: [], dayOfWeeks: [], periodIndexes: [], location: '', remark: '' });
+const courseForm = reactive({ name: '', weekNumbers: [], dayOfWeeks: [], periodIndexes: [] });
 
 const weekDayLabels = ['', '一', '二', '三', '四', '五', '六', '日'];
 const weekDays = [
@@ -452,7 +441,7 @@ function prevWeek() { if (weekOffset.value > 0) { weekOffset.value--; loadWeekVi
 function nextWeek() { weekOffset.value++; loadWeekView(); }
 
 function openAddCourse() {
-  Object.assign(courseForm, { name: '', weekNumbers: [], dayOfWeeks: [], periodIndexes: [], location: '', remark: '' });
+  Object.assign(courseForm, { name: '', weekNumbers: [], dayOfWeeks: [], periodIndexes: [] });
   editingCourse.value = null;
   showCourseDialog.value = true;
 }
@@ -463,7 +452,6 @@ function editCourse(c) {
     weekNumbers: c.weekNumbers ? [...c.weekNumbers] : [],
     dayOfWeeks: c.dayOfWeeks ? [...c.dayOfWeeks] : [],
     periodIndexes: c.periodIndexes ? [...c.periodIndexes] : [],
-    location: c.location || '', remark: c.remark || '',
   });
   editingCourse.value = c;
   showCourseDialog.value = true;
@@ -481,7 +469,6 @@ async function saveCourse() {
       weekNumbers: [...courseForm.weekNumbers].sort((a, b) => a - b),
       dayOfWeeks: [...courseForm.dayOfWeeks].sort((a, b) => a - b),
       periodIndexes: [...courseForm.periodIndexes].sort((a, b) => a - b),
-      location: courseForm.location || '', remark: courseForm.remark || '',
     };
     const res = editingCourse.value
       ? await scheduleApi.updateCourse(editingCourse.value.id, payload)
@@ -699,7 +686,7 @@ onMounted(async () => {
 }
 .course-block:hover { transform: scale(1.03); box-shadow: 0 2px 12px rgba(30,24,18,0.10); z-index: 1; }
 .course-block-name { font-size: 12px; font-weight: 600; color: var(--color-text); line-height: 1.35; }
-.course-block-loc { font-size: 10px; color: var(--color-text-muted); display: flex; align-items: center; gap: 3px; margin-top: 4px; }
+
 
 /* ===== Course Dialog ===== */
 .course-dialog-form .el-select { width: 100%; }

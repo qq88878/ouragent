@@ -85,7 +85,7 @@ ouragent/
 ```bash
 # ==================== MySQL 数据库 ====================
 MYSQL_ROOT_PASSWORD=your_mysql_password    # 必须修改！
-MYSQL_DATABASE=edu
+MYSQL_DATABASE=edu_agent
 
 # ==================== Java 后端 ====================
 SPRING_PROFILES_ACTIVE=prod
@@ -109,7 +109,7 @@ APP_BASE_URL=http://localhost
 APP_ENV=production
 DEBUG=false
 LOG_LEVEL=INFO
-DB_NAME=edu
+DB_NAME=edu_agent
 DB_PORT=3306
 DB_POOL_SIZE=10
 DB_MAX_OVERFLOW=20

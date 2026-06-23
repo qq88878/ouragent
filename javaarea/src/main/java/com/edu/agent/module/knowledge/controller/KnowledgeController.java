@@ -5,8 +5,6 @@ import com.edu.agent.module.knowledge.dto.BatchApproveDTO;
 import com.edu.agent.module.knowledge.dto.KnowledgeDTO;
 import com.edu.agent.module.knowledge.dto.KnowledgeUploadDTO;
 import com.edu.agent.module.knowledge.service.KnowledgeService;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -14,7 +12,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.Map;
-
 import java.util.List;
 
 @RestController
@@ -29,33 +26,21 @@ public class KnowledgeController {
 
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
-    public Result<KnowledgeDTO> upload(@RequestPart("file") MultipartFile file,
-                                       @RequestParam(required = false) Long courseId,
-                                       @RequestParam(required = false) String name,
-                                       @RequestParam(required = false) String description) {
+    public Result<KnowledgeDTO> upload(@RequestPart("file") MultipartFile file) {
         if (file == null || file.isEmpty()) {
             return Result.fail(400, "No file selected or file is empty");
         }
         KnowledgeUploadDTO dto = new KnowledgeUploadDTO();
-        dto.setCourseId(courseId);
-        dto.setName(name);
-        dto.setDescription(description);
         return Result.success(knowledgeService.uploadKnowledge(file, dto));
     }
 
     @PostMapping(value = "/upload-batch", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
-    public Result<List<KnowledgeDTO>> uploadBatch(@RequestPart("files") List<MultipartFile> files,
-                                                   @RequestParam(required = false) Long courseId,
-                                                   @RequestParam(required = false) String name,
-                                                   @RequestParam(required = false) String description) {
+    public Result<List<KnowledgeDTO>> uploadBatch(@RequestPart("files") List<MultipartFile> files) {
         if (files == null || files.isEmpty()) {
             return Result.fail(400, "No files selected");
         }
         KnowledgeUploadDTO dto = new KnowledgeUploadDTO();
-        dto.setCourseId(courseId);
-        dto.setName(name);
-        dto.setDescription(description);
         return Result.success(knowledgeService.uploadKnowledgeBatch(files, dto));
     }
 
@@ -91,6 +76,13 @@ public class KnowledgeController {
         return Result.success(result);
     }
 
+    @PutMapping("/{id}/remark")
+    @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
+    public Result<Void> updateRemark(@PathVariable Long id, @RequestParam String remark) {
+        knowledgeService.updateRemark(id, remark);
+        return Result.success();
+    }
+
     @PutMapping("/{id}/assign")
     @PreAuthorize("hasAnyRole('TEACHER','ADMIN')")
     public Result<Void> assignToCourse(@PathVariable Long id, @RequestParam(required = false) Long courseId) {
@@ -120,8 +112,7 @@ public class KnowledgeController {
 
     @PostMapping("/{id}/approve")
     @PreAuthorize("hasRole('ADMIN')")
-    public Result<Void> approve(@PathVariable Long id,
-                                @RequestBody(required = false) BatchApproveDTO dto) {
+    public Result<Void> approve(@PathVariable Long id, @RequestBody(required = false) BatchApproveDTO dto) {
         boolean approved = dto != null && dto.isApproved();
         String remark = dto != null ? dto.getRemark() : null;
         knowledgeService.approveKnowledge(id, approved, remark);

@@ -47,14 +47,8 @@
           </div>
         </template>
       </el-table-column>
-      <el-table-column v-if="isAdmin" label="上传者" width="120">
+      <el-table-column label="上传者" width="120">
         <template #default="{ row }">{{ row.uploadedByName || '-' }}</template>
-      </el-table-column>
-      <el-table-column label="所属课程" width="160">
-        <template #default="{ row }">
-          <el-tag v-if="row.courseName" size="small" effect="plain" round>{{ row.courseName }}</el-tag>
-          <span v-else class="text-muted">-</span>
-        </template>
       </el-table-column>
       <el-table-column prop="fileType" label="类型" width="90">
         <template #default="{ row }">
@@ -63,6 +57,15 @@
       </el-table-column>
       <el-table-column label="大小" width="90">
         <template #default="{ row }">{{ formatSize(row.fileSize) }}</template>
+      </el-table-column>
+      <el-table-column label="备注" min-width="160">
+        <template #default="{ row }">
+          <template v-if="canEdit(row)">
+            <span v-if="!row._editing" class="remark-text" @click="startEditRemark(row)">{{ row.remark || '点击添加备注' }}</span>
+            <el-input v-else v-model="row._remarkValue" size="small" @blur="saveRemark(row)" @keyup.enter="saveRemark(row)" placeholder="输入备注" />
+          </template>
+          <span v-else class="text-muted">{{ row.remark || '-' }}</span>
+        </template>
       </el-table-column>
       <el-table-column v-if="isAdmin" label="审核状态" width="100">
         <template #default="{ row }">
@@ -81,160 +84,162 @@
             <el-button text type="success" size="small" @click="openApproveDialog(row.id, true)">通过</el-button>
             <el-button text type="warning" size="small" @click="openApproveDialog(row.id, false)">拒绝</el-button>
           </template>
-          <el-button v-if="isTeacherOrAdmin" text type="danger" size="small" @click="remove(row.id)">删除</el-button>
+          <el-button v-if="canDelete(row)" text type="danger" size="small" @click="remove(row.id)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
 
     <!-- 上传弹窗 -->
-    <el-dialog v-if="isTeacherOrAdmin" v-model="showUploadDialog" title="上传知识库文件" width="500px">
-      <el-form label-width="70px">
-        <el-form-item label="课程">
-          <el-select v-model="uploadForm.courseId" placeholder="可不选，上传到公共库" clearable style="width: 100%;">
-            <el-option v-for="c in courses" :key="c.id" :label="c.title" :value="c.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="文件名">
-          <el-input v-model="uploadForm.name" placeholder="自定义文件名（选填）" />
-        </el-form-item>
-        <el-form-item label="描述">
-          <el-input v-model="uploadForm.description" placeholder="文件描述（选填）" />
-        </el-form-item>
-        <el-form-item label="文件">
-          <el-upload :auto-upload="false" :on-change="handleFileAdd" multiple drag style="width: 100%;">
-            <el-icon :size="32" color="#C4BAB0"><UploadFilled /></el-icon>
-            <div style="margin-top: 6px; font-size: 13px;">拖拽或点击选择文件（可多选）</div>
-          </el-upload>
-          <div v-if="uploadForm.files.length > 0" class="file-list">
-            <div v-for="(f, idx) in uploadForm.files" :key="idx" class="file-item">
-              <span class="file-item-name">{{ f.name }}</span>
-              <span class="file-item-size">{{ formatSize(f.size) }}</span>
-              <el-button text type="danger" size="small" @click="removeFile(idx)">
-                <el-icon :size="14"><Delete /></el-icon>
-              </el-button>
-            </div>
-          </div>
-        </el-form-item>
-      </el-form>
+    <el-dialog v-if="isTeacherOrAdmin" v-model="showUploadDialog" title="上传知识库文件" width="480px">
+      <el-upload
+        ref="uploadRef"
+        drag
+        multiple
+        :auto-upload="false"
+        :on-change="handleFileAdd"
+        :file-list="uploadForm.fileList"
+        style="width: 100%;"
+      >
+        <el-icon :size="40" color="#C1803A"><UploadFilled /></el-icon>
+        <div class="el-upload__text">拖拽文件到此处或 <em>点击选择</em></div>
+        <template #tip>
+          <div class="el-upload__tip">支持 PDF / DOCX / MD / TXT 格式</div>
+        </template>
+      </el-upload>
       <template #footer>
         <el-button @click="showUploadDialog = false">取消</el-button>
-        <el-button type="primary" :loading="uploading" @click="doUpload">上传</el-button>
+        <el-button type="primary" @click="doUpload" :loading="uploading" :disabled="uploadForm.files.length === 0">上传</el-button>
       </template>
     </el-dialog>
 
-    <!-- 审核弹窗 -->
-    <el-dialog v-model="showApproveDialog" title="文件审核" width="420px">
-      <el-form>
+    <!-- 查看内容 -->
+    <el-dialog v-model="showContentDialog" :title="'文件内容：' + contentName" width="760px" top="5vh">
+      <div v-if="contentLoading" v-loading="contentLoading" style="min-height: 200px;"></div>
+      <div v-else-if="!contentText" class="content-unavailable">
+        <el-icon :size="36" color="#C4BAB0"><WarningFilled /></el-icon>
+        <p>暂不支持预览此文件类型</p>
+      </div>
+      <pre v-else class="content-preview">{{ contentText }}</pre>
+    </el-dialog>
+
+    <!-- 审核 -->
+    <el-dialog v-model="showApproveDialog" title="审核文件" width="440px">
+      <el-form label-width="60px">
         <el-form-item label="备注">
-          <el-input v-model="approveForm.remark" type="textarea" :rows="3" placeholder="审核备注（选填）" />
+          <el-input v-model="approveForm.remark" type="textarea" :rows="3" placeholder="审核意见" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showApproveDialog = false">取消</el-button>
-        <el-button :type="approveForm.approved ? 'success' : 'warning'" @click="doApprove">确认{{ approveForm.approved ? '通过' : '拒绝' }}</el-button>
+        <el-button type="primary" @click="doApprove">确定</el-button>
       </template>
     </el-dialog>
 
-    <!-- 批量审核弹窗 -->
-    <el-dialog v-model="showBatchApproveDialog" :title="(batchApproveForm.approved ? '批量通过' : '批量拒绝') + '文件'" width="420px">
-      <el-form>
+    <!-- 批量审核 -->
+    <el-dialog v-model="showBatchApproveDialog" title="批量审核" width="440px">
+      <el-form label-width="60px">
         <el-form-item label="备注">
-          <el-input v-model="batchApproveForm.remark" type="textarea" :rows="3" placeholder="批量审核备注（选填）" />
+          <el-input v-model="batchApproveForm.remark" type="textarea" :rows="3" placeholder="审核意见" />
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="showBatchApproveDialog = false">取消</el-button>
-        <el-button :type="batchApproveForm.approved ? 'success' : 'warning'" @click="doBatchApprove">确认</el-button>
+        <el-button type="primary" @click="doBatchApprove">确定</el-button>
       </template>
-    </el-dialog>
-
-    <!-- 内容预览弹窗 -->
-    <el-dialog v-model="showContentDialog" :title="'查看内容: ' + contentName" width="800px" top="3vh">
-      <div v-loading="contentLoading" style="max-height: 70vh; overflow-y: auto;">
-        <template v-if="!contentLoading && contentText">
-          <div v-if="isPreviewPlaceholder" class="content-unavailable">
-            <el-icon :size="48" color="#C4BAB0"><WarningFilled /></el-icon>
-            <p>{{ contentText }}</p>
-          </div>
-          <pre v-else class="content-preview">{{ contentText }}</pre>
-        </template>
-        <el-empty v-if="!contentLoading && !contentText" description="无法加载内容" :image-size="60" />
-      </div>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue';
-import { useAuthStore } from '@/stores/auth';
 import { knowledgeApi, courseApi } from '@/api';
+import { useAuthStore } from '@/stores/auth';
 import { ElMessage, ElMessageBox } from 'element-plus';
-import { Plus, Search, UploadFilled, WarningFilled, Document } from '@element-plus/icons-vue';
+import { Plus, Search, UploadFilled, WarningFilled } from '@element-plus/icons-vue';
 
-const authStore = useAuthStore();
-const isAdmin = computed(() => authStore.user?.role === 'ADMIN');
-const isTeacherOrAdmin = computed(() => authStore.user?.role === 'TEACHER' || authStore.user?.role === 'ADMIN');
+const auth = useAuthStore();
+const userId = computed(() => auth.user?.id);
+const isTeacher = computed(() => auth.user?.role === 'TEACHER');
+const isAdmin = computed(() => auth.user?.role === 'ADMIN');
+const isTeacherOrAdmin = computed(() => isTeacher.value || isAdmin.value);
 
 const knowledgeList = ref([]);
 const loading = ref(false);
 const searchKeyword = ref('');
 const approvalFilter = ref('');
-const selectedIds = ref([]);
-const courses = ref([]);
 
 const showUploadDialog = ref(false);
-const uploadForm = reactive({ courseId: null, files: [], name: '', description: '' });
+const uploadForm = reactive({ files: [], fileList: [] });
 const uploading = ref(false);
+
+const showContentDialog = ref(false);
+const contentLoading = ref(false);
+const contentText = ref('');
+const contentName = ref('');
 
 const showApproveDialog = ref(false);
 const approveForm = reactive({ id: null, approved: true, remark: '' });
 
 const showBatchApproveDialog = ref(false);
 const batchApproveForm = reactive({ approved: true, remark: '' });
+const selectedIds = ref([]);
 
-const showContentDialog = ref(false);
-const contentText = ref('');
-const contentName = ref('');
-const contentLoading = ref(false);
-const isPreviewPlaceholder = computed(() => contentText.value && contentText.value.startsWith('[此文件类型'));
-
-const fileTypeIcons = {
-  pdf: '📄', doc: '📝', docx: '📝', ppt: '📊', pptx: '📊',
-  xls: '📈', xlsx: '📈', txt: '📃', md: '📋', png: '🖼️', jpg: '🖼️', jpeg: '🖼️',
-};
-const fileTypeIcon = (t) => fileTypeIcons[(t || '').toLowerCase()] || '📁';
+const courses = ref([]);
 
 onMounted(async () => {
   await loadKnowledge();
-  if (isTeacherOrAdmin.value) { try { const r = await courseApi.list({ page: 1, size: 200 }); if (r.code === 200) courses.value = r.data?.records || []; } catch {} }
+  if (isTeacherOrAdmin.value) {
+    try { const r = await courseApi.list({ page: 1, size: 100 }); courses.value = r.data?.records || []; } catch {}
+  }
 });
+
+function canEdit(row) {
+  return isTeacherOrAdmin.value && (row.uploadedBy === userId.value || isAdmin.value);
+}
+
+function canDelete(row) {
+  return isTeacherOrAdmin.value && (row.uploadedBy === userId.value || isAdmin.value);
+}
+
+function startEditRemark(row) {
+  row._editing = true;
+  row._remarkValue = row.remark || '';
+}
+
+async function saveRemark(row) {
+  row._editing = false;
+  const val = (row._remarkValue || '').trim();
+  if (val === (row.remark || '')) return;
+  try {
+    await knowledgeApi.updateRemark(row.id, val);
+    row.remark = val;
+    ElMessage.success('备注已更新');
+  } catch {
+    ElMessage.error('更新失败');
+  }
+}
+
+function fileTypeIcon(type) {
+  const map = { pdf: '📄', docx: '📝', md: '📋', txt: '📃' };
+  return map[type] || '📁';
+}
 
 async function loadKnowledge() {
   loading.value = true;
   try {
     let res;
-    if (approvalFilter.value === 'PENDING') {
+    if (approvalFilter.value) {
       res = await knowledgeApi.listPending();
+    } else if (searchKeyword.value.trim()) {
+      res = await knowledgeApi.search(searchKeyword.value.trim());
     } else {
       res = await knowledgeApi.listAll();
     }
-    if (res.code === 200) {
-      let data = res.data || [];
-      if (approvalFilter.value && approvalFilter.value !== 'PENDING') {
-        data = data.filter(k => k.approvalStatus === approvalFilter.value);
-      }
-      knowledgeList.value = data;
-    }
+    knowledgeList.value = (res.data || []).map(r => ({ ...r, _editing: false, _remarkValue: '' }));
   } catch {} finally { loading.value = false; }
 }
 
-async function doSearch() {
-  loading.value = true; approvalFilter.value = '';
-  try {
-    if (searchKeyword.value.trim()) { const res = await knowledgeApi.search(searchKeyword.value.trim()); if (res.code === 200) knowledgeList.value = res.data || []; }
-    else { await loadKnowledge(); }
-  } catch {} finally { loading.value = false; }
-}
+async function doSearch() { approvalFilter.value = ''; await loadKnowledge(); }
 
 async function viewContent(id) {
   contentLoading.value = true; contentText.value = ''; contentName.value = ''; showContentDialog.value = true;
@@ -248,18 +253,16 @@ function handleFileAdd(file) {
     uploadForm.files.push(f);
   }
 }
-function removeFile(idx) { uploadForm.files.splice(idx, 1); }
 
-function openUploadDialog() { Object.assign(uploadForm, { courseId: null, files: [], name: '', description: '' }); showUploadDialog.value = true; }
+function openUploadDialog() { uploadForm.files = []; uploadForm.fileList = []; showUploadDialog.value = true; }
 
 async function doUpload() {
   if (uploadForm.files.length === 0) { ElMessage.warning('请选择文件'); return; }
   uploading.value = true;
   try {
-    const res = await knowledgeApi.uploadBatch(uploadForm.files, uploadForm.courseId || null, uploadForm.name, uploadForm.description);
+    const res = await knowledgeApi.uploadBatch(uploadForm.files);
     if (res.code === 200) {
-      const count = res.data ? res.data.length : uploadForm.files.length;
-      ElMessage.success(`成功上传 ${count} 个文件`);
+      ElMessage.success('上传成功');
       showUploadDialog.value = false;
       await loadKnowledge();
     }
@@ -274,16 +277,15 @@ async function remove(id) {
 function handleSelectionChange(selection) { selectedIds.value = selection.map(item => item.id); }
 
 function openApproveDialog(id, approved) { Object.assign(approveForm, { id, approved, remark: '' }); showApproveDialog.value = true; }
-
 function openBatchApproveDialog(approved) { Object.assign(batchApproveForm, { approved, remark: '' }); showBatchApproveDialog.value = true; }
 
 async function doApprove() {
-  try { const { id, approved, remark } = approveForm; await knowledgeApi.approve(id, approved, remark); showApproveDialog.value = false; await loadKnowledge(); ElMessage.success(`已${approved ? '通过' : '拒绝'}`); }
+  try { const { id, approved, remark } = approveForm; await knowledgeApi.approve(id, approved, remark); showApproveDialog.value = false; await loadKnowledge(); ElMessage.success('已' + (approved ? '通过' : '拒绝')); }
   catch { ElMessage.error('操作失败'); }
 }
 
 async function doBatchApprove() {
-  try { const { approved, remark } = batchApproveForm; await knowledgeApi.batchApprove(selectedIds.value, approved, remark); showBatchApproveDialog.value = false; selectedIds.value = []; await loadKnowledge(); ElMessage.success(`已批量${approved ? '通过' : '拒绝'}`); }
+  try { const { approved, remark } = batchApproveForm; await knowledgeApi.batchApprove(selectedIds.value, approved, remark); showBatchApproveDialog.value = false; selectedIds.value = []; await loadKnowledge(); ElMessage.success('已批量' + (approved ? '通过' : '拒绝')); }
   catch { ElMessage.error('操作失败'); }
 }
 
@@ -304,10 +306,11 @@ function formatSize(bytes) { if (!bytes) return '-'; if (bytes < 1024) return by
 .search-input { width: 400px; }
 
 .kb-table { border-radius: var(--radius-lg); overflow: hidden; }
-.kb-table :deep(.el-table__body tr:hover > td) { background: var(--color-bg-hover) !important; }
 .file-name-cell { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .file-icon { font-size: 18px; flex-shrink: 0; }
 .text-muted { color: var(--color-text-placeholder); }
+.remark-text { cursor: pointer; color: var(--color-text-muted); font-size: 13px; }
+.remark-text:hover { color: var(--color-primary); }
 
 .content-unavailable { text-align: center; padding: 48px 20px; color: var(--color-text-muted); }
 .content-unavailable p { margin-top: 18px; font-size: 14px; }
@@ -316,9 +319,4 @@ function formatSize(bytes) { if (!bytes) return '-'; if (bytes < 1024) return by
   font-size: 14px; line-height: 1.9; white-space: pre-wrap; word-break: break-all;
   max-height: 60vh; overflow-y: auto;
 }
-
-.file-list { margin-top: 10px; max-height: 160px; overflow-y: auto; }
-.file-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--color-bg); border-radius: 6px; margin-bottom: 4px; font-size: 13px; }
-.file-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text); }
-.file-item-size { color: var(--color-text-muted); font-size: 12px; flex-shrink: 0; }
 </style>

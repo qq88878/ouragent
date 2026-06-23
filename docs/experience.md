@@ -332,7 +332,7 @@ docker exec edu-mysql mysql -u root -proot_password -e \
 
 同时在 JDBC URL 里加参数：
 ```yaml
-url: jdbc:mysql://mysql:3306/edu?...&useSSL=false&allowPublicKeyRetrieval=true
+url: jdbc:mysql://mysql:3306/edu_agent?...&useSSL=false&allowPublicKeyRetrieval=true
 ```
 
 ### 坑 4：schema.sql 没有自动执行
@@ -351,7 +351,7 @@ volumes:
 docker exec -i edu-mysql mysql -u root -proot_password edu < javaarea/src/main/resources/db/schema.sql
 ```
 
-**注意**：schema.sql 里有 `CREATE DATABASE edu; USE edu;`，但实际数据库名是 `edu`。
+**注意**：schema.sql 里有 `CREATE DATABASE edu; USE edu;`，但实际数据库名是 `edu_agent`。
 需要去掉这两行，或者直接在 `edu` 库里执行建表语句。
 
 ### 坑 5：Spring Profile 不生效

@@ -1,7 +1,7 @@
 ﻿-- Add uploaded_by, approval_status, and approval_remark fields to knowledge_base table
 -- This migration adds role-based access control for knowledge management
 
-USE edu;
+USE edu_agent;
 
 -- Add uploaded_by field to track who uploaded the file
 ALTER TABLE `knowledge_base`
@@ -24,3 +24,7 @@ UPDATE `knowledge_base` kb
 JOIN `course` c ON kb.course_id = c.id
 SET kb.uploaded_by = c.teacher_id
 WHERE kb.course_id IS NOT NULL;
+
+-- Add remark field for teacher notes
+ALTER TABLE knowledge_base
+ADD COLUMN emark VARCHAR(500) DEFAULT NULL COMMENT '教师备注' AFTER pproval_remark;

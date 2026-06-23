@@ -5,7 +5,7 @@ metadata:
   namespace: edu-agent
 data:
   # MySQL
-  MYSQL_DATABASE: edu
+  MYSQL_DATABASE: edu_agent
   MYSQL_USER: edu
   DB_HOST: mysql
   # PostgreSQL

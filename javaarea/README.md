@@ -105,7 +105,7 @@ src/main/resources/
 
 ```bash
 # 创建数据库
-mysql -u root -p -e "CREATE DATABASE edu DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+mysql -u root -p -e "CREATE DATABASE edu_agent DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
 # 导入表结构
 mysql -u root -p edu < src/main/resources/db/schema.sql
@@ -118,7 +118,7 @@ mysql -u root -p edu < src/main/resources/db/schema.sql
 ```yaml
 spring:
   datasource:
-    url: jdbc:mysql://localhost:3306/edu?useSSL=false&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://localhost:3306/edu_agent?useSSL=false&serverTimezone=Asia/Shanghai
     username: root
     password: your_password
   data:

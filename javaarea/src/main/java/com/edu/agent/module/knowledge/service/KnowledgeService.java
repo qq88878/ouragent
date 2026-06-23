@@ -8,33 +8,18 @@ import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 public interface KnowledgeService {
-    /**
-     * Upload multiple knowledge files in batch.
-     */
     List<KnowledgeDTO> uploadKnowledgeBatch(List<MultipartFile> files, KnowledgeUploadDTO dto);
-
-
     KnowledgeDTO uploadKnowledge(MultipartFile file, KnowledgeUploadDTO dto);
-
     KnowledgeDTO getKnowledgeById(Long id);
-
     List<KnowledgeDTO> listByCourse(Long courseId);
-
     List<KnowledgeDTO> listAll();
-
     List<KnowledgeDTO> searchByName(String keyword);
-
     String getContent(Long id);
-
     List<KnowledgeDTO> listByApprovalStatus(String approvalStatus);
-
     void approveKnowledge(Long id, boolean approved, String remark);
-
     void batchApprove(BatchApproveDTO dto);
-
     void assignToCourse(Long knowledgeId, Long courseId);
-
+    void updateRemark(Long id, String remark);
     void deleteKnowledge(Long id);
-
     void reprocessKnowledge(Long id);
 }
