@@ -138,7 +138,7 @@ CREATE TABLE IF NOT EXISTS `chat_message` (
 CREATE TABLE IF NOT EXISTS `learning_path` (
     `id`             BIGINT        NOT NULL AUTO_INCREMENT,
     `user_id`        BIGINT        NOT NULL,
-    `course_id`      BIGINT        NOT NULL,
+    `course_id`      BIGINT        DEFAULT NULL,
     `title`          VARCHAR(255)  NOT NULL,
     `description`    TEXT          DEFAULT NULL,
     `total_steps`    INT           NOT NULL DEFAULT 0,

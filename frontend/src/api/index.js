@@ -97,8 +97,8 @@ export const chatApi = {
 };
 
 export const learningApi = {
-    generatePath(data) { return http.post('/learning/paths/generate', data); },
-    generatePathFromChat(data) { return http.post('/learning/paths/generate-from-chat', data); },
+    generatePath(data) { return http.post('/learning/paths/generate', data, { timeout: 120000 }); },
+    generatePathFromChat(data) { return http.post('/learning/paths/generate-from-chat', data, { timeout: 120000 }); },
     listPaths(includeArchived = false) { return http.get('/learning/paths/', { params: { includeArchived } }); },
     getPathById(id) { return http.get(`/learning/paths/${id}`); },
     updateStepStatus(pathId, stepId, status) {
