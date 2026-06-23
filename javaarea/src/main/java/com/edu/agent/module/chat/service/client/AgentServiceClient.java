@@ -53,7 +53,7 @@ public class AgentServiceClient {
 
     private HttpHeaders createMultipartHeaders() {
         HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+        // Do NOT set Content-Type here; Spring FormHttpMessageConverter sets it with proper boundary
         headers.set("X-Service-Key", serviceKey);
         return headers;
     }
@@ -102,7 +102,7 @@ public class AgentServiceClient {
     public String ingestKnowledge(Long knowledgeId, Long courseId, String filePath, String fileType) {
         try {
             HttpHeaders headers = createHeaders();
-            headers.setContentType(new MediaType(MediaType.MULTIPART_FORM_DATA, StandardCharsets.UTF_8));
+            // Let Spring set Content-Type with proper boundary for multipart
 
             MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
             body.add("file", new FileSystemResource(filePath));
