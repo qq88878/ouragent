@@ -3,7 +3,8 @@
     <!-- 侧边栏 -->
     <div class="chat-sidebar">
       <div class="sidebar-header">
-        <el-select v-model="selectedCourseId" placeholder="按课程筛选" clearable size="default" style="width: 100%; margin-bottom: 10px;" @change="onCourseChange">
+        <el-select v-model="selectedCourseId" placeholder="选择课程（不选则AI自动识别）" clearable size="default" style="width: 100%; margin-bottom: 10px;" @change="onCourseChange">
+          <el-option label="不指定课程（AI自动选择）" :value="null" />
           <el-option v-for="c in courses" :key="c.id" :label="c.title" :value="c.id" />
         </el-select>
         <el-button type="primary" style="width: 100%;" @click="createSession">

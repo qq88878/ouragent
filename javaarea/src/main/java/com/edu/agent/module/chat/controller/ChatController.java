@@ -66,6 +66,13 @@ public class ChatController {
         return chatService.sendMessageStream(id, loginUser.getUser().getId(), request);
     }
 
+    @PostMapping(value = "/sessions/{id}/messages/qa-stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter sendQAStream(@PathVariable Long id,
+                                    @Valid @RequestBody ChatRequest request) {
+        LoginUser loginUser = (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        return chatService.sendQAStream(id, loginUser.getUser().getId(), request);
+    }
+
     @GetMapping("/sessions/{id}/signals")
     public Result<Map<String, Object>> getChatSignals(@PathVariable Long id) {
         return Result.success(chatService.getChatSignals(id));

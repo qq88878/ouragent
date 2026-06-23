@@ -253,11 +253,74 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
         return emitter;
     }
 
+    @Override
+    public SseEmitter sendQAStream(Long sessionId, Long userId, ChatRequest request) {
+        ChatSession session = getById(sessionId);
+        if (session == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "会话不存在");
+        }
+        if (!session.getUserId().equals(userId)) {
+            throw new BizException(ResultCode.FORBIDDEN, "无权访问此会话");
+        }
+
+        // Save user message synchronously
+        ChatMessage userMessage = new ChatMessage();
+        userMessage.setSessionId(sessionId);
+        userMessage.setRole("USER");
+        userMessage.setContent(request.getMessage());
+        messageMapper.insert(userMessage);
+
+        // Build context (same as normal chat)
+        Map<String, Object> context = buildContext(session);
+
+        // Update session title if first message
+        if ("新对话".equals(session.getTitle())) {
+            String title = request.getMessage().length() > 50
+                    ? request.getMessage().substring(0, 50) + "..."
+                    : request.getMessage();
+            session.setTitle(title);
+            updateById(session);
+        }
+
+        SseEmitter emitter = new SseEmitter(120_000L);
+        StringBuilder accumulator = new StringBuilder();
+        SecurityContext secCtx = SecurityContextHolder.getContext();
+
+        streamExecutor.submit(() -> {
+            SecurityContextHolder.setContext(secCtx);
+            try {
+                agentServiceClient.streamQAWithCheck(request.getMessage(), context, sessionId, emitter, accumulator);
+            } catch (Exception e) {
+                log.error("深度答疑流式对话失败", e);
+                try {
+                    emitter.send(SseEmitter.event().data("{\"type\":\"error\",\"error\":\"AI 服务暂时不可用\"}"));
+                    emitter.complete();
+                } catch (Exception ignored) {}
+            } finally {
+                String fullResponse = accumulator.toString();
+                if (!fullResponse.isEmpty()) {
+                    ChatMessage assistantMessage = new ChatMessage();
+                    assistantMessage.setSessionId(sessionId);
+                    assistantMessage.setRole("ASSISTANT");
+                    assistantMessage.setContent(fullResponse);
+                    messageMapper.insert(assistantMessage);
+                }
+                SecurityContextHolder.clearContext();
+            }
+        });
+
+        emitter.onTimeout(() -> log.warn("QA SSE 超时: sessionId={}", sessionId));
+        emitter.onError(e -> log.warn("QA SSE 错误: sessionId={}", sessionId, e));
+
+        return emitter;
+    }
+
     private Map<String, Object> buildContext(ChatSession session) {
         Map<String, Object> context = new HashMap<>();
 
         // Knowledge context
         if (session.getCourseId() != null) {
+            // 固定课程模式：只检索该课程的知识库
             LambdaQueryWrapper<KnowledgeBase> kbWrapper = new LambdaQueryWrapper<>();
             kbWrapper.eq(KnowledgeBase::getCourseId, session.getCourseId())
                     .eq(KnowledgeBase::getStatus, 1);
@@ -274,6 +337,39 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
             if (course != null) {
                 context.put("course_id", session.getCourseId());
                 context.put("course_title", course.getTitle());
+            }
+        } else {
+            // 动态课程模式：传所有课程及知识库，让 AI 自主选择
+            List<Course> allCourses = courseMapper.selectList(null);
+            if (allCourses != null && !allCourses.isEmpty()) {
+                Map<Long, List<Long>> courseKnowledgeMap = new HashMap<>();
+                List<Long> allKnowledgeIds = new ArrayList<>();
+                for (Course c : allCourses) {
+                    LambdaQueryWrapper<KnowledgeBase> kbWrapper = new LambdaQueryWrapper<>();
+                    kbWrapper.eq(KnowledgeBase::getCourseId, c.getId())
+                            .eq(KnowledgeBase::getStatus, 1);
+                    List<Long> kbIds = knowledgeMapper.selectList(kbWrapper)
+                            .stream().map(KnowledgeBase::getId).collect(Collectors.toList());
+                    if (!kbIds.isEmpty()) {
+                        courseKnowledgeMap.put(c.getId(), kbIds);
+                        allKnowledgeIds.addAll(kbIds);
+                    }
+                }
+                if (!allKnowledgeIds.isEmpty()) {
+                    context.put("knowledge_ids", allKnowledgeIds);
+                }
+                // 课程目录：让 AI 知道有哪些课程可选
+                List<Map<String, Object>> courseCatalog = new ArrayList<>();
+                for (Course c : allCourses) {
+                    Map<String, Object> item = new HashMap<>();
+                    item.put("id", c.getId());
+                    item.put("title", c.getTitle());
+                    if (courseKnowledgeMap.containsKey(c.getId())) {
+                        item.put("knowledge_ids", courseKnowledgeMap.get(c.getId()));
+                    }
+                    courseCatalog.add(item);
+                }
+                context.put("course_catalog", courseCatalog);
             }
         }
 

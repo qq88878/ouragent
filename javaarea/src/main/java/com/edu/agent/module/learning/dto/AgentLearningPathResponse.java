@@ -3,6 +3,7 @@ package com.edu.agent.module.learning.dto;
 
 import java.util.List;
 import java.util.Collections;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 /**
  * Typed response from Python Agent /agent/plan endpoint.
@@ -19,7 +20,9 @@ public class AgentLearningPathResponse {
         private Integer order;
         private String title;
         private String description;
+        @JsonProperty("knowledge_ids")
         private List<Integer> knowledgeIds;
+        @JsonProperty("estimated_hours")
         private Integer estimatedHours;
         private List<String> resources;
 

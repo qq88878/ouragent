@@ -156,6 +156,7 @@ class Orchestrator:
         knowledge_ids = context.get("knowledge_ids")
         basic_profile = context.get("basic_profile")
         course_title = context.get("course_title", "")
+        course_catalog = context.get("course_catalog")
 
         await self._ensure_redis()
 
@@ -212,6 +213,7 @@ class Orchestrator:
         schedule = context.get("schedule")
         system_prompt = self._build_chat_system_prompt(
             basic_profile, knowledge_context, schedule, signals_profile, course_title,
+            course_catalog=course_catalog,
         )
         messages = [{"role": "system", "content": system_prompt}]
         if history:
@@ -394,8 +396,9 @@ class Orchestrator:
             logger.warning("质检失败: %s", e)
             yield {"type": "quality_check", "quality": {"score": 80, "is_correct": True, "error": str(e)}}
 
-        # 保存对话历史
+        # 保存对话历史 + 更新画像信号
         await self._save_chat_message(session_id, question, complete_answer)
+        await self._extract_and_update_signals(user_id, session_id or "", question, complete_answer)
         yield {"type": "done"}
 
     def _build_chat_system_prompt(
@@ -405,6 +408,7 @@ class Orchestrator:
         schedule: Optional[Dict[str, Any]] = None,
         signals_profile: Optional[Dict[str, Any]] = None,
         course_title: str = "",
+        course_catalog: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         now = datetime.now()
         weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
@@ -416,6 +420,19 @@ class Orchestrator:
             "你是一位经验丰富的学习顾问，正在和一位学生聊天。",
             "",
             f"你正在辅导的课程是：{course_title}，请围绕这门课展开对话。" if course_title else "",
+        ]
+
+        # 动态课程模式：注入课程目录
+        if course_catalog and not course_title:
+            parts.append("")
+            parts.append("当前可用的课程：")
+            for c in course_catalog:
+                parts.append(f"  - {c.get('title', '')}")
+            parts.append("")
+            parts.append("请根据学生的提问判断涉及哪门课程，优先使用对应课程的参考资料回答。")
+            parts.append("如果问题涉及多门课程，可以综合回答。在回答中说明你引用的是哪门课的内容。")
+
+        parts.extend([
             "",
             "- 通过自然的对话了解这位学生，帮他弄清自己想学什么、为什么学、怎么学最有效",
             "- 当你觉得已经足够了解他了，可以温柔地建议他点击「生成学习路径」——但不要第一次就说，等聊到位了再提",
@@ -427,7 +444,7 @@ class Orchestrator:
             "- 记住学生说过的信息，别重复问",
             "",
             "如果学生问具体的学术问题，先回答，然后自然地把话题引回了解他的学习状况。",
-        ]
+        ])
 
         # Known profile: tell the agent what's already known so it doesn't re-ask
         if basic_profile:
@@ -951,13 +968,33 @@ class Orchestrator:
         schedule: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """生成学习路径（委托给 PlannerAgent）"""
+
+        # RAG 检索：为每个知识库条目获取实际内容
+        enriched_knowledge = list(course_knowledge)  # shallow copy
+        if self.rag and enriched_knowledge:
+            for item in enriched_knowledge:
+                kid = item.get("id")
+                if kid is None:
+                    continue
+                try:
+                    results = await self.rag.retrieve(
+                        query=item.get("title", ""),
+                        top_k=2,
+                        knowledge_ids=[kid],
+                    )
+                    if results:
+                        content_snippets = [r["content"] for r in results]
+                        item["content"] = "\n".join(content_snippets)
+                except Exception as e:
+                    logger.debug("RAG 检索知识库内容失败: knowledge_id=%s, %s", kid, e)
+
         return await self._call_agent_safe(
             "planner_agent", self.planner_agent, "generate_path",
             fallback={"title": course_title, "steps": [], "error": "planner_failed"},
             timeout=60.0,
             student_profile=basic_profile,
             course_title=course_title,
-            course_knowledge=course_knowledge,
+            course_knowledge=enriched_knowledge,
             goal=goal,
             schedule=schedule,
         )
@@ -1119,8 +1156,9 @@ class Orchestrator:
             except Exception as e:
                 logger.warning("自动记录错题失败: %s", e)
 
-        # 保存对话历史
+        # 保存对话历史 + 更新画像信号
         await self._save_chat_message(session_id, question, best_answer)
+        await self._extract_and_update_signals(user_id, session_id or "", question, best_answer)
 
         return {
             "answer": best_answer,

@@ -196,13 +196,19 @@ export const agentApi = {
     },
     async *streamChatWithQualityCheck(message, context = {}, sessionId = null, signal = null) {
         const token = localStorage.getItem('accessToken');
-        const response = await fetch('/agent/chat/stream-quality-check', {
+        const url = sessionId
+            ? `/api/chat/sessions/${sessionId}/messages/qa-stream`
+            : '/agent/chat/stream-quality-check';
+        const body = sessionId
+            ? JSON.stringify({ message })
+            : JSON.stringify({ message, context, session_id: sessionId });
+        const response = await fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 ...(token ? { Authorization: 'Bearer ' + token } : {}),
             },
-            body: JSON.stringify({ message, context, session_id: sessionId }),
+            body,
             signal,
         });
         if (!response.ok) throw new Error('HTTP ' + response.status);

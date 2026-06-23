@@ -131,6 +131,7 @@ class PlanRequest(BaseModel):
     course_title: str = Field(default="课程", max_length=200)
     course_knowledge: List[Dict[str, Any]] = Field(default_factory=list, max_length=500)
     goal: str = Field(default="掌握课程核心知识", max_length=500)
+    schedule: Optional[Dict[str, Any]] = Field(default=None, description="课表信息")
 
     @model_validator(mode="before")
     @classmethod
@@ -554,6 +555,7 @@ async def generate_plan(request: PlanRequest, _: dict = Depends(get_current_user
             course_title=request.course_title,
             course_knowledge=request.course_knowledge,
             goal=request.goal,
+            schedule=request.schedule,
         )
         return result
     except Exception as e:

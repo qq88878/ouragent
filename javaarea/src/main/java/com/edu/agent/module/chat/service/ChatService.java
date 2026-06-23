@@ -22,6 +22,8 @@ public interface ChatService {
 
     SseEmitter sendMessageStream(Long sessionId, Long userId, ChatRequest request);
 
+    SseEmitter sendQAStream(Long sessionId, Long userId, ChatRequest request);
+
     void deleteSession(Long sessionId, Long userId);
 
     Map<String, Object> getChatSignals(Long sessionId);

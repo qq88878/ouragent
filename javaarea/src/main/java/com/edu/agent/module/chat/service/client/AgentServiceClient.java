@@ -23,6 +23,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import com.edu.agent.module.learning.dto.QuestionnaireDTO;
 
@@ -176,11 +177,18 @@ public class AgentServiceClient {
 
     public AgentLearningPathResponse generateLearningPath(
             Map<String, Object> studentProfile, Long courseId, String goal,
+            String courseTitle, List<Map<String, Object>> courseKnowledge,
             Map<String, Object> schedule) {
         Map<String, Object> body = new HashMap<>();
         body.put("student_profile", studentProfile);
         body.put("course_id", courseId);
         body.put("goal", goal);
+        if (courseTitle != null) {
+            body.put("course_title", courseTitle);
+        }
+        if (courseKnowledge != null && !courseKnowledge.isEmpty()) {
+            body.put("course_knowledge", courseKnowledge);
+        }
         if (schedule != null && !schedule.isEmpty()) {
             body.put("schedule", schedule);
         }
@@ -261,6 +269,68 @@ public class AgentServiceClient {
                         emitter.complete();
                     } catch (Exception e) {
                         log.error("SSE stream read error", e);
+                        try {
+                            emitter.completeWithError(e);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    return null;
+                }
+        );
+    }
+
+    /**
+     * 流式深度答疑 — 读取 Python SSE 流，转发所有事件类型给 SseEmitter
+     * 同时累积文本内容用于数据库持久化
+     */
+    public void streamQAWithCheck(String message, Map<String, Object> context, Long sessionId,
+                                   org.springframework.web.servlet.mvc.method.annotation.SseEmitter emitter,
+                                   StringBuilder accumulator) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("message", message);
+        body.put("context", context);
+        if (sessionId != null) {
+            body.put("session_id", String.valueOf(sessionId));
+        }
+
+        HttpHeaders headers = createHeaders();
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, headers);
+
+        restTemplate.execute(
+                agentServiceUrl + "/agent/chat/stream-quality-check",
+                org.springframework.http.HttpMethod.POST,
+                restTemplate.httpEntityCallback(request),
+                (org.springframework.web.client.ResponseExtractor<Void>) response -> {
+                    try (BufferedReader reader = new BufferedReader(
+                            new InputStreamReader(response.getBody(), StandardCharsets.UTF_8))) {
+                        String line;
+                        com.fasterxml.jackson.databind.ObjectMapper localMapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                        while ((line = reader.readLine()) != null) {
+                            if (line.startsWith("data: ")) {
+                                String data = line.substring(6);
+                                try {
+                                    java.util.Map<String, Object> parsed = localMapper.readValue(data, java.util.Map.class);
+                                    String type = (String) parsed.getOrDefault("type", "text");
+                                    if ("text".equals(type)) {
+                                        Object content = parsed.get("content");
+                                        if (content != null) {
+                                            accumulator.append(content.toString());
+                                        }
+                                    }
+                                    // 转发所有事件（text, quality_check, done, end）
+                                    emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter
+                                            .event().data(localMapper.writeValueAsString(parsed)));
+                                } catch (Exception ignored) {
+                                }
+                            }
+                        }
+                        try {
+                            emitter.send(org.springframework.web.servlet.mvc.method.annotation.SseEmitter
+                                    .event().data("{\"type\":\"end\"}"));
+                        } catch (Exception ignored) {}
+                        emitter.complete();
+                    } catch (Exception e) {
+                        log.error("QA SSE stream read error", e);
                         try {
                             emitter.completeWithError(e);
                         } catch (Exception ignored) {

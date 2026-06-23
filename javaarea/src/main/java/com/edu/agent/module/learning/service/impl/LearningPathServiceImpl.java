@@ -23,6 +23,8 @@ import com.edu.agent.module.learning.service.StudentProfileService;
 import com.edu.agent.module.schedule.dto.ScheduleConfigDTO;
 import com.edu.agent.module.schedule.dto.ScheduleCourseDTO;
 import com.edu.agent.module.schedule.service.ScheduleService;
+import com.edu.agent.module.knowledge.dto.KnowledgeDTO;
+import com.edu.agent.module.knowledge.service.KnowledgeService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,13 +44,15 @@ public class LearningPathServiceImpl
     private final CourseMapper courseMapper;
     private final ScheduleService scheduleService;
     private final StudentProfileQuestionnaireMapper questionnaireMapper;
-    public LearningPathServiceImpl(LearningPathStepMapper stepMapper, AgentServiceClient agentServiceClient, StudentProfileService studentProfileService, CourseMapper courseMapper, ScheduleService scheduleService, StudentProfileQuestionnaireMapper questionnaireMapper) {
+    private final KnowledgeService knowledgeService;
+    public LearningPathServiceImpl(LearningPathStepMapper stepMapper, AgentServiceClient agentServiceClient, StudentProfileService studentProfileService, CourseMapper courseMapper, ScheduleService scheduleService, StudentProfileQuestionnaireMapper questionnaireMapper, KnowledgeService knowledgeService) {
         this.stepMapper = stepMapper;
         this.agentServiceClient = agentServiceClient;
         this.studentProfileService = studentProfileService;
         this.courseMapper = courseMapper;
         this.scheduleService = scheduleService;
         this.questionnaireMapper = questionnaireMapper;
+        this.knowledgeService = knowledgeService;
     }
 
     @Override
@@ -110,12 +114,27 @@ public class LearningPathServiceImpl
             log.debug("获取课表信息失败: userId={}", userId, e);
         }
 
+        // 获取课程关联的知识库内容
+        List<Map<String, Object>> courseKnowledge = new ArrayList<>();
+        try {
+            List<KnowledgeDTO> knowledgeItems = knowledgeService.listByCourse(request.getCourseId());
+            for (KnowledgeDTO k : knowledgeItems) {
+                Map<String, Object> item = new HashMap<>();
+                item.put("id", k.getId());
+                item.put("title", k.getName());
+                item.put("description", k.getDescription() != null ? k.getDescription() : "");
+                courseKnowledge.add(item);
+            }
+        } catch (Exception e) {
+            log.warn("获取知识库内容失败，将不包含知识库信息: {}", e.getMessage());
+        }
+
         AgentLearningPathResponse agentResponse;
         try {
             agentResponse = agentServiceClient.generateLearningPath(
                     profileMap, request.getCourseId(),
                     request.getGoal() != null ? request.getGoal() : "掌握课程核心知识",
-                    scheduleContext);
+                    course.getTitle(), courseKnowledge, scheduleContext);
         } catch (Exception e) {
             log.error("调用 Agent 生成学习路径失败", e);
             agentResponse = generateDefaultPath(course.getTitle());
@@ -163,6 +182,9 @@ public class LearningPathServiceImpl
             step.setStatus(0);
             step.setStepType(inferStepType(stepData.getTitle(), stepData.getDescription()));
             step.setEstimatedHours(stepData.getEstimatedHours() != null ? stepData.getEstimatedHours() : 2);
+            if (stepData.getKnowledgeIds() != null && !stepData.getKnowledgeIds().isEmpty()) {
+                step.setKnowledgeBaseId(stepData.getKnowledgeIds().get(0).longValue());
+            }
             stepMapper.insert(step);
         }
 
