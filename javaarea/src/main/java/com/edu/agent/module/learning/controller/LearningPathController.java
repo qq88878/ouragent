@@ -11,6 +11,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/learning/paths")
@@ -26,6 +27,15 @@ public class LearningPathController {
     public Result<LearningPathDTO> generatePath(@Valid @RequestBody LearningPathGenerateRequest request) {
         LoginUser loginUser = (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         return Result.success(learningPathService.generatePath(loginUser.getUser().getId(), request));
+    }
+
+    @PostMapping("/generate-from-chat")
+    public Result<LearningPathDTO> generatePathFromChat(@RequestBody Map<String, Object> body) {
+        LoginUser loginUser = (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        Long courseId = body.get("courseId") != null ? Long.valueOf(body.get("courseId").toString()) : null;
+        @SuppressWarnings("unchecked")
+        List<Map<String, String>> messages = (List<Map<String, String>>) body.get("messages");
+        return Result.success(learningPathService.generatePathFromChat(loginUser.getUser().getId(), courseId, messages));
     }
 
     @GetMapping("/")

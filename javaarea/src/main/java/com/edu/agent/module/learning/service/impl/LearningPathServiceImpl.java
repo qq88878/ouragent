@@ -193,6 +193,85 @@ public class LearningPathServiceImpl
     }
 
     @Override
+    @Transactional
+    public LearningPathDTO generatePathFromChat(Long userId, Long courseId, List<Map<String, String>> messages) {
+        // 获取课程信息
+        String courseTitle = "课程";
+        if (courseId != null) {
+            Course course = courseMapper.selectById(courseId);
+            if (course != null) {
+                courseTitle = course.getTitle();
+            }
+        }
+
+        // 调用 Python agent 基于对话生成路径
+        AgentLearningPathResponse agentResponse;
+        try {
+            String cidStr = courseId != null ? String.valueOf(courseId) : null;
+            agentResponse = agentServiceClient.generatePathFromChat(messages, cidStr, courseTitle);
+        } catch (Exception e) {
+            log.error("调用 Agent 基于对话生成学习路径失败", e);
+            agentResponse = generateDefaultPath(courseTitle);
+        }
+
+        // 版本管理：归档同课程已有路径
+        if (courseId != null) {
+            LambdaQueryWrapper<LearningPath> existingWrapper = new LambdaQueryWrapper<>();
+            existingWrapper.eq(LearningPath::getUserId, userId)
+                    .eq(LearningPath::getCourseId, courseId)
+                    .eq(LearningPath::getArchived, 0);
+            List<LearningPath> existingPaths = list(existingWrapper);
+            int maxVersion = 0;
+            for (LearningPath old : existingPaths) {
+                old.setArchived(1);
+                if (old.getVersion() != null && old.getVersion() > maxVersion) {
+                    maxVersion = old.getVersion();
+                }
+                updateById(old);
+            }
+        }
+
+        // 保存路径
+        LearningPath path = new LearningPath();
+        path.setUserId(userId);
+        path.setCourseId(courseId);
+        String title = agentResponse.getTitle();
+        path.setTitle(title != null ? title : courseTitle + " - 学习路径");
+        String desc = agentResponse.getDescription();
+        path.setDescription(desc != null ? desc : "基于对话生成的个性化学习路径");
+        path.setStatus(0);
+        path.setVersion(1);
+        path.setArchived(0);
+        path.setStarred(0);
+        save(path);
+
+        // 保存步骤
+        List<AgentLearningPathResponse.Step> steps = agentResponse.getStepsSafe();
+        path.setTotalSteps(steps.size());
+        path.setCompletedSteps(0);
+        updateById(path);
+
+        for (int i = 0; i < steps.size(); i++) {
+            AgentLearningPathResponse.Step stepData = steps.get(i);
+            LearningPathStep step = new LearningPathStep();
+            step.setPathId(path.getId());
+            step.setStepOrder(i + 1);
+            step.setTitle(stepData.getTitle() != null ? stepData.getTitle() : "步骤 " + (i + 1));
+            step.setDescription(stepData.getDescription() != null ? stepData.getDescription() : "");
+            step.setStatus(0);
+            step.setStepType(inferStepType(stepData.getTitle(), stepData.getDescription()));
+            step.setEstimatedHours(stepData.getEstimatedHours() != null ? stepData.getEstimatedHours() : 2);
+            if (stepData.getKnowledgeIds() != null && !stepData.getKnowledgeIds().isEmpty()) {
+                step.setKnowledgeBaseId(stepData.getKnowledgeIds().get(0).longValue());
+            }
+            stepMapper.insert(step);
+        }
+
+        log.info("基于对话生成学习路径成功: pathId={}, userId={}, courseId={}", path.getId(), userId, courseId);
+        return getPathById(path.getId());
+    }
+
+    @Override
     public List<LearningPathDTO> listPaths(Long userId) {
         return listPaths(userId, false);
     }

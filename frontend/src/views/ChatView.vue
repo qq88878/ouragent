@@ -519,12 +519,11 @@ async function generateLearningPath() {
   const chatMessages = messages.value.map(m => ({ role: m.role, content: m.content }));
 
   try {
-    const res = await agentApi.generateLearningPathFromChat(
-      chatMessages,
-      selectedCourseId.value ? String(selectedCourseId.value) : null,
-      currentCourse?.title || '',
-    );
-    pathData.value = res;
+    const res = await learningApi.generatePathFromChat({
+      messages: chatMessages,
+      courseId: selectedCourseId.value || null,
+    });
+    pathData.value = res.data || res;
   } catch (e) {
     ElMessage.error('生成学习路径失败: ' + (e.response?.data?.detail || e.message || '网络错误'));
     pathDialogVisible.value = false;

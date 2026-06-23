@@ -203,6 +203,30 @@ public class AgentServiceClient {
         return response.getBody() != null ? response.getBody() : new AgentLearningPathResponse();
     }
 
+    /**
+     * 基于对话历史生成学习路径
+     */
+    public AgentLearningPathResponse generatePathFromChat(
+            List<Map<String, String>> messages, String courseId, String courseTitle) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("messages", messages);
+        if (courseId != null) {
+            body.put("course_id", courseId);
+        }
+        if (courseTitle != null) {
+            body.put("course_title", courseTitle);
+        }
+
+        HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, createHeaders());
+        ResponseEntity<AgentLearningPathResponse> response = restTemplate.exchange(
+                agentServiceUrl + "/agent/chat/learning-path",
+                HttpMethod.POST,
+                request,
+                new ParameterizedTypeReference<>() {});
+
+        return response.getBody() != null ? response.getBody() : new AgentLearningPathResponse();
+    }
+
     public Map<String, Object> evaluateAnswer(String question, String answer) {
         Map<String, Object> body = new HashMap<>();
         body.put("question", question);

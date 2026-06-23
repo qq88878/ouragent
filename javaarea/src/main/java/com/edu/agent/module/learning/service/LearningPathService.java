@@ -4,10 +4,13 @@ import com.edu.agent.module.learning.dto.LearningPathDTO;
 import com.edu.agent.module.learning.dto.LearningPathGenerateRequest;
 
 import java.util.List;
+import java.util.Map;
 
 public interface LearningPathService {
 
     LearningPathDTO generatePath(Long userId, LearningPathGenerateRequest request);
+
+    LearningPathDTO generatePathFromChat(Long userId, Long courseId, List<Map<String, String>> messages);
 
     List<LearningPathDTO> listPaths(Long userId);
 
