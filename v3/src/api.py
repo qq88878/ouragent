@@ -129,6 +129,7 @@ class AnalyzeRequest(BaseModel):
 class PlanRequest(BaseModel):
     basic_profile: Dict[str, Any] = Field(default_factory=dict, description="基础画像（跨课程共享）")
     course_title: str = Field(default="课程", max_length=200)
+    course_description: str = Field(default="", max_length=500, description="课程描述")
     course_knowledge: List[Dict[str, Any]] = Field(default_factory=list, max_length=500)
     goal: str = Field(default="掌握课程核心知识", max_length=500)
     schedule: Optional[Dict[str, Any]] = Field(default=None, description="课表信息")
@@ -185,6 +186,7 @@ class ChatPathRequest(BaseModel):
     messages: List[Dict[str, str]] = Field(..., min_length=1, max_length=100)
     course_id: Optional[str] = None
     course_title: str = Field(default="", max_length=200)
+    course_description: str = Field(default="", max_length=500)
 
 
 class ToolRequest(BaseModel):
@@ -553,6 +555,7 @@ async def generate_plan(request: PlanRequest, _: dict = Depends(get_current_user
         result = await orchestrator.generate_learning_path(
             basic_profile=request.basic_profile,
             course_title=request.course_title,
+            course_description=request.course_description,
             course_knowledge=request.course_knowledge,
             goal=request.goal,
             schedule=request.schedule,
@@ -668,6 +671,7 @@ async def generate_chat_learning_path(request: ChatPathRequest, user: dict = Dep
             messages=request.messages,
             course_id=request.course_id,
             course_title=request.course_title,
+            course_description=request.course_description,
             user_id=str(user.get("sub", user.get("id", ""))),
         )
         return result

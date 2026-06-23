@@ -129,12 +129,27 @@ public class LearningPathServiceImpl
             log.warn("获取知识库内容失败，将不包含知识库信息: {}", e.getMessage());
         }
 
+        // 构建课程描述
+        StringBuilder courseDesc = new StringBuilder();
+        if (course.getDescription() != null && !course.getDescription().isEmpty()) {
+            courseDesc.append(course.getDescription());
+        }
+        if (course.getCategory() != null && !course.getCategory().isEmpty()) {
+            if (courseDesc.length() > 0) courseDesc.append("。");
+            courseDesc.append("分类: ").append(course.getCategory());
+        }
+        if (course.getDifficulty() != null && !course.getDifficulty().isEmpty()) {
+            if (courseDesc.length() > 0) courseDesc.append("。");
+            courseDesc.append("难度: ").append(course.getDifficulty());
+        }
+
         AgentLearningPathResponse agentResponse;
         try {
             agentResponse = agentServiceClient.generateLearningPath(
                     profileMap, request.getCourseId(),
                     request.getGoal() != null ? request.getGoal() : "掌握课程核心知识",
-                    course.getTitle(), courseKnowledge, scheduleContext);
+                    course.getTitle(), courseDesc.toString(),
+                    courseKnowledge, scheduleContext);
         } catch (Exception e) {
             log.error("调用 Agent 生成学习路径失败", e);
             agentResponse = generateDefaultPath(course.getTitle());
@@ -158,8 +173,10 @@ public class LearningPathServiceImpl
         LearningPath path = new LearningPath();
         path.setUserId(userId);
         path.setCourseId(request.getCourseId());
-        path.setTitle(course.getTitle() + " - 学习路径");
-        path.setDescription("基于AI生成的个性化学习路径");
+        String respTitle = agentResponse.getTitle();
+        path.setTitle(respTitle != null ? respTitle : course.getTitle() + " - 学习路径");
+        String respDesc = agentResponse.getDescription();
+        path.setDescription(respDesc != null ? respDesc : "基于AI生成的个性化学习路径");
         path.setStatus(0);
         path.setVersion(maxVersion + 1);
         path.setArchived(0);
@@ -208,27 +225,48 @@ public class LearningPathServiceImpl
         AgentLearningPathResponse agentResponse;
         try {
             String cidStr = courseId != null ? String.valueOf(courseId) : null;
-            agentResponse = agentServiceClient.generatePathFromChat(messages, cidStr, courseTitle);
+            String courseDesc = "";
+            if (courseId != null) {
+                Course course = courseMapper.selectById(courseId);
+                if (course != null) {
+                    StringBuilder desc = new StringBuilder();
+                    if (course.getDescription() != null && !course.getDescription().isEmpty()) {
+                        desc.append(course.getDescription());
+                    }
+                    if (course.getCategory() != null && !course.getCategory().isEmpty()) {
+                        if (desc.length() > 0) desc.append("。");
+                        desc.append("分类: ").append(course.getCategory());
+                    }
+                    if (course.getDifficulty() != null && !course.getDifficulty().isEmpty()) {
+                        if (desc.length() > 0) desc.append("。");
+                        desc.append("难度: ").append(course.getDifficulty());
+                    }
+                    courseDesc = desc.toString();
+                }
+            }
+            agentResponse = agentServiceClient.generatePathFromChat(messages, cidStr, courseTitle, courseDesc);
         } catch (Exception e) {
             log.error("调用 Agent 基于对话生成学习路径失败", e);
             agentResponse = generateDefaultPath(courseTitle);
         }
 
         // 版本管理：归档同课程已有路径
+        int maxVersion = 0;
+        LambdaQueryWrapper<LearningPath> existingWrapper = new LambdaQueryWrapper<>();
+        existingWrapper.eq(LearningPath::getUserId, userId)
+                .eq(LearningPath::getArchived, 0);
         if (courseId != null) {
-            LambdaQueryWrapper<LearningPath> existingWrapper = new LambdaQueryWrapper<>();
-            existingWrapper.eq(LearningPath::getUserId, userId)
-                    .eq(LearningPath::getCourseId, courseId)
-                    .eq(LearningPath::getArchived, 0);
-            List<LearningPath> existingPaths = list(existingWrapper);
-            int maxVersion = 0;
-            for (LearningPath old : existingPaths) {
-                old.setArchived(1);
-                if (old.getVersion() != null && old.getVersion() > maxVersion) {
-                    maxVersion = old.getVersion();
-                }
-                updateById(old);
+            existingWrapper.eq(LearningPath::getCourseId, courseId);
+        } else {
+            existingWrapper.isNull(LearningPath::getCourseId);
+        }
+        List<LearningPath> existingPaths = list(existingWrapper);
+        for (LearningPath old : existingPaths) {
+            old.setArchived(1);
+            if (old.getVersion() != null && old.getVersion() > maxVersion) {
+                maxVersion = old.getVersion();
             }
+            updateById(old);
         }
 
         // 保存路径
@@ -240,7 +278,7 @@ public class LearningPathServiceImpl
         String desc = agentResponse.getDescription();
         path.setDescription(desc != null ? desc : "基于对话生成的个性化学习路径");
         path.setStatus(0);
-        path.setVersion(1);
+        path.setVersion(maxVersion + 1);
         path.setArchived(0);
         path.setStarred(0);
         save(path);

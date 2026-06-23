@@ -177,7 +177,8 @@ public class AgentServiceClient {
 
     public AgentLearningPathResponse generateLearningPath(
             Map<String, Object> studentProfile, Long courseId, String goal,
-            String courseTitle, List<Map<String, Object>> courseKnowledge,
+            String courseTitle, String courseDescription,
+            List<Map<String, Object>> courseKnowledge,
             Map<String, Object> schedule) {
         Map<String, Object> body = new HashMap<>();
         body.put("student_profile", studentProfile);
@@ -185,6 +186,9 @@ public class AgentServiceClient {
         body.put("goal", goal);
         if (courseTitle != null) {
             body.put("course_title", courseTitle);
+        }
+        if (courseDescription != null && !courseDescription.isEmpty()) {
+            body.put("course_description", courseDescription);
         }
         if (courseKnowledge != null && !courseKnowledge.isEmpty()) {
             body.put("course_knowledge", courseKnowledge);
@@ -207,7 +211,7 @@ public class AgentServiceClient {
      * 基于对话历史生成学习路径
      */
     public AgentLearningPathResponse generatePathFromChat(
-            List<Map<String, String>> messages, String courseId, String courseTitle) {
+            List<Map<String, String>> messages, String courseId, String courseTitle, String courseDescription) {
         Map<String, Object> body = new HashMap<>();
         body.put("messages", messages);
         if (courseId != null) {
@@ -215,6 +219,9 @@ public class AgentServiceClient {
         }
         if (courseTitle != null) {
             body.put("course_title", courseTitle);
+        }
+        if (courseDescription != null && !courseDescription.isEmpty()) {
+            body.put("course_description", courseDescription);
         }
 
         HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, createHeaders());

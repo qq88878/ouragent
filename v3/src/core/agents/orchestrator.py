@@ -982,6 +982,7 @@ class Orchestrator:
         basic_profile: Dict[str, Any],
         course_title: str,
         course_knowledge: List[Dict[str, Any]],
+        course_description: str = "",
         goal: str = "掌握课程核心知识",
         schedule: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
@@ -997,7 +998,7 @@ class Orchestrator:
                 try:
                     results = await self.rag.retrieve(
                         query=item.get("title", ""),
-                        top_k=2,
+                        top_k=3,
                         knowledge_ids=[kid],
                     )
                     if results:
@@ -1009,9 +1010,10 @@ class Orchestrator:
         return await self._call_agent_safe(
             "planner_agent", self.planner_agent, "generate_path",
             fallback={"title": course_title, "steps": [], "error": "planner_failed"},
-            timeout=60.0,
+            timeout=90.0,
             student_profile=basic_profile,
             course_title=course_title,
+            course_description=course_description,
             course_knowledge=enriched_knowledge,
             goal=goal,
             schedule=schedule,
@@ -1297,6 +1299,7 @@ class Orchestrator:
         messages: List[Dict[str, str]],
         course_id: Optional[str] = None,
         course_title: str = "",
+        course_description: str = "",
         user_id: str = "",
     ) -> Dict[str, Any]:
         """
@@ -1362,7 +1365,7 @@ class Orchestrator:
                         seen_ids.add(kid)
                         knowledge_items.append({
                             "id": kid,
-                            "content": r["content"][:300],
+                            "content": r["content"][:600],
                             "source": r.get("source", ""),
                             "score": r.get("score", 0),
                         })
@@ -1399,6 +1402,7 @@ class Orchestrator:
         path_result = await self.generate_learning_path(
             basic_profile=student_profile,
             course_title=course_title,
+            course_description=course_description,
             course_knowledge=course_knowledge,
             goal=goal,
         )
