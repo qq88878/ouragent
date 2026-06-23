@@ -53,7 +53,12 @@ logger = logging.getLogger(__name__)
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=10000, description="用户消息")
     context: Dict[str, Any] = Field(default_factory=dict, description="上下文（knowledge_ids, basic_profile 等）")
-    session_id: Optional[str] = Field(None, pattern=r"^[a-f0-9\-]{36}$", description="会话ID（UUID格式）")
+    session_id: Optional[str] = None
+
+    @field_validator("session_id", mode="before")
+    @classmethod
+    def coerce_session_id(cls, v):
+        return str(v) if v is not None else v
 
     @field_validator("message")
     @classmethod
@@ -160,6 +165,11 @@ class QAWithCheckRequest(BaseModel):
     session_id: Optional[str] = None
     max_retries: int = Field(default=2, ge=0, le=5)
     quality_threshold: float = Field(default=70.0, ge=0, le=100)
+
+    @field_validator("session_id", mode="before")
+    @classmethod
+    def coerce_session_id(cls, v):
+        return str(v) if v is not None else v
 
 
 class DiagnosePracticeRequest(BaseModel):
