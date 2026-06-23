@@ -238,7 +238,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { chatApi, courseApi, agentApi } from '@/api';
+import { chatApi, courseApi, agentApi, learningApi } from '@/api';
 import { useChatStore } from '@/stores/chat';
 import { useAuthStore } from '@/stores/auth';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -489,6 +489,27 @@ async function deleteSession(id) {
 
 async function generateLearningPath() {
   if (messages.value.length === 0) return;
+
+  // 检查问卷完成状态
+  try {
+    const qs = await learningApi.getQuestionnaireStatus();
+    if (!qs.data || !qs.data.completed) {
+      try {
+        await ElMessageBox.confirm('完成学习画像问卷可获得更精准的个性化路径，是否先去完成？', '提示', {
+          confirmButtonText: '去完成问卷',
+          cancelButtonText: '跳过，直接生成',
+          type: 'info',
+        });
+        router.push('/profile');
+        return;
+      } catch {
+        // 用户点了"跳过"，继续生成
+      }
+    }
+  } catch {
+    // 接口失败不阻塞生成
+  }
+
   pathDialogVisible.value = true;
   pathLoading.value = true;
   pathData.value = null;

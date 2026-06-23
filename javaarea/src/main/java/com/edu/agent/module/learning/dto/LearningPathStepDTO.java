@@ -10,6 +10,9 @@ public class LearningPathStepDTO {
     private String description;
     private Long knowledgeBaseId;
     private Integer status; // 0=pending, 1=in_progress, 2=completed
+    private Boolean isCurrent;
+    private String stepType; // CONCEPT/PRACTICE/REVIEW/PROJECT
+    private Integer estimatedHours;
 
     @java.lang.SuppressWarnings("all")
     public LearningPathStepDTO() {
@@ -46,6 +49,21 @@ public class LearningPathStepDTO {
     }
 
     @java.lang.SuppressWarnings("all")
+    public Boolean getIsCurrent() {
+        return this.isCurrent;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public String getStepType() {
+        return this.stepType;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public Integer getEstimatedHours() {
+        return this.estimatedHours;
+    }
+
+    @java.lang.SuppressWarnings("all")
     public void setId(final Long id) {
         this.id = id;
     }
@@ -73,6 +91,21 @@ public class LearningPathStepDTO {
     @java.lang.SuppressWarnings("all")
     public void setStatus(final Integer status) {
         this.status = status;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setIsCurrent(final Boolean isCurrent) {
+        this.isCurrent = isCurrent;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setStepType(final String stepType) {
+        this.stepType = stepType;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setEstimatedHours(final Integer estimatedHours) {
+        this.estimatedHours = estimatedHours;
     }
 
     @java.lang.Override

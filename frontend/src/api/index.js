@@ -98,12 +98,14 @@ export const chatApi = {
 
 export const learningApi = {
     generatePath(data) { return http.post('/learning/paths/generate', data); },
-    listPaths() { return http.get('/learning/paths/'); },
+    listPaths(includeArchived = false) { return http.get('/learning/paths/', { params: { includeArchived } }); },
     getPathById(id) { return http.get(`/learning/paths/${id}`); },
     updateStepStatus(pathId, stepId, status) {
         return http.put(`/learning/paths/${pathId}/steps/${stepId}`, null, { params: { status } });
     },
     deletePath(id) { return http.delete(`/learning/paths/${id}`); },
+    toggleStar(id) { return http.put(`/learning/paths/${id}/star`); },
+    toggleArchive(id) { return http.put(`/learning/paths/${id}/archive`); },
     getProfile() { return http.get('/profile/'); },
     updateProfile(data) { return http.put('/profile/', data); },
     getRadarData() { return http.get('/profile/radar'); },

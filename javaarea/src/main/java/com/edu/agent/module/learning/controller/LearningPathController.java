@@ -29,9 +29,10 @@ public class LearningPathController {
     }
 
     @GetMapping("/")
-    public Result<List<LearningPathDTO>> listPaths() {
+    public Result<List<LearningPathDTO>> listPaths(
+            @RequestParam(defaultValue = "false") boolean includeArchived) {
         LoginUser loginUser = (LoginUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        return Result.success(learningPathService.listPaths(loginUser.getUser().getId()));
+        return Result.success(learningPathService.listPaths(loginUser.getUser().getId(), includeArchived));
     }
 
     @GetMapping("/{id}")
@@ -51,6 +52,18 @@ public class LearningPathController {
     @DeleteMapping("/{id}")
     public Result<Void> deletePath(@PathVariable Long id) {
         learningPathService.deletePath(id);
+        return Result.success();
+    }
+
+    @PutMapping("/{id}/star")
+    public Result<Void> toggleStar(@PathVariable Long id) {
+        learningPathService.toggleStar(id);
+        return Result.success();
+    }
+
+    @PutMapping("/{id}/archive")
+    public Result<Void> toggleArchive(@PathVariable Long id) {
+        learningPathService.toggleArchive(id);
         return Result.success();
     }
 }

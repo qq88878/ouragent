@@ -13,6 +13,9 @@ public class LearningPath extends BaseEntity {
     private Integer totalSteps;
     private Integer completedSteps;
     private Integer status; // 0=in_progress, 1=completed, 2=abandoned
+    private Integer version;
+    private Integer archived;
+    private Integer starred;
 
     @java.lang.SuppressWarnings("all")
     public LearningPath() {
@@ -54,6 +57,21 @@ public class LearningPath extends BaseEntity {
     }
 
     @java.lang.SuppressWarnings("all")
+    public Integer getVersion() {
+        return this.version;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public Integer getArchived() {
+        return this.archived;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public Integer getStarred() {
+        return this.starred;
+    }
+
+    @java.lang.SuppressWarnings("all")
     public void setUserId(final Long userId) {
         this.userId = userId;
     }
@@ -86,6 +104,21 @@ public class LearningPath extends BaseEntity {
     @java.lang.SuppressWarnings("all")
     public void setStatus(final Integer status) {
         this.status = status;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setVersion(final Integer version) {
+        this.version = version;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setArchived(final Integer archived) {
+        this.archived = archived;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setStarred(final Integer starred) {
+        this.starred = starred;
     }
 
     @java.lang.Override

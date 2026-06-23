@@ -15,6 +15,11 @@ public class LearningPathDTO {
     private Integer status; // 0=in_progress, 1=completed, 2=abandoned
     private List<LearningPathStepDTO> steps;
     private LocalDateTime createTime;
+    private Integer currentStepIndex;
+    private Integer estimatedRemainingHours;
+    private Integer version;
+    private Integer archived;
+    private Integer starred;
 
     @java.lang.SuppressWarnings("all")
     public LearningPathDTO() {
@@ -71,6 +76,31 @@ public class LearningPathDTO {
     }
 
     @java.lang.SuppressWarnings("all")
+    public Integer getCurrentStepIndex() {
+        return this.currentStepIndex;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public Integer getEstimatedRemainingHours() {
+        return this.estimatedRemainingHours;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public Integer getVersion() {
+        return this.version;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public Integer getArchived() {
+        return this.archived;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public Integer getStarred() {
+        return this.starred;
+    }
+
+    @java.lang.SuppressWarnings("all")
     public void setId(final Long id) {
         this.id = id;
     }
@@ -118,6 +148,31 @@ public class LearningPathDTO {
     @java.lang.SuppressWarnings("all")
     public void setCreateTime(final LocalDateTime createTime) {
         this.createTime = createTime;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setCurrentStepIndex(final Integer currentStepIndex) {
+        this.currentStepIndex = currentStepIndex;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setEstimatedRemainingHours(final Integer estimatedRemainingHours) {
+        this.estimatedRemainingHours = estimatedRemainingHours;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setVersion(final Integer version) {
+        this.version = version;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setArchived(final Integer archived) {
+        this.archived = archived;
+    }
+
+    @java.lang.SuppressWarnings("all")
+    public void setStarred(final Integer starred) {
+        this.starred = starred;
     }
 
     @java.lang.Override
