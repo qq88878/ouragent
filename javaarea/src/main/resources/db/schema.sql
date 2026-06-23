@@ -81,18 +81,23 @@ CREATE TABLE IF NOT EXISTS `course_enrollment` (
 -- -----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `knowledge_base` (
     `id`             BIGINT        NOT NULL AUTO_INCREMENT,
+    `course_id`      BIGINT        DEFAULT NULL,
+    `uploaded_by`    BIGINT        DEFAULT NULL,
     `name`           VARCHAR(128)  NOT NULL,
     `description`    TEXT          DEFAULT NULL,
-    `course_id`      BIGINT        DEFAULT NULL,
     `file_path`      VARCHAR(512)  NOT NULL,
     `file_type`      VARCHAR(32)   DEFAULT NULL COMMENT 'pdf / docx / md / txt',
     `file_size`      BIGINT        DEFAULT NULL,
     `status`         TINYINT       NOT NULL DEFAULT 0 COMMENT '0=pending 1=indexed 2=failed',
+    `approval_status` VARCHAR(20)  NOT NULL DEFAULT 'APPROVED',
+    `approval_remark` VARCHAR(500) DEFAULT NULL,
+    `remark`         VARCHAR(500)  DEFAULT NULL COMMENT '备注',
     `create_time`    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `update_time`    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted`        TINYINT       NOT NULL DEFAULT 0,
     PRIMARY KEY (`id`),
-    INDEX `idx_course_id` (`course_id`)
+    INDEX `idx_course_id` (`course_id`),
+    INDEX `idx_approval_status` (`approval_status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------
