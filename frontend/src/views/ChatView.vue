@@ -299,7 +299,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  chatStore.setChatOpen(false);
+  chatStore.setChatPageActive(false);
   if (abortController) abortController.abort();
 });
 

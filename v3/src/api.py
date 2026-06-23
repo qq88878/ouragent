@@ -33,7 +33,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, File, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Literal
 
 from config.settings import settings, DATA_DIR
@@ -123,9 +123,20 @@ class AnalyzeRequest(BaseModel):
 
 class PlanRequest(BaseModel):
     basic_profile: Dict[str, Any] = Field(default_factory=dict, description="基础画像（跨课程共享）")
-    course_title: str = Field(..., min_length=1, max_length=200)
+    course_title: str = Field(default="课程", max_length=200)
     course_knowledge: List[Dict[str, Any]] = Field(default_factory=list, max_length=500)
     goal: str = Field(default="掌握课程核心知识", max_length=500)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_fields(cls, data):
+        # 兼容 Java 客户端: student_profile → basic_profile
+        if isinstance(data, dict):
+            if "student_profile" in data and "basic_profile" not in data:
+                data["basic_profile"] = data.pop("student_profile")
+            # course_id 不是必需的，忽略
+            data.pop("course_id", None)
+        return data
 
 
 class GenerateRequest(BaseModel):
@@ -146,7 +157,7 @@ class EvaluateRequest(BaseModel):
 class QAWithCheckRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=10000)
     context: Dict[str, Any] = Field(default_factory=dict)
-    session_id: Optional[str] = Field(None, pattern=r"^[a-f0-9\-]{36}$")
+    session_id: Optional[str] = None
     max_retries: int = Field(default=2, ge=0, le=5)
     quality_threshold: float = Field(default=70.0, ge=0, le=100)
 
@@ -529,7 +540,7 @@ async def generate_plan(request: PlanRequest, _: dict = Depends(get_current_user
 
     try:
         result = await orchestrator.generate_learning_path(
-            student_profile=request.basic_profile,
+            basic_profile=request.basic_profile,
             course_title=request.course_title,
             course_knowledge=request.course_knowledge,
             goal=request.goal,

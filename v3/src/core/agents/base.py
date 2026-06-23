@@ -53,6 +53,7 @@ class BaseAgent(ABC):
         user_message: str,
         context: str = "",
         history: List[Dict[str, str]] | None = None,
+        **kwargs,
     ) -> str:
         """
         调用 LLM 生成回复
@@ -76,7 +77,7 @@ class BaseAgent(ABC):
         messages.append({"role": "user", "content": user_message})
 
         try:
-            return await self.llm.chat(messages)
+            return await self.llm.chat(messages, **kwargs)
         except Exception as e:
             logger.error("[%s] LLM 调用失败: %s", self.name, e)
             return f"[Agent {self.name} 调用失败: {e}]"

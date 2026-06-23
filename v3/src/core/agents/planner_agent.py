@@ -82,30 +82,14 @@ class PlannerAgent(BaseAgent):
         profile_text = json.dumps(student_profile, ensure_ascii=False)
         knowledge_text = json.dumps(course_knowledge, ensure_ascii=False)
 
-        prompt = f"""请为以下学生生成个性化学习路径。
+        prompt = f"""生成3-5步的学习路径，只输出JSON，无其他文字。
 
-课程: {course_title}
-学习目标: {goal}
-学生画像: {profile_text}
-课程知识列表: {knowledge_text}
+课程:{course_title} 目标:{goal}
+画像:{profile_text}
+知识:{knowledge_text}
 
-请输出 JSON 格式:
-{{
-  "title": "学习路径标题",
-  "description": "路径概述",
-  "total_steps": 步骤数,
-  "estimated_total_hours": 预计总学时,
-  "steps": [
-    {{
-      "order": 1,
-      "title": "步骤标题",
-      "description": "具体学习内容和方法",
-      "knowledge_ids": [关联的知识库ID],
-      "estimated_hours": 预计学时,
-      "checkpoint": "该阶段的检验方式"
-    }}
-  ]
-}}"""
+JSON:
+{{"title":"路径标题","description":"概述","steps":[{{"order":1,"title":"步骤","description":"内容","knowledge_ids":[],"estimated_hours":2}}]}}"""
 
-        response = await self.chat(prompt)
+        response = await self.chat(prompt, max_tokens=2048)
         return parse_llm_json(response, fallback={"title": course_title, "steps": []})

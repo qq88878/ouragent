@@ -980,7 +980,8 @@ class Orchestrator:
         return await self._call_agent_safe(
             "planner_agent", self.planner_agent, "generate_path",
             fallback={"title": course_title, "steps": [], "error": "planner_failed"},
-            student_profile=student_profile,
+            timeout=60.0,
+            student_profile=basic_profile,
             course_title=course_title,
             course_knowledge=course_knowledge,
             goal=goal,
@@ -1364,7 +1365,7 @@ class Orchestrator:
 
         # Step 5: 调用 PlannerAgent 生成学习路径
         path_result = await self.generate_learning_path(
-            student_profile=student_profile,
+            basic_profile=student_profile,
             course_title=course_title,
             course_knowledge=course_knowledge,
             goal=goal,
