@@ -417,33 +417,80 @@ async def stream_chat_with_quality_check(request: QAWithCheckRequest, _: dict = 
 # ==================== 知识库接口 ====================
 
 
+async def _extract_topic_keywords_for_knowledge(
+    knowledge_id: int,
+    source_name: str,
+    title: str,
+    metadata: dict,
+    content: str,
+    use_llm: Optional[bool] = None,
+) -> list:
+    """从文档中提取话题关键词（规则提取 + 可选 LLM 语义提取）
+    use_llm: None = 自动（有 LLM 就用），True = 强制启用，False = 强制禁用
+    """
+    topics = []
+    if orchestrator is not None:
+        try:
+            await orchestrator._ensure_redis()
+            if orchestrator._topic_kw_mgr is not None:
+                mapping = await orchestrator._topic_kw_mgr.extract_and_register(
+                    knowledge_id=knowledge_id,
+                    source_name=source_name,
+                    title=title,
+                    metadata=metadata,
+                    content_preview=content[:1000],
+                    use_llm=use_llm,
+                )
+                topics = list(set(mapping.values()))
+        except Exception as e:
+            logger.debug("话题关键词提取失败（不影响文档入库）: %s", e)
+    return topics
+
+
 @app.post("/agent/knowledge/ingest")
 async def ingest_knowledge(
     file: UploadFile = File(...),
     knowledge_id: int = Form(...),
     course_id: int = Form(0),
+    use_llm: Optional[bool] = Form(None),
     _: dict = Depends(get_current_user),
 ):
     """
     知识文档入库（Java AgentServiceClient.ingestKnowledge）
 
     接收上传的文件，解析文本 -> 分块 -> 向量化 -> 存入向量库
+    + 自动提取话题关键词（规则 + 可选 LLM 语义提取）
+
+    - use_llm: None=自动（有 LLM Provider 就启用），True=强制启用，False=强制禁用
     """
     if not rag_pipeline:
         raise HTTPException(status_code=503, detail="RAG 未初始化")
 
     try:
         content = await file.read()
+        filename = file.filename or "unknown.txt"
         chunks = await rag_pipeline.ingest_bytes(
             content=content,
-            filename=file.filename or "unknown.txt",
+            filename=filename,
             knowledge_id=knowledge_id,
             extra_metadata={"course_id": course_id},
+        )
+        # ⭐ 自动提取话题关键词（规则 + 可选 LLM）
+        text_content = content.decode("utf-8", errors="ignore") if isinstance(content, bytes) else content
+        topics = await _extract_topic_keywords_for_knowledge(
+            knowledge_id=knowledge_id,
+            source_name=filename,
+            title=filename,
+            metadata={"course_id": course_id},
+            content=text_content,
+            use_llm=use_llm,
         )
         return {
             "knowledgeId": knowledge_id,
             "chunks": chunks,
             "status": "indexed" if chunks > 0 else "failed",
+            "topics": topics,
+            "llm_enabled": (orchestrator is not None and orchestrator.llm is not None),
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -452,10 +499,14 @@ async def ingest_knowledge(
 @app.post("/agent/knowledge/ingest-text")
 async def ingest_knowledge_text(
     request: KnowledgeIngestRequest,
+    use_llm: Optional[bool] = None,
     _: dict = Depends(get_current_user),
 ):
     """
     文本内容入库（备用接口，直接传文本）
+    + 自动提取话题关键词（规则 + 可选 LLM 语义提取）
+
+    - use_llm: None=自动（有 LLM Provider 就启用），True=强制启用，False=强制禁用
     """
     if not rag_pipeline:
         raise HTTPException(status_code=503, detail="RAG 未初始化")
@@ -466,6 +517,14 @@ async def ingest_knowledge_text(
             source=f"knowledge_{request.knowledge_id}",
             knowledge_id=request.knowledge_id,
             extra_metadata={"course_id": request.course_id, "file_type": request.file_type},
+        )
+        topics = await _extract_topic_keywords_for_knowledge(
+            knowledge_id=request.knowledge_id,
+            source_name=f"knowledge_{request.knowledge_id}",
+            title=f"knowledge_{request.knowledge_id}",
+            metadata={"course_id": request.course_id},
+            content=request.content,
+            use_llm=use_llm,
         )
         return KnowledgeIngestResponse(
             knowledge_id=request.knowledge_id,
@@ -482,6 +541,71 @@ async def get_knowledge_status(_: dict = Depends(get_current_user)):
     if not rag_pipeline:
         raise HTTPException(status_code=503, detail="RAG 未初始化")
     return rag_pipeline.stats()
+
+
+# ==================== 话题关键词管理 ====================
+
+@app.get("/agent/topics")
+async def list_topics(knowledge_id: Optional[int] = None,
+                       _: dict = Depends(get_current_user)):
+    """查询当前动态提取到的话题关键词
+    - 不传 knowledge_id → 返回全局合并后的关键词
+    - 传 knowledge_id → 只返回该知识库提取到的关键词
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+    await orchestrator._ensure_redis()
+    mgr = orchestrator._topic_kw_mgr
+    llm_available = orchestrator.llm is not None if orchestrator else False
+    if mgr is None:
+        return {"dynamic_count": 0, "dynamic_keywords": {}, "llm_enabled": llm_available}
+    if knowledge_id is not None:
+        data = await mgr.list_by_knowledge(knowledge_id)
+        return {"knowledge_id": knowledge_id, "data": data, "llm_enabled": llm_available}
+    dynamic = await mgr.list_all()
+    return {
+        "dynamic_count": len(dynamic),
+        "dynamic_keywords": dict(list(dynamic.items())[:100]),
+        "llm_enabled": llm_available,
+    }
+
+
+@app.post("/agent/topics")
+async def add_topic_keyword(keyword: str, canonical_name: str,
+                              _: dict = Depends(get_current_user)):
+    """人工添加关键词（导入新知识域时手工补齐）"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+    await orchestrator._ensure_redis()
+    if orchestrator._topic_kw_mgr is None:
+        raise HTTPException(status_code=500, detail="关键词管理器未就绪")
+    await orchestrator._topic_kw_mgr.add_keyword(keyword, canonical_name)
+    return {"success": True, "keyword": keyword, "canonical_name": canonical_name}
+
+
+@app.delete("/agent/topics")
+async def delete_topic_keyword(keyword: str,
+                                 _: dict = Depends(get_current_user)):
+    """从全局动态词典中删除某个关键词"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+    await orchestrator._ensure_redis()
+    if orchestrator._topic_kw_mgr is None:
+        raise HTTPException(status_code=500, detail="关键词管理器未就绪")
+    removed = await orchestrator._topic_kw_mgr.remove_keyword(keyword)
+    return {"success": removed, "keyword": keyword}
+
+
+@app.delete("/agent/topics/all")
+async def clear_all_topics(_: dict = Depends(get_current_user)):
+    """⚠️ 清空全部动态关键词（用于调试/重建）"""
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent 未初始化")
+    await orchestrator._ensure_redis()
+    if orchestrator._topic_kw_mgr is None:
+        raise HTTPException(status_code=500, detail="关键词管理器未就绪")
+    await orchestrator._topic_kw_mgr.clear_all()
+    return {"success": True, "message": "已清空，请重新导入文档以重建关键词"}
 
 
 # ==================== 多 Agent 接口 ====================

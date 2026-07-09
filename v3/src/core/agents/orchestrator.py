@@ -12,6 +12,7 @@ from ..memory.session_manager import SessionManager
 from ..memory.conversation_memory import ConversationMemory
 from ..memory.profile_cache import ProfileCache, RAGCache
 from ..memory.chat_signals import ChatSignalExtractor, ChatSignalsCache
+from ..memory.topic_keyword_manager import TopicKeywordManager
 from ..memory.learning_progress import LearningProgress
 from ..rag.rag_pipeline import RAGPipeline
 from ..tools.base import ToolRegistry
@@ -66,7 +67,9 @@ class Orchestrator:
         self._rag_cache: Optional[RAGCache] = None
         self._learning_progress: Optional[LearningProgress] = None
         self._signals_cache: Optional[ChatSignalsCache] = None
-        self._signal_extractor = ChatSignalExtractor()
+        self._topic_kw_mgr: Optional[TopicKeywordManager] = None
+        # 先用 None 初始化，Redis 就绪后再绑定动态关键词管理器
+        self._signal_extractor = ChatSignalExtractor(keyword_manager=None)
 
         # 注册工具
         self.tools = ToolRegistry()
@@ -125,6 +128,10 @@ class Orchestrator:
             self._rag_cache = RAGCache(self._redis_client)
             self._learning_progress = LearningProgress(self._redis_client)
             self._signals_cache = ChatSignalsCache(self._redis_client)
+            # ⭐ 动态话题关键词管理器 — 导入文档时 规则+LLM 双模式提取
+            #    self.llm 存在时，会额外做语义级关键词提取（失败不影响规则提取）
+            self._topic_kw_mgr = TopicKeywordManager(self._redis_client, llm=self.llm)
+            self._signal_extractor.keyword_manager = self._topic_kw_mgr
             logger.info("Redis 记忆系统初始化完成")
         return self._redis_client
 
@@ -255,12 +262,17 @@ class Orchestrator:
         session_id: str,
         user_message: str,
         assistant_response: str,
+        knowledge_ids: Optional[List[int]] = None,
     ) -> None:
-        """从本轮对话提取学习信号并更新 Redis 画像"""
+        """从本轮对话提取学习信号并更新 Redis 画像
+        传入 knowledge_ids 可限定话题关键词搜索范围（对应文档所属知识库）
+        """
         if not self._signals_cache or not user_id:
             return
         try:
-            delta = self._signal_extractor.extract(user_message, assistant_response)
+            delta = await self._signal_extractor.extract(
+                user_message, assistant_response, knowledge_ids=knowledge_ids,
+            )
             if delta:
                 await self._signals_cache.update_signals(user_id, session_id, delta)
         except Exception as e:
@@ -290,7 +302,10 @@ class Orchestrator:
             response = await self.llm.chat(messages)
 
             await self._save_chat_message(session_id, message, response)
-            await self._extract_and_update_signals(user_id, session_id or "", message, response)
+            knowledge_ids = context.get("knowledge_ids")
+            await self._extract_and_update_signals(
+                user_id, session_id or "", message, response, knowledge_ids=knowledge_ids,
+            )
             return response
         except Exception as e:
             logger.error("对话失败: %s", e)

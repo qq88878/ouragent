@@ -1,4 +1,6 @@
-"""对话实时学习信号提取与缓存 — 规则提取，零 LLM 调用"""
+"""对话实时学习信号提取与缓存 — 规则提取，零 LLM 调用
+新增：支持从 TopicKeywordManager 动态合并知识库关键词（静态基线 + Redis 动态）
+"""
 
 from __future__ import annotations
 
@@ -8,75 +10,14 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from .redis_client import RedisClient
+from .topic_keyword_manager import TopicKeywordManager, get_static_keywords
 
 logger = logging.getLogger(__name__)
 
 SIGNALS_TTL = 7 * 24 * 3600  # 7 days
 
-# ── 教育关键词词典（keyword -> canonical topic name）──────────────────
-_TOPIC_KEYWORDS: Dict[str, str] = {
-    # Python
-    "列表": "Python列表", "list": "Python列表",
-    "元组": "元组", "tuple": "元组",
-    "字典": "字典", "dict": "字典",
-    "集合": "集合", "set": "集合",
-    "字符串": "字符串", "string": "字符串", "str": "字符串",
-    "函数": "函数", "function": "函数",
-    "类": "面向对象", "class": "面向对象",
-    "继承": "继承", "inheritance": "继承",
-    "装饰器": "装饰器", "decorator": "装饰器",
-    "迭代器": "迭代器", "iterator": "迭代器",
-    "生成器": "生成器", "generator": "生成器",
-    "异常": "异常处理", "exception": "异常处理",
-    "模块": "模块与包", "module": "模块与包", "package": "模块与包",
-    "文件": "文件操作", "file": "文件操作",
-    "正则": "正则表达式", "regex": "正则表达式", "regular expression": "正则表达式",
-    "多线程": "多线程", "threading": "多线程",
-    "协程": "协程", "async": "协程", "await": "协程", "coroutine": "协程",
-    "递归": "递归", "recursion": "递归",
-    "lambda": "Lambda表达式",
-    "列表推导": "列表推导式", "list comprehension": "列表推导式",
-    "切片": "切片", "slice": "切片",
-    # 数据结构与算法
-    "算法": "算法", "algorithm": "算法",
-    "排序": "排序算法", "sort": "排序算法",
-    "搜索": "搜索算法", "search": "搜索算法",
-    "二叉树": "二叉树", "binary tree": "二叉树",
-    "链表": "链表", "linked list": "链表",
-    "栈": "栈", "stack": "栈",
-    "队列": "队列", "queue": "队列",
-    "哈希": "哈希表", "hash": "哈希表",
-    "图": "图论", "graph": "图论",
-    "动态规划": "动态规划", "dynamic programming": "动态规划",
-    # 数据库
-    "数据库": "数据库", "database": "数据库",
-    "sql": "SQL", "查询": "SQL查询",
-    "索引": "数据库索引", "index": "数据库索引",
-    "事务": "数据库事务", "transaction": "数据库事务",
-    # 数学
-    "方程": "方程", "equation": "方程",
-    "矩阵": "矩阵", "matrix": "矩阵",
-    "导数": "导数", "derivative": "导数",
-    "积分": "积分", "integral": "积分",
-    "概率": "概率", "probability": "概率",
-    "统计": "统计学", "statistics": "统计学",
-    "线性代数": "线性代数", "linear algebra": "线性代数",
-    # Web
-    "html": "HTML", "css": "CSS", "javascript": "JavaScript", "js": "JavaScript",
-    "react": "React", "vue": "Vue", "前端": "前端开发", "frontend": "前端开发",
-    "api": "API", "接口": "API接口",
-    "http": "HTTP协议", "https": "HTTP协议",
-    # 通用
-    "变量": "变量", "variable": "变量",
-    "循环": "循环", "loop": "循环", "for": "循环", "while": "循环",
-    "条件": "条件判断", "if": "条件判断",
-    "数组": "数组", "array": "数组",
-    "指针": "指针", "pointer": "指针",
-    "进程": "进程", "process": "进程",
-    "线程": "线程", "thread": "线程",
-    "网络": "计算机网络", "network": "计算机网络",
-    "操作系统": "操作系统", "operating system": "操作系统",
-}
+# ── 静态基线词典：由 topic_keyword_manager.get_static_keywords() 提供 ──
+_STATIC_TOPIC_KEYWORDS: Dict[str, str] = get_static_keywords()
 
 # 难度关键词
 _DIFFICULTY_KEYWORDS: Dict[str, List[str]] = {
@@ -110,10 +51,20 @@ _GAP_PATTERNS = [
 
 
 class ChatSignalExtractor:
-    """无状态规则提取器 — 从单轮对话提取学习信号 delta"""
+    """无状态规则提取器 — 从单轮对话提取学习信号 delta
+    支持从 TopicKeywordManager 动态合并知识库中提取到的话题关键词。
+    """
 
-    def extract(self, user_message: str, assistant_response: str) -> Dict[str, Any]:
-        topics = self._extract_topics(user_message, assistant_response)
+    def __init__(self, keyword_manager: Optional[TopicKeywordManager] = None):
+        self.keyword_manager = keyword_manager  # 可在运行时注入
+
+    async def extract(
+        self,
+        user_message: str,
+        assistant_response: str,
+        knowledge_ids: Optional[List[int]] = None,
+    ) -> Dict[str, Any]:
+        topics = await self._extract_topics(user_message, assistant_response, knowledge_ids)
         difficulty = self._detect_difficulty(user_message)
         question_type = self._detect_question_type(user_message)
         gap_keywords = self._detect_gaps(user_message)
@@ -132,19 +83,37 @@ class ChatSignalExtractor:
 
     # ── 内部方法 ────────────────────────────────────────────
 
-    def _extract_topics(self, user_msg: str, assistant_resp: str) -> List[str]:
-        """通过关键词词典 + 助手回复模式提取话题"""
+    async def _extract_topics(
+        self,
+        user_msg: str,
+        assistant_resp: str,
+        knowledge_ids: Optional[List[int]] = None,
+    ) -> List[str]:
+        """通过 静态基线词典 + Redis 动态关键词 + 助手回复模式 提取话题"""
         text = (user_msg + " " + assistant_resp[:500]).lower()
         found: List[str] = []
 
-        # 词典匹配（按出现顺序，去重）
-        for keyword, topic in _TOPIC_KEYWORDS.items():
+        # 1) 静态基线词典（始终可用）
+        for keyword, topic in _STATIC_TOPIC_KEYWORDS.items():
             if keyword in text and topic not in found:
                 found.append(topic)
             if len(found) >= 5:
-                break
+                return found[:5]
 
-        # 从助手回复中提取主题提示（如 "关于xxx", "xxx指的是"）
+        # 2) 从 TopicKeywordManager 动态获取关键词（从导入知识库中自动提取）
+        if self.keyword_manager is not None:
+            try:
+                dynamic_kws = await self.keyword_manager.get_merged_keywords(knowledge_ids)
+                for keyword, topic in dynamic_kws.items():
+                    if keyword in text and topic not in found:
+                        found.append(topic)
+                    if len(found) >= 5:
+                        return found[:5]
+            except Exception:
+                # Redis 失败不影响主流程，降级为静态
+                logger.debug("动态关键词加载失败，降级到静态词典")
+
+        # 3) 从助手回复中提取主题提示（如 "关于xxx"、"xxx指的是"）
         if len(found) < 5:
             patterns = [
                 r"关于[「『《]?([^」』》,，。\.]{2,15})[」』》]?",
