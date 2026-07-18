@@ -232,8 +232,8 @@ public class LearningPathServiceImpl
         for (LearningPath old : list(ew)) { old.setArchived(1); if (old.getVersion() != null && old.getVersion() > mv) mv = old.getVersion(); updateById(old); }
         LearningPath path = new LearningPath();
         path.setUserId(userId); path.setCourseId(courseId);
-        path.setTitle(courseTitle + " - 个性化学习路径");
-        path.setDescription("AI正在分析对话内容，生成个性化学习路径...");
+        path.setTitle(courseTitle + " - 对话学习路径（生成中...）");
+        path.setDescription("正在分析对话内容，提取知识点并生成专属学习路径...");
         path.setStatus(3); path.setVersion(mv + 1); path.setArchived(0); path.setStarred(0); path.setTotalSteps(0); path.setCompletedSteps(0);
         save(path);
         Long pid = path.getId();
@@ -248,7 +248,7 @@ public class LearningPathServiceImpl
         }
         if (ar == null) ar = generateDefaultPath(courseTitle);
 
-        path.setTitle(ar.getTitle() != null ? ar.getTitle() : courseTitle + " - 学习路径");
+        path.setTitle(ar.getTitle() != null ? ar.getTitle() : courseTitle + " - 个性化学习路径");
         path.setDescription(ar.getDescription() != null ? ar.getDescription() : "基于对话生成");
         path.setStatus(0);
         List<AgentLearningPathResponse.Step> steps = ar.getStepsSafe();
@@ -408,24 +408,34 @@ public class LearningPathServiceImpl
 
     private AgentLearningPathResponse generateDefaultPath(String courseTitle) {
         AgentLearningPathResponse response = new AgentLearningPathResponse();
-        response.setTitle(courseTitle + " - 默认学习路径");
+        response.setTitle(courseTitle + " - 个性化学习路径");
+        response.setDescription("基于您的学习需求自动规划的学习路线，涵盖核心知识点和实践应用");
 
         List<AgentLearningPathResponse.Step> steps = new ArrayList<>();
 
         AgentLearningPathResponse.Step step1 = new AgentLearningPathResponse.Step();
-        step1.setTitle("基础概念学习");
-        step1.setDescription("学习" + courseTitle + "的基础概念和核心知识");
+        step1.setTitle(courseTitle + "核心概念入门");
+        step1.setDescription("掌握" + courseTitle + "的基础概念和核心知识框架，建立扎实的学习基础");
+        step1.setEstimatedHours(3);
         steps.add(step1);
 
         AgentLearningPathResponse.Step step2 = new AgentLearningPathResponse.Step();
-        step2.setTitle("实践练习");
-        step2.setDescription("通过实践练习巩固所学知识");
+        step2.setTitle(courseTitle + "关键技能实践");
+        step2.setDescription("通过实际练习和案例分析，将理论知识转化为实践能力");
+        step2.setEstimatedHours(4);
         steps.add(step2);
 
         AgentLearningPathResponse.Step step3 = new AgentLearningPathResponse.Step();
-        step3.setTitle("进阶提升");
-        step3.setDescription("深入学习高级内容，提升综合能力");
+        step3.setTitle(courseTitle + "综合应用与深化");
+        step3.setDescription("综合运用所学知识解决复杂问题，深化理解并拓展应用场景");
+        step3.setEstimatedHours(3);
         steps.add(step3);
+
+        AgentLearningPathResponse.Step step4 = new AgentLearningPathResponse.Step();
+        step4.setTitle("知识巩固与复习");
+        step4.setDescription("系统回顾" + courseTitle + "的关键知识点，查漏补缺巩固学习成果");
+        step4.setEstimatedHours(2);
+        steps.add(step4);
 
         response.setSteps(steps);
         return response;

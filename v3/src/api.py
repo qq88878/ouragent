@@ -121,6 +121,8 @@ class AnalyzeRequest(BaseModel):
     """课程画像分析请求 — 基础画像 + 对话历史"""
     user_id: str = Field(..., min_length=1, max_length=100)
     course_id: Optional[int] = Field(None, gt=0)
+    course_title: str = Field(default="", max_length=200, description="课程名称")
+    course_description: str = Field(default="", max_length=500, description="课程描述")
     basic_profile: Dict[str, Any] = Field(default_factory=dict, description="基础画像（来自问卷分析）")
     chat_history: List[Dict[str, str]] = Field(default_factory=list, max_length=100)
     study_records: List[Dict[str, Any]] = Field(default_factory=list, max_length=100)
@@ -743,6 +745,8 @@ async def analyze_course_profile(request: AnalyzeRequest, _: dict = Depends(get_
             chat_history=request.chat_history,
             study_records=request.study_records,
             course_id=request.course_id,
+            course_title=request.course_title,
+            course_description=request.course_description,
         )
         return result
     except Exception as e:

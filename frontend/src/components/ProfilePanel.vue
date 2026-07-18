@@ -183,107 +183,71 @@ const sessionSignals = computed(() => {
 
 // ===== 完整文字画像：综合基础数据 + 会话实时信号 =====
 const generatedProfileText = computed(() => {
+  const cp = profileStore.courseProfile
   const bp = basicProfile.value
-  if (!bp) return '暂未获取到画像数据，请完成初始问卷或与AI对话以生成画像。'
+  const sig = sessionSignals.value
+
+  if (!bp && !cp) return '暂未获取到画像数据，请完成初始问卷或与AI对话以生成画像。'
 
   const parts = []
 
-  // 学习风格描述
-  const styleMap = {
-    VISUAL: '视觉型学习者，擅长通过图表、视频、思维导图等视觉材料理解和记忆知识',
-    AUDITORY: '听觉型学习者，擅长通过听课、讨论、音频材料来吸收知识',
-    READING: '阅读型学习者，偏好通过阅读书籍、文档和笔记来深入学习',
-    KINESTHETIC: '实践型学习者，倾向于通过动手操作、实验和实际项目来掌握技能'
-  }
-  const styleText = styleMap[bp.learningStyle] || `${bp.learningStyle}型学习者`
-  parts.push(styleText)
-
-  // 等级描述
-  const levelMap = {
-    ZERO_BASIC: '当前为零基础入门阶段，需要从最基础的概念和技能开始学习',
-    BEGINNER: '处于初级水平，已掌握基本概念，能够完成简单的练习和任务',
-    INTERMEDIATE: '达到中级水平，能够独立解决常见问题，正在向深入理解迈进',
-    ADVANCED: '具备高级水平，能够解决复杂问题并探索前沿知识'
-  }
-  if (bp.gradeLevel) {
-    parts.push(levelMap[bp.gradeLevel] || `当前学习等级为${bp.gradeLevel}`)
-  }
-
-  // 优势
-  if (bp.strengths) {
-    parts.push(`学习优势方面：${bp.strengths}`)
-  }
-
-  // 不足
-  if (bp.weaknesses) {
-    parts.push(`需要加强方面：${bp.weaknesses}`)
-  }
-
-  // 兴趣
-  if (bp.interests) {
-    parts.push(`兴趣方向：${bp.interests}`)
-  }
-
-  // 偏好设置
-  let prefs = bp.preferences
-  if (typeof prefs === 'string') {
-    try { prefs = JSON.parse(prefs) } catch { prefs = null }
-  }
-  if (prefs) {
-    if (prefs.education_level) {
-      const eduMap = { HIGH_SCHOOL: '高中', ASSOCIATE: '大专', BACHELOR: '本科', MASTER: '硕士', PHD: '博士', OTHER: '其他' }
-      parts.push(`学历背景：${eduMap[prefs.education_level] || prefs.education_level}`)
+  // ===== Part 1: AI-generated course analysis (primary) =====
+  if (cp && (cp.course_strengths?.length || cp.course_weaknesses?.length || cp.summary)) {
+    if (cp.summary && cp.summary.length > 10) {
+      parts.push(cp.summary)
     }
-    if (prefs.major) {
-      parts.push(`专业方向：${prefs.major}`)
+
+    if (cp.course_strengths && cp.course_strengths.length > 0) {
+      parts.push('掌握较好：' + cp.course_strengths.join('、'))
     }
-    if (prefs.study_pace) {
-      const paceMap = { SLOW: '慢速扎实型，倾向逐步深入', MODERATE: '中等节奏，平衡深度与广度', FAST: '快速学习型，高效吸收新知识' }
-      parts.push(`学习节奏：${paceMap[prefs.study_pace] || prefs.study_pace}`)
+
+    if (cp.course_weaknesses && cp.course_weaknesses.length > 0) {
+      parts.push('需要加强：' + cp.course_weaknesses.join('、'))
     }
-    if (prefs.recommended_strategy) {
-      parts.push(`推荐学习策略：${prefs.recommended_strategy}`)
+
+    if (cp.engagement_level && cp.engagement_level !== 'UNKNOWN') {
+      const engMap = { HIGH: '参与度高，积极互动', MEDIUM: '参与度中等', LOW: '参与度较低，可能需要更多引导' }
+      parts.push(engMap[cp.engagement_level] || cp.engagement_level)
     }
   }
 
-  // 注入当前会话的实时信号
-  const sig = sessionSignals.value
-  if (sig) {
-    if (sig.active_topics && sig.active_topics.length > 0) {
-      parts.push(`本会话正在讨论：${sig.active_topics.slice(0, 5).join('、')}`)
+  // ===== Part 2: Basic learning profile =====
+  if (bp) {
+    const styleMap = {
+      VISUAL: '视觉型学习者（图表、视频、思维导图）',
+      AUDITORY: '听觉型学习者（听课、讨论、音频）',
+      READING: '阅读型学习者（书籍、文档、笔记）',
+      KINESTHETIC: '实践型学习者（动手操作、实验、项目）'
     }
-    if (sig.gap_keywords && sig.gap_keywords.length > 0) {
-      parts.push(`当前暴露的知识薄弱点：${sig.gap_keywords.slice(0, 3).join('、')}`)
+    const levelMap = {
+      ZERO_BASIC: '零基础',
+      BEGINNER: '初级',
+      INTERMEDIATE: '中级',
+      ADVANCED: '高级'
     }
-    if (sig.exchange_count > 0) {
-      parts.push(`本会话已进行 ${sig.exchange_count} 轮对话`)
+
+    let bgParts = []
+    if (bp.learningStyle) bgParts.push(styleMap[bp.learningStyle] || bp.learningStyle)
+    if (bp.gradeLevel) bgParts.push('当前水平：' + (levelMap[bp.gradeLevel] || bp.gradeLevel))
+
+    let prefs = bp.preferences
+    if (typeof prefs === 'string') { try { prefs = JSON.parse(prefs) } catch { prefs = null } }
+    if (prefs?.study_pace) {
+      const paceMap = { SLOW: '慢速扎实', MODERATE: '中等节奏', FAST: '快速推进' }
+      bgParts.push('学习节奏：' + (paceMap[prefs.study_pace] || prefs.study_pace))
     }
-    const dist = sig.difficulty_distribution
-    if (dist) {
-      const total = (dist.beginner || 0) + (dist.neutral || 0) + (dist.advanced || 0)
-      if (total > 0) {
-        const advRatio = Math.round((dist.advanced || 0) / total * 100)
-        const begRatio = Math.round((dist.beginner || 0) / total * 100)
-        if (advRatio > 40) {
-          parts.push(`当前对话难度偏高，建议补充基础知识`)
-        } else if (begRatio > 60) {
-          parts.push(`当前对话偏基础，可以适当增加挑战性内容`)
-        }
-      }
-    }
-    // 维度总结
-    const dims = profileStore.liveDimensions
-    if (dims && Object.keys(dims).length > 0) {
-      const entries = Object.entries(dims).sort((a, b) => b[1] - a[1])
-      const top = entries[0]
-      const bottom = entries[entries.length - 1]
-      if (top && bottom && top[1] - bottom[1] > 15) {
-        parts.push(`当前能力画像：${top[0]}较强（${Math.round(top[1])}分），${bottom[0]}有待提升（${Math.round(bottom[1])}分）`)
-      }
+
+    if (bgParts.length > 0) {
+      parts.push(bgParts.join('，'))
     }
   }
 
-  return parts.join('。') + '。'
+  // ===== Part 3: Session summary (clean count only) =====
+  if (sig && sig.exchange_count > 0) {
+    parts.push('本会话已进行 ' + sig.exchange_count + ' 轮对话')
+  }
+
+  return parts.join('\n') || '暂未获取到画像数据'
 })
 
 // ===== 雷达图数据 =====

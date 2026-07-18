@@ -195,6 +195,11 @@ const currentSessionTitle = computed(() => {
   return s?.title || '对话';
 });
 
+const currentSessionCourse = computed(() => {
+  const s = sessions.value.find(s => s.id === currentSessionId.value);
+  return s || null;
+});
+
 const sessions = ref([]);
 const messages = ref([]);
 const currentSessionId = ref(null);
@@ -265,6 +270,19 @@ async function selectSession(id) {
     scrollToBottom();
     await loadSignals(id);
     await profileStore.loadSessionSignals(id);
+    // Trigger course profile analysis
+    try {
+      const userId = authStore.user?.id || JSON.parse(localStorage.getItem('currentUser') || '{}')?.id;
+      const chatHistory = (messages.value || []).map(m => ({
+        role: m.role === 'USER' ? 'user' : 'assistant',
+        content: m.content || ''
+      }));
+      if (userId && chatHistory.length > 0) {
+        const sess = currentSessionCourse.value;
+        const courseTitle = sess?.courseName || "";
+        profileStore.refreshProfile(String(userId), chatHistory, courseTitle, "");
+      }
+    } catch { /* non-critical */ }
     nextTick(() => { const el = chatInputRef.value?.$el?.querySelector('textarea'); if (el) el.focus(); });
   } catch { messages.value = []; }
 }
@@ -309,6 +327,19 @@ async function sendMessage() {
     loadSessions();
     await loadSignals(currentSessionId.value);
     await profileStore.loadSessionSignals(currentSessionId.value);
+    // Trigger course profile analysis
+    try {
+      const userId = authStore.user?.id || JSON.parse(localStorage.getItem('currentUser') || '{}')?.id;
+      const chatHistory = (messages.value || []).map(m => ({
+        role: m.role === 'USER' ? 'user' : 'assistant',
+        content: m.content || ''
+      }));
+      if (userId && chatHistory.length > 0) {
+        const sess = currentSessionCourse.value;
+        const courseTitle = sess?.courseName || "";
+        profileStore.refreshProfile(String(userId), chatHistory, courseTitle, "");
+      }
+    } catch { /* non-critical */ }
     nextTick().then(scrollToBottom);
     return;
   }
@@ -449,7 +480,7 @@ async function generateLearningPath() {
   try {
     const res = await learningApi.generatePathFromChat({
       messages: chatMessages,
-      courseId: selectedCourseId.value || null,
+      courseId: currentSessionCourse.value?.courseId || selectedCourseId.value || null,
     });
     ElMessage.success('已开始生成学习路径，即将跳转...');
     setTimeout(() => router.push('/learning'), 500);

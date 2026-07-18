@@ -203,26 +203,32 @@ export const useProfileStore = defineStore("profile", () => {
     }
   }
 
-  async function refreshProfile(userId, chatHistory = null) {
+  async function refreshProfile(userId, chatHistory = null, courseTitle = "", courseDescription = "") {
     if (refreshing.value) return;
     refreshing.value = true;
     error.value = "";
     try {
       const token = localStorage.getItem("accessToken");
       if (chatHistory && chatHistory.length > 0) {
-        await axios.post(
+        const courseRes = await axios.post(
           "/agent/agent/profile/course",
           {
             user_id: String(userId),
             basic_profile: basicProfile.value || {},
             chat_history: chatHistory.slice(-20),
             study_records: [],
+            course_title: courseTitle || "",
+            course_description: courseDescription || "",
           },
           {
             headers: token ? { Authorization: "Bearer " + token } : {},
             timeout: 60000,
           }
         );
+        if (courseRes.data) {
+          courseProfile.value = courseRes.data;
+          console.log("[ProfileStore] courseProfile loaded:", Object.keys(courseRes.data));
+        }
       }
       await loadBasicProfile(true);
     } catch (e) {

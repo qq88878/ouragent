@@ -167,6 +167,8 @@ class ProfileAgent(BaseAgent):
         study_records: List[Dict[str, Any]] | None = None,
         knowledge_context: str = "",
         chat_signals: Dict[str, Any] | None = None,
+        course_title: str = "",
+        course_description: str = "",
     ) -> Dict[str, Any]:
         """结合基础画像、对话历史、知识库上下文，动态构建课程学生画像（不持久化）"""
         if not chat_history:
@@ -186,7 +188,7 @@ class ProfileAgent(BaseAgent):
         signals_text = json.dumps(chat_signals or {}, ensure_ascii=False) if chat_signals else "暂无信号"
         profile_text = json.dumps(basic_profile, ensure_ascii=False)
 
-        prompt = f"""请根据学生的基础画像和本课程的对话历史，生成该课程特有的学生理解。
+        prompt = f"""【当前课程：{course_title}】\n\n请根据学生的基础画像和本课程的对话历史，生成该课程特有的学生理解。
 
 【基础画像（跨课程共享）】
 {profile_text}

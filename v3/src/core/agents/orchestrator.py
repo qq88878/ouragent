@@ -1051,6 +1051,8 @@ class Orchestrator:
         chat_history: List[Dict[str, str]],
         study_records: List[Dict[str, Any]] | None = None,
         course_id: Optional[int] = None,
+        course_title: str = "",
+        course_description: str = "",
     ) -> Dict[str, Any]:
         """构建课程画像（不持久化，每次从对话历史动态构建）"""
         result = await self._call_agent_safe(
@@ -1059,7 +1061,11 @@ class Orchestrator:
             basic_profile=basic_profile,
             chat_history=chat_history,
             study_records=study_records or [],
+            course_title=course_title,
+            course_description=course_description,
         )
+
+        return result
 
     async def update_profile_from_activity(
         self,
@@ -1607,7 +1613,21 @@ class Orchestrator:
             for item in knowledge_items
         ]
 
-        goal = "掌握对话中涉及的知识点，并规划后续学习方向"
+
+        # Fallback: use discussed topics as knowledge context when RAG returns nothing
+        if not course_knowledge and discussed_topics:
+            for t in discussed_topics[:10]:
+                topic = t.get("topic", "")
+                keywords = t.get("keywords", [])
+                if topic:
+                    course_knowledge.append({
+                        "id": 0,
+                        "title": topic,
+                        "content": f"从对话中提取的知识主题：{topic}。关键概念：{", ".join(keywords)}" if keywords else f"从对话中提取的知识主题：{topic}",
+                    })
+            logger.info("Using %d discussed topics as fallback knowledge", len(course_knowledge))
+        discussed_str = "、".join(t.get("topic", "") for t in discussed_topics[:5])
+        goal = f"掌握对话中涉及的知识点：{discussed_str}，并规划后续学习方向" if discussed_str else "掌握课程核心知识"
         if not course_title:
             course_title = "基于对话的个性化学习"
 

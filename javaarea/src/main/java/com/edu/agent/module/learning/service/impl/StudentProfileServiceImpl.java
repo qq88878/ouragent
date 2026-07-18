@@ -82,7 +82,6 @@ public class StudentProfileServiceImpl
             if (profile.getPreferences() != null) {
                 existing.setPreferences(profile.getPreferences());
             }
-            // Save profile history snapshot before update
             saveProfileHistory(userId, existing, "manual");
             updateById(existing);
         }
@@ -101,24 +100,71 @@ public class StudentProfileServiceImpl
         radarData.put("interests", profile.getInterests());
         radarData.put("gradeLevel", profile.getGradeLevel());
 
-        // Fast-path: use keyword-based dimensions for instant response
-        // AI deep analysis available via /agent/profile/dimensions
         Map<String, Object> dimensions = new HashMap<>();
-        String strengths = profile.getStrengths() != null ? profile.getStrengths() : "";
-        String weaknesses = profile.getWeaknesses() != null ? profile.getWeaknesses() : "";
-        dimensions.put("\u7406\u8bba\u77e5\u8bc6", calculateDimension(strengths, weaknesses, "\u7406\u8bba"));
-        dimensions.put("\u5b9e\u8df5\u80fd\u529b", calculateDimension(strengths, weaknesses, "\u5b9e\u8df5"));
-        dimensions.put("\u95ee\u9898\u89e3\u51b3", calculateDimension(strengths, weaknesses, "\u95ee\u9898"));
-        dimensions.put("\u521b\u65b0\u601d\u7ef4", calculateDimension(strengths, weaknesses, "\u521b\u65b0"));
-        dimensions.put("\u534f\u4f5c\u80fd\u529b", calculateDimension(strengths, weaknesses, "\u534f\u4f5c"));
+
+        // Try AI-powered dimension scoring from Python Agent
+        try {
+            Map<String, Object> profileMap = new HashMap<>();
+            profileMap.put("learning_style", profile.getLearningStyle());
+            profileMap.put("grade_level", profile.getGradeLevel());
+            profileMap.put("strengths", profile.getStrengths());
+            profileMap.put("weaknesses", profile.getWeaknesses());
+            profileMap.put("interests", profile.getInterests());
+            Map<String, Object> aiResult = agentServiceClient.analyzeProfileDimensions(
+                String.valueOf(userId), profileMap,
+                java.util.Collections.emptyList(),
+                java.util.Collections.emptyList(),
+                java.util.Collections.emptyMap(),
+                java.util.Collections.emptyMap()
+            );
+            if (aiResult != null && aiResult.containsKey("dimensions")) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> aiDims = (Map<String, Object>) aiResult.get("dimensions");
+                if (aiDims != null && !aiDims.isEmpty()) {
+                    // Map English dimension keys to Chinese for frontend display
+                    java.util.Map<String, String> keyMap = new HashMap<>();
+                    keyMap.put("theoretical_knowledge", "理论知识");
+                    keyMap.put("practical_ability", "实践能力");
+                    keyMap.put("problem_solving", "问题解决");
+                    keyMap.put("innovative_thinking", "创新思维");
+                    keyMap.put("collaboration", "协作能力");
+                    for (Map.Entry<String, Object> entry : aiDims.entrySet()) {
+                        Object val = entry.getValue();
+                        String key = keyMap.getOrDefault(entry.getKey(), entry.getKey());
+                        if (val instanceof Map) {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> dimObj = (Map<String, Object>) val;
+                            Object score = dimObj.get("score");
+                            dimensions.put(key, score != null ? score : 50);
+                        } else {
+                            dimensions.put(key, val != null ? val : 50);
+                        }
+                    }
+                    radarData.put("source", "ai");
+                    if (aiResult.containsKey("overall_assessment")) {
+                        radarData.put("assessment", aiResult.get("overall_assessment"));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("AI dimension scoring failed, falling back to keyword heuristic: userId={}", userId, e);
+        }
+
+        // Fallback: keyword-based dimensions if AI fails
+        if (dimensions.isEmpty()) {
+            String strengths = profile.getStrengths() != null ? profile.getStrengths() : "";
+            String weaknesses = profile.getWeaknesses() != null ? profile.getWeaknesses() : "";
+            dimensions.put("理论知识", calculateDimension(strengths, weaknesses, "理论"));
+            dimensions.put("实践能力", calculateDimension(strengths, weaknesses, "实践"));
+            dimensions.put("问题解决", calculateDimension(strengths, weaknesses, "问题"));
+            dimensions.put("创新思维", calculateDimension(strengths, weaknesses, "创新"));
+            dimensions.put("协作能力", calculateDimension(strengths, weaknesses, "协作"));
+            radarData.put("source", "keyword");
+        }
 
         radarData.put("dimensions", dimensions);
-        radarData.put("source", "keyword");
         return radarData;
     }
-
-
-
 
     private void saveProfileHistory(Long userId, StudentProfile profile, String triggerSource) {
         if (profileHistoryService == null) return;

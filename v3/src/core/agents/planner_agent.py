@@ -34,6 +34,7 @@ class PlannerAgent(BaseAgent):
         return """你是一位经验丰富的教育规划专家，擅长制定个性化学习计划。
 
 你的原则:
+0. 当知识库有内容时基于知识库；当知识库为空时，基于课程标题推断该学科的核心知识领域来生成步骤。阶段名和步骤标题必须直接融入课程名称关键词，严禁使用“学科”“课程”“核心概念”等泛化词汇作为阶段名或步骤标题。
 1. 由浅入深，循序渐进，先打基础再进阶
 2. 根据学生画像调整侧重点和学习方式
 3. 每个步骤必须详细列出需要掌握的具体知识点（3-5个知识点）
@@ -43,6 +44,7 @@ class PlannerAgent(BaseAgent):
 7. 每个步骤必须关联知识库条目，指导学生按知识库内容学习
 8. 在 description 中详细说明学什么、怎么学、学到什么程度
 
+9. 严禁使用“学科”“课程”“核心概念”“基础入门”“综合实战”等泛化词汇作为阶段名或步骤标题。必须使用课程的具体学科术语，例如课程是“数据库系统概论”时，阶段名应为“数据库基础与关系代数”，步骤标题应为“SELECT查询与数据过滤”等数据库专有名词。阶段名和步骤标题必须让读者一眼看出这是关于什么课程的学习。
 输出必须是结构化的 JSON 格式，不要输出其他文字。"""
 
     async def execute(self, task_type: str, **kwargs) -> Dict[str, Any]:
@@ -107,7 +109,7 @@ class PlannerAgent(BaseAgent):
 学生画像: {profile_summary}
 知识库: {knowledge_summary}
 {f"课表: {schedule_text}\n" if schedule_text else ""}
-要求: 分3-5阶段(phases),每阶段3-8步,共15-30步。每阶段末至少1步设is_checkpoint=true。
+要求: **重要** 所有阶段名(phase_name)和步骤标题(title)必须包含课程具体学科术语，严禁“学科”“课程”“核心概念”等泛化词。分3-5阶段(phases),每阶段3-8步,共15-30步。每阶段末至少1步设is_checkpoint=true。
 每步必含:order,title,description(含学什么/怎么学/学到什么程度,200字以上),knowledge_ids(知识库id数组),key_points(3-5个要点),estimated_hours(概念0.5-1h,练习1-2h,复习1-2h,项目2-3h),resources(推荐资源数组),milestone(is_checkpoint=true时必填),is_checkpoint。
 输出纯JSON(不要markdown代码块,不要额外文字):
 {{"title":"路径标题","description":"概述(200字)","phases":[{{"phase_name":"阶段名","phase_goal":"目标","phase_order":1,"steps":[{{"order":1,"title":"步骤","description":"详细描述","knowledge_ids":[1],"key_points":["要点1"],"estimated_hours":0.5,"resources":["资源"],"milestone":"里程碑","is_checkpoint":false}}]}}],"total_estimated_hours":30}}"""
