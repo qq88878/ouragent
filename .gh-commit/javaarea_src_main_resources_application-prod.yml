@@ -25,7 +25,7 @@ agent:
   service:
     url: ${AGENT_SERVICE_URL:http://agent-service:8000}
     key: ${AGENT_SERVICE_KEY:default-dev-key}
-    timeout: ${AGENT_TIMEOUT:600000}
+    timeout: ${AGENT_TIMEOUT:10000}
     retry:
       max-attempts: 3
       delay: 1000

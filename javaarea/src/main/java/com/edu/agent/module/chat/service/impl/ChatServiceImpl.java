@@ -321,6 +321,11 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
     private Map<String, Object> buildContext(ChatSession session) {
         Map<String, Object> context = new HashMap<>();
 
+        // User ID for mistake book auto-recording
+        if (session.getUserId() != null) {
+            context.put("user_id", String.valueOf(session.getUserId()));
+        }
+
         // Knowledge context
         if (session.getCourseId() != null) {
             // 固定课程模式：只检索该课程的知识库

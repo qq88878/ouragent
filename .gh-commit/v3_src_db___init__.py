@@ -12,7 +12,7 @@ from .database import (
     close_db,
 )
 
-from .models import User, MistakeBook, MistakeNotification
+from .models import User
 
 __all__ = [
     "engine",
@@ -22,6 +22,5 @@ __all__ = [
     "init_db",
     "close_db",
     "User",
-    "MistakeBook",
 ]
 

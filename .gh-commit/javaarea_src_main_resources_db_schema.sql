@@ -1,4 +1,4 @@
-﻿CREATE DATABASE IF NOT EXISTS edu_agent;
+CREATE DATABASE IF NOT EXISTS edu_agent;
 USE edu_agent;
 
 -- ============================================================
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS `user` (
     `phone`          VARCHAR(32)  DEFAULT NULL,
     `avatar`         VARCHAR(255) DEFAULT NULL,
     `education_level` VARCHAR(32)  DEFAULT NULL COMMENT 'PRIMARY / JUNIOR / SENIOR / UNIVERSITY',
-    `major`          VARCHAR(255) DEFAULT NULL COMMENT '大学为专业名，小初高为感兴趣学科(逗号分隔)',
+    `major`          VARCHAR(255) DEFAULT NULL COMMENT '��ѧΪרҵ����С����Ϊ����Ȥѧ��(���ŷָ�)',
     `role`           VARCHAR(32)  NOT NULL DEFAULT 'STUDENT' COMMENT 'STUDENT / TEACHER / ADMIN',
     `status`         TINYINT      NOT NULL DEFAULT 1 COMMENT '1=active 0=disabled',
     `email_verified` TINYINT      NOT NULL DEFAULT 0 COMMENT '0=unverified 1=verified',
@@ -138,7 +138,7 @@ CREATE TABLE IF NOT EXISTS `chat_message` (
 CREATE TABLE IF NOT EXISTS `learning_path` (
     `id`             BIGINT        NOT NULL AUTO_INCREMENT,
     `user_id`        BIGINT        NOT NULL,
-    `course_id`      BIGINT        DEFAULT NULL,
+    `course_id`      BIGINT        NOT NULL,
     `title`          VARCHAR(255)  NOT NULL,
     `description`    TEXT          DEFAULT NULL,
     `total_steps`    INT           NOT NULL DEFAULT 0,
@@ -214,33 +214,13 @@ CREATE TABLE IF NOT EXISTS `student_profile` (
     UNIQUE KEY `uk_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- -----------------------------------------------------------
-<<<<<<< Updated upstream
--- 9b. student_profile_history (profile version tracking)
--- -----------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `student_profile_history` (
-    `id`                BIGINT        NOT NULL AUTO_INCREMENT,
-    `user_id`           BIGINT        NOT NULL,
-    `profile_snapshot`  JSON          NOT NULL COMMENT 'Full profile snapshot at this version',
-    `change_summary`    VARCHAR(512)  DEFAULT NULL COMMENT 'What changed and why',
-    `trigger_source`    VARCHAR(64)   DEFAULT NULL COMMENT 'questionnaire|evaluation|chat|manual|ai_dimensions',
-    `version`           INT           NOT NULL DEFAULT 1,
-    `create_time`       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`),
-    KEY `idx_user_version` (`user_id`, `version`),
-    KEY `idx_user_time` (`user_id`, `create_time`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- -----------------------------------------------------------
 -- 10. student_profile_questionnaire (?????????????)
-=======
--- 10. student_profile_questionnaire (ȫ���û������ʾ�)
->>>>>>> Stashed changes
 -- -----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `student_profile_questionnaire` (
     `id`                  BIGINT        NOT NULL AUTO_INCREMENT,
     `user_id`             BIGINT        NOT NULL,
-    `questionnaire_data`  JSON          DEFAULT NULL COMMENT '��ά���ʾ�����',
-    `is_completed`        TINYINT       NOT NULL DEFAULT 0 COMMENT '0=δ��� 1=�����',
+    `questionnaire_data`  JSON          DEFAULT NULL COMMENT '????????????',
+    `is_completed`        TINYINT       NOT NULL DEFAULT 0 COMMENT '0=��??? 1=?????',
     `create_time`         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `update_time`         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted`             TINYINT       NOT NULL DEFAULT 0,
@@ -248,13 +228,13 @@ CREATE TABLE IF NOT EXISTS `student_profile_questionnaire` (
     UNIQUE KEY `uk_questionnaire_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- -----------------------------------------------------------
--- 11. schedule_config (学生课表配置)
+-- 11. schedule_config (ѧ���α�����)
 -- -----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS schedule_config (
     id                  BIGINT        NOT NULL AUTO_INCREMENT,
     user_id             BIGINT        NOT NULL,
-    semester_start_date DATE          DEFAULT NULL COMMENT '开学日期',
-    period_config       TEXT          DEFAULT NULL COMMENT '时间段配置 [{name,startTime,endTime}]',
+    semester_start_date DATE          DEFAULT NULL COMMENT '��ѧ����',
+    period_config       TEXT          DEFAULT NULL COMMENT 'ʱ������� [{name,startTime,endTime}]',
     create_time         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted             TINYINT       NOT NULL DEFAULT 0,
@@ -263,15 +243,15 @@ CREATE TABLE IF NOT EXISTS schedule_config (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- -----------------------------------------------------------
--- 12. schedule_course (学生课表课程)
+-- 12. schedule_course (ѧ���α�γ�)
 -- -----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS schedule_course (
     id              BIGINT        NOT NULL AUTO_INCREMENT,
     user_id         BIGINT        NOT NULL,
-    name            VARCHAR(128)  NOT NULL COMMENT '课程名称',
-    week_numbers    TEXT          DEFAULT NULL COMMENT '哪些周 [1,2,3,...]',
-    day_of_weeks    TEXT          DEFAULT NULL COMMENT '哪些天 1=周一...7=周日',
-    period_indexes  TEXT          DEFAULT NULL COMMENT '哪些时间段索引',
+    name            VARCHAR(128)  NOT NULL COMMENT '�γ�����',
+    week_numbers    TEXT          DEFAULT NULL COMMENT '��Щ�� [1,2,3,...]',
+    day_of_weeks    TEXT          DEFAULT NULL COMMENT '��Щ�� 1=��һ...7=����',
+    period_indexes  TEXT          DEFAULT NULL COMMENT '��Щʱ�������',
     create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted         TINYINT       NOT NULL DEFAULT 0,
@@ -281,51 +261,3 @@ CREATE TABLE IF NOT EXISTS schedule_course (
 -- -----------------------------------------------------------
 
 
--- 执行 javaarea/src/main/resources/db/migration/add_schedule_course_fields.sql
-CREATE TABLE IF NOT EXISTS mistake_book (
-    id              BIGINT        NOT NULL AUTO_INCREMENT,
-    user_id         BIGINT        NOT NULL COMMENT 'user id',
-    question        TEXT          NOT NULL COMMENT 'question text',
-    student_answer  TEXT          COMMENT 'student answer',
-    reference_answer TEXT         COMMENT 'correct answer',
-    error_category  VARCHAR(64)   DEFAULT 'concept_unclear' COMMENT 'error category',
-    error_pattern   VARCHAR(255)  DEFAULT '' COMMENT 'error pattern',
-    error_root_cause TEXT          COMMENT 'root cause',
-    knowledge_id    BIGINT        DEFAULT NULL COMMENT 'related knowledge id',
-    knowledge_name  VARCHAR(255)  DEFAULT '' COMMENT 'knowledge name',
-    course_id       BIGINT        DEFAULT NULL COMMENT 'related course id',
-    diagnosis       JSON          COMMENT 'AI diagnosis result',
-    review_count    INT           DEFAULT 0 COMMENT 'review count',
-    review_stage    INT           DEFAULT 0 COMMENT 'review stage 0-5',
-    next_review_at  DATETIME      DEFAULT NULL COMMENT 'next review time',
-    mastered        TINYINT       DEFAULT 0 COMMENT '0=not mastered 1=mastered',
-    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    update_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    deleted         TINYINT       NOT NULL DEFAULT 0,
-    PRIMARY KEY (id),
-    INDEX idx_mistake_user (user_id),
-    INDEX idx_mistake_review (user_id, next_review_at),
-    INDEX idx_mistake_course (course_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-ALTER TABLE schedule_course ADD COLUMN location VARCHAR(255), ADD COLUMN remark VARCHAR(512);
-
--- -----------------------------------------------------------
--- 13. mistake_notification
--- -----------------------------------------------------------
-CREATE TABLE IF NOT EXISTS mistake_notification (
-    id              BIGINT        NOT NULL AUTO_INCREMENT,
-    user_id         BIGINT        NOT NULL COMMENT 'user id',
-    mistake_id      BIGINT        NOT NULL COMMENT 'mistake_book id',
-    type            VARCHAR(32)   NOT NULL DEFAULT 'review_due' COMMENT 'notification type',
-    title           VARCHAR(255)  NOT NULL DEFAULT '' COMMENT 'title',
-    message         TEXT          COMMENT 'message body',
-    error_category  VARCHAR(64)   DEFAULT '' COMMENT 'error category',
-    knowledge_name  VARCHAR(255)  DEFAULT '' COMMENT 'knowledge name',
-    review_stage    INT           DEFAULT 0 COMMENT 'review stage',
-    is_read         TINYINT       NOT NULL DEFAULT 0 COMMENT '0=unread 1=read',
-    create_time     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    INDEX idx_notif_user (user_id),
-    INDEX idx_notif_read (user_id, is_read)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

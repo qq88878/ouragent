@@ -8,12 +8,8 @@ spring:
     name: edu
   servlet:
     multipart:
-      max-file-size: 200MB
-      max-request-size: 300MB
-
-agent:
-  service:
-    timeout: 300000  # 5 min for large file ingestion
+      max-file-size: 50MB
+      max-request-size: 100MB
 
 mybatis-plus:
   mapper-locations: classpath:mapper/*.xml

@@ -1,4 +1,4 @@
-﻿"""Orchestrator - 多 Agent 协作编排器，系统总入口"""
+"""Orchestrator - 多 Agent 协作编排器，系统总入口"""
 
 from __future__ import annotations
 
@@ -12,7 +12,6 @@ from ..memory.session_manager import SessionManager
 from ..memory.conversation_memory import ConversationMemory
 from ..memory.profile_cache import ProfileCache, RAGCache
 from ..memory.chat_signals import ChatSignalExtractor, ChatSignalsCache
-from ..memory.topic_keyword_manager import TopicKeywordManager
 from ..memory.learning_progress import LearningProgress
 from ..rag.rag_pipeline import RAGPipeline
 from ..tools.base import ToolRegistry
@@ -67,9 +66,7 @@ class Orchestrator:
         self._rag_cache: Optional[RAGCache] = None
         self._learning_progress: Optional[LearningProgress] = None
         self._signals_cache: Optional[ChatSignalsCache] = None
-        self._topic_kw_mgr: Optional[TopicKeywordManager] = None
-        # 先用 None 初始化，Redis 就绪后再绑定动态关键词管理器
-        self._signal_extractor = ChatSignalExtractor(keyword_manager=None)
+        self._signal_extractor = ChatSignalExtractor()
 
         # 注册工具
         self.tools = ToolRegistry()
@@ -128,10 +125,6 @@ class Orchestrator:
             self._rag_cache = RAGCache(self._redis_client)
             self._learning_progress = LearningProgress(self._redis_client)
             self._signals_cache = ChatSignalsCache(self._redis_client)
-            # ⭐ 动态话题关键词管理器 — 导入文档时 规则+LLM 双模式提取
-            #    self.llm 存在时，会额外做语义级关键词提取（失败不影响规则提取）
-            self._topic_kw_mgr = TopicKeywordManager(self._redis_client, llm=self.llm)
-            self._signal_extractor.keyword_manager = self._topic_kw_mgr
             logger.info("Redis 记忆系统初始化完成")
         return self._redis_client
 
@@ -162,51 +155,24 @@ class Orchestrator:
         """
         knowledge_ids = context.get("knowledge_ids")
         basic_profile = context.get("basic_profile")
-        course_title = context.get("course_title", "")
-        course_catalog = context.get("course_catalog")
 
-        # Redis 初始化（失败不阻断对话，降级为无状态模式）
-        try:
-            await self._ensure_redis()
-        except Exception as e:
-            logger.warning("Redis 初始化失败，降级为无状态对话: %s", e)
+        await self._ensure_redis()
 
         # 获取对话历史（优先从 Redis）
         history = context.get("history")
         session_user_id = ""
         signals_profile: Dict[str, Any] = {}
         if session_id and self._session_manager:
-            try:
-                conv = ConversationMemory(self._redis_client, session_id)
-                history = await conv.get_recent_context_for_llm(max_messages=10)
-                await self._session_manager.touch_session(session_id)
+            conv = ConversationMemory(self._redis_client, session_id)
+            history = await conv.get_recent_context_for_llm(max_messages=10)
+            await self._session_manager.touch_session(session_id)
 
-                # Auto-create session in Redis if not exists (for signal tracking)
-                existing = await self._session_manager.get_session(session_id)
-                logger.info("Session %s: existing=%s, user_id=%s", session_id, existing, context.get("user_id"))
-                if not existing and context.get("user_id"):
-                    from datetime import datetime
-                    meta = {
-                        "session_id": session_id,
-                        "user_id": str(context["user_id"]),
-                        "course_id": context.get("course_id"),
-                        "created_at": datetime.now().isoformat(),
-                        "last_active": datetime.now().isoformat(),
-                        "message_count": 0,
-                    }
-                    await self._session_manager.redis.set_json(
-                        self._session_manager._meta_key(session_id),
-                        meta,
-                        ttl=7*24*3600,
-                    )
-                # 加载会话级学习信号
-                session_meta = await self._session_manager.get_session(session_id)
-                if session_meta:
-                    session_user_id = str(session_meta.get("user_id", ""))
-                    if self._signals_cache and session_user_id:
-                        signals_profile = await self._signals_cache.get_signals(session_user_id, session_id)
-            except Exception as e:
-                logger.warning("Redis 会话操作失败，使用无状态模式: %s", e)
+            # 加载会话级学习信号
+            session_meta = await self._session_manager.get_session(session_id)
+            if session_meta:
+                session_user_id = str(session_meta.get("user_id", ""))
+                if self._signals_cache and session_user_id:
+                    signals_profile = await self._signals_cache.get_signals(session_user_id, session_id)
 
         # RAG query 增强：拼接 active_topics + gap_keywords
         enhanced_query = message
@@ -224,13 +190,10 @@ class Orchestrator:
         # RAG 检索（带缓存）
         knowledge_context = ""
         if self._rag_cache:
-            try:
-                cached_results = await self._rag_cache.get_results(enhanced_query, knowledge_ids)
-                if cached_results:
-                    knowledge_context = "\n\n---\n\n".join(r["content"] for r in cached_results)
-                    logger.debug("RAG 缓存命中")
-            except Exception as e:
-                logger.debug("RAG 缓存读取失败，跳过缓存: %s", e)
+            cached_results = await self._rag_cache.get_results(enhanced_query, knowledge_ids)
+            if cached_results:
+                knowledge_context = "\n\n---\n\n".join(r["content"] for r in cached_results)
+                logger.debug("RAG 缓存命中")
 
         if not knowledge_context:
             try:
@@ -240,18 +203,14 @@ class Orchestrator:
                 if retrieved:
                     knowledge_context = "\n\n---\n\n".join(r["content"] for r in retrieved)
                     if self._rag_cache:
-                        try:
-                            await self._rag_cache.set_results(enhanced_query, retrieved, knowledge_ids)
-                        except Exception as e:
-                            logger.debug("RAG 缓存写入失败: %s", e)
+                        await self._rag_cache.set_results(enhanced_query, retrieved, knowledge_ids)
             except Exception as e:
                 logger.warning("RAG 检索失败，降级为纯 LLM 对话: %s", e)
 
         # 构造个性化 prompt（注入学习信号）
         schedule = context.get("schedule")
         system_prompt = self._build_chat_system_prompt(
-            basic_profile, knowledge_context, schedule, signals_profile, course_title,
-            course_catalog=course_catalog,
+            basic_profile, knowledge_context, schedule, signals_profile,
         )
         messages = [{"role": "system", "content": system_prompt}]
         if history:
@@ -263,14 +222,11 @@ class Orchestrator:
         self, session_id: Optional[str], message: str, response: str,
     ) -> None:
         """保存对话消息到 Redis。"""
-        if session_id and self._session_manager:
+        if session_id and self._session_manager and response:
             try:
                 conv = ConversationMemory(self._redis_client, session_id)
-                # Always save the user message
                 await conv.add_message("user", message)
-                # Only save assistant message if there is a response
-                if response:
-                    await conv.add_message("assistant", response)
+                await conv.add_message("assistant", response)
             except Exception as e:
                 logger.warning("保存对话历史失败: %s", e)
 
@@ -280,17 +236,12 @@ class Orchestrator:
         session_id: str,
         user_message: str,
         assistant_response: str,
-        knowledge_ids: Optional[List[int]] = None,
     ) -> None:
-        """从本轮对话提取学习信号并更新 Redis 画像
-        传入 knowledge_ids 可限定话题关键词搜索范围（对应文档所属知识库）
-        """
+        """从本轮对话提取学习信号并更新 Redis 画像"""
         if not self._signals_cache or not user_id:
             return
         try:
-            delta = await self._signal_extractor.extract(
-                user_message, assistant_response, knowledge_ids=knowledge_ids,
-            )
+            delta = self._signal_extractor.extract(user_message, assistant_response)
             if delta:
                 await self._signals_cache.update_signals(user_id, session_id, delta)
         except Exception as e:
@@ -311,21 +262,12 @@ class Orchestrator:
             session_id: 会话ID（用于记忆对话历史）
         """
         context = context or {}
+        messages, user_id = await self._prepare_chat_messages(message, context, session_id)
 
         try:
-            messages, user_id = await self._prepare_chat_messages(message, context, session_id)
-
-            # Save user message immediately so history survives errors
-            await self._save_chat_message(session_id, message, "")
             response = await self.llm.chat(messages)
-
             await self._save_chat_message(session_id, message, response)
-            knowledge_ids = context.get("knowledge_ids")
-            await self._extract_and_update_signals(
-                user_id, session_id or "", message, response, knowledge_ids=knowledge_ids,
-            )
-            user_id = user_id or context.get("user_id", "")
-            self._maybe_record_mistake(user_id, message, response, context)
+            await self._extract_and_update_signals(user_id, session_id or "", message, response)
             return response
         except Exception as e:
             logger.error("对话失败: %s", e)
@@ -339,12 +281,7 @@ class Orchestrator:
     ) -> AsyncIterator[str]:
         """流式 RAG 增强对话 — 逐块 yield"""
         context = context or {}
-        try:
-            messages, user_id = await self._prepare_chat_messages(message, context, session_id)
-        except Exception as e:
-            logger.error("对话准备失败: %s", e)
-            yield f"抱歉，处理您的问题时出现错误: {e}"
-            return
+        messages, user_id = await self._prepare_chat_messages(message, context, session_id)
 
         full_response = []
         try:
@@ -357,10 +294,7 @@ class Orchestrator:
         finally:
             response_text = "".join(full_response)
             await self._save_chat_message(session_id, message, response_text)
-            knowledge_ids_for_stream = context.get("knowledge_ids")
-            await self._extract_and_update_signals(user_id, session_id or "", message, response_text, knowledge_ids=knowledge_ids_for_stream)
-            user_id = user_id or context.get("user_id", "")
-            self._maybe_record_mistake(user_id, message, response_text, context)
+            await self._extract_and_update_signals(user_id, session_id or "", message, response_text)
 
     async def stream_answer_with_quality_check(
         self,
@@ -381,7 +315,6 @@ class Orchestrator:
         context = context or {}
         knowledge_ids = context.get("knowledge_ids")
         basic_profile = context.get("basic_profile")
-        course_title = context.get("course_title", "")
         user_id = context.get("user_id", "")
         course_id = context.get("course_id")
 
@@ -452,11 +385,8 @@ class Orchestrator:
             logger.warning("质检失败: %s", e)
             yield {"type": "quality_check", "quality": {"score": 80, "is_correct": True, "error": str(e)}}
 
-        # 保存对话历史 + 更新画像信号
+        # 保存对话历史
         await self._save_chat_message(session_id, question, complete_answer)
-        knowledge_ids_for_qa = context.get("knowledge_ids")
-        await self._extract_and_update_signals(user_id, session_id or "", question, complete_answer, knowledge_ids=knowledge_ids_for_qa)
-        self._maybe_record_mistake(user_id, question, complete_answer, context)
         yield {"type": "done"}
 
     def _build_chat_system_prompt(
@@ -465,8 +395,6 @@ class Orchestrator:
         knowledge_context: str,
         schedule: Optional[Dict[str, Any]] = None,
         signals_profile: Optional[Dict[str, Any]] = None,
-        course_title: str = "",
-        course_catalog: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         now = datetime.now()
         weekday_names = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
@@ -474,108 +402,132 @@ class Orchestrator:
 
         parts = [
             f"今天是{today_str}。",
+            "你是我们的AI学习助手，请根据学生的情况提供个性化、友好的学习辅导。",
             "",
-            "你是一位经验丰富的学习顾问，正在和一位学生聊天。",
-            "",
-            f"你正在辅导的课程是：{course_title}，请围绕这门课展开对话。" if course_title else "",
+            "回答要求：",
+            "- 回答要简洁清晰，控制在1-2段以内",
+            "- 如果学生有具体的学习风格或薄弱点，请针对性调整回答方式",
+            "- 优先基于提供的知识库内容回答",
+            "- 如涉及课程安排，请结合课表信息给出建议",
         ]
 
-        # 动态课程模式：注入课程目录
-        if course_catalog and not course_title:
-            parts.append("")
-            parts.append("当前可用的课程：")
-            for c in course_catalog:
-                parts.append(f"  - {c.get('title', '')}")
-            parts.append("")
-            parts.append("请根据学生的提问判断涉及哪门课程，优先使用对应课程的参考资料回答。")
-            parts.append("如果问题涉及多门课程，可以综合回答。在回答中说明你引用的是哪门课的内容。")
-
-        parts.extend([
-            "",
-            "- 通过自然的对话了解这位学生，帮他弄清自己想学什么、为什么学、怎么学最有效",
-            "- 当你觉得已经足够了解他了，可以温柔地建议他点击「生成学习路径」——但不要第一次就说，等聊到位了再提",
-            "",
-            "对话风格：",
-            "- 随性、真诚、像在咖啡馆聊天，不是在调查问卷",
-            "- 问题要自然地从上下文中引出，不要列清单式提问",
-            "- 每次回复不要太长，2-4句就好",
-            "- 记住学生说过的信息，别重复问",
-            "",
-            "如果学生问具体的学术问题，先回答，然后自然地把话题引回了解他的学习状况。",
-        ])
-
-        # Known profile: tell the agent what's already known so it doesn't re-ask
         if basic_profile:
-            known = []
+            parts.append("")
+            parts.append("当前学生画像信息（请据此调整教学策略）：")
+            # 学习风格
             style = basic_profile.get("learning_style", "")
             if style:
-                style_map = {"VISUAL": "视觉型", "AUDITORY": "听觉型", "READING": "阅读型", "KINESTHETIC": "动手型"}
-                known.append(f"学习风格: {style_map.get(style, style)}")
+                style_map = {
+                    "VISUAL": "视觉型",
+                    "AUDITORY": "听觉型",
+                    "READING": "阅读型",
+                    "KINESTHETIC": "动手型",
+                }
+                if style in style_map:
+                    parts.append(f"- 学习风格：{style_map[style]}")
+
+            # 优势与劣势
             strengths = basic_profile.get("strengths", "")
-            if strengths:
-                known.append(f"优势: {strengths}")
             weaknesses = basic_profile.get("weaknesses", "")
+            if strengths:
+                parts.append(f"- 优势领域：{strengths}")
             if weaknesses:
-                known.append(f"薄弱: {weaknesses}")
+                parts.append(f"- 薄弱领域：{weaknesses}")
+
             interests = basic_profile.get("interests", "")
             if interests:
-                known.append(f"兴趣: {interests}")
+                parts.append(f"- 兴趣爱好：{interests}")
+
+            # 问卷信息
             q = basic_profile.get("questionnaire")
             if q:
                 major = q.get("major_direction", "")
                 if major:
-                    known.append(f"专业方向: {major}")
+                    parts.append(f"- 专业方向：{major}")
+
                 education = q.get("education_level", "")
                 if education:
-                    edu_map = {"HIGH_SCHOOL": "高中", "ASSOCIATE": "大专", "BACHELOR": "本科", "MASTER": "硕士", "PHD": "博士", "OTHER": "其他"}
-                    known.append(f"学历: {edu_map.get(education, education)}")
+                    edu_map = {
+                        "HIGH_SCHOOL": "高中", "ASSOCIATE": "大专", "BACHELOR": "本科",
+                        "MASTER": "硕士", "PHD": "博士", "OTHER": "其他"
+                    }
+                    parts.append(f"- 学历水平：{edu_map.get(education, education)}")
+
                 goals = q.get("learning_goals", [])
                 if goals:
-                    goal_map = {"EXAM": "应试", "INTEREST": "兴趣", "EMPLOYMENT": "就业", "PROMOTION": "晋升", "SELF_IMPROVEMENT": "自我提升", "OTHER": "其他"}
-                    known.append(f"目标: {', '.join(goal_map.get(g, g) for g in goals)}")
+                    goal_map = {
+                        "EXAM": "应试备考", "INTEREST": "兴趣学习", "EMPLOYMENT": "求职就业",
+                        "PROMOTION": "职场晋升", "SELF_IMPROVEMENT": "自我提升", "OTHER": "其他"
+                    }
+                    goals_cn = [goal_map.get(g, g) for g in goals]
+                    parts.append(f"- 学习目标：{', '.join(goals_cn)}")
+
+                motivation = q.get("motivation_level", "")
+                if motivation:
+                    mot_map = {"STRONG": "强", "MODERATE": "中等", "WEAK": "弱"}
+                    parts.append(f"- 学习动机：{mot_map.get(motivation, motivation)}")
+
                 subj_level = q.get("subject_level", "")
                 if subj_level:
                     lvl_map = {"ZERO_BASIC": "零基础", "BEGINNER": "初级", "INTERMEDIATE": "中级", "ADVANCED": "高级"}
-                    known.append(f"学科水平: {lvl_map.get(subj_level, subj_level)}")
+                    parts.append(f"- 学科水平：{lvl_map.get(subj_level, subj_level)}")
+
                 self_strengths = q.get("self_strengths", [])
                 if self_strengths:
-                    known.append(f"自认优势: {', '.join(self_strengths)}")
+                    parts.append(f"- 自我优势：{', '.join(self_strengths)}")
+
                 self_weaknesses = q.get("self_weaknesses", [])
                 if self_weaknesses:
-                    known.append(f"自认不足: {', '.join(self_weaknesses)}")
-                methods = q.get("learning_methods", [])
-                if methods:
-                    method_map = {"VIDEO": "视频", "READING": "阅读", "HANDS_ON": "实践", "DISCUSSION": "讨论", "LECTURE": "听讲", "QUIZ": "刷题"}
-                    known.append(f"偏好方式: {', '.join(method_map.get(m, m) for m in methods)}")
+                    parts.append(f"- 自我不足：{', '.join(self_weaknesses)}")
+
+                learning_methods = q.get("learning_methods", [])
+                if learning_methods:
+                    method_map = {
+                        "VIDEO": "视频学习", "READING": "阅读教材", "HANDS_ON": "动手实践",
+                        "DISCUSSION": "讨论交流", "LECTURE": "听讲座", "QUIZ": "刷题练习"
+                    }
+                    methods_cn = [method_map.get(m, m) for m in learning_methods]
+                    parts.append(f"- 偏好学习方式：{', '.join(methods_cn)}")
+
                 session_dur = q.get("session_duration", "")
                 if session_dur:
-                    dur_map = {"LESS_30MIN": "<30min", "30_60MIN": "30-60min", "1_2HOURS": "1-2h", "2_4HOURS": "2-4h", "MORE_4HOURS": ">4h"}
-                    known.append(f"单次时长: {dur_map.get(session_dur, session_dur)}")
+                    dur_map = {
+                        "LESS_30MIN": "少于30分钟", "30_60MIN": "30-60分钟", "1_2HOURS": "1-2小时",
+                        "2_4HOURS": "2-4小时", "MORE_4HOURS": "4小时以上"
+                    }
+                    parts.append(f"- 单次学习时长：{dur_map.get(session_dur, session_dur)}")
+
                 focus = q.get("focus_level", "")
                 if focus:
-                    f_map = {"VERY_HIGH": "很高", "HIGH": "较高", "MODERATE": "中等", "LOW": "较低", "VERY_LOW": "很低"}
-                    known.append(f"专注力: {f_map.get(focus, focus)}")
-            if known:
-                parts.append("")
-                parts.append("已知的学生信息（不要重复询问）：")
-                for item in known:
-                    parts.append(f"  {item}")
+                    f_map = {"VERY_HIGH": "非常高", "HIGH": "较高", "MODERATE": "中等", "LOW": "较低", "VERY_LOW": "非常低"}
+                    parts.append(f"- 专注力水平：{f_map.get(focus, focus)}")
 
-        # Knowledge base context (for answering factual questions)
         if knowledge_context:
             parts.append("")
-            parts.append("参考资料：")
-            parts.append(str(knowledge_context))
+            parts.append("相关知识库内容（优先基于此回答）：\n" + str(knowledge_context))
 
-        # Signals from conversation analysis (supplementary, don't over-rely)
+        if schedule:
+            parts.append("")
+            parts.append("当前课表信息：")
+            parts.append(str(schedule))
+
+        # 注入实时学习信号（对话过程中自动提取）
         if signals_profile:
+            difficulty = signals_profile.get("difficulty_distribution", {})
+            total = sum(difficulty.values()) if difficulty else 0
+            if total > 0:
+                dominant = max(difficulty, key=difficulty.get)
+                level_map = {"beginner": "初学者", "neutral": "中等", "advanced": "进阶"}
+                parts.append(f"- 当前对话难度感知：{level_map.get(dominant, '中等')}")
             gaps = signals_profile.get("gap_keywords", [])
             if gaps:
-                parts.append("")
-                parts.append(f"学生近期困惑: {', '.join(gaps[:3])}")
+                parts.append(f"- 学生近期困惑点：{', '.join(gaps[:3])}")
+            active = signals_profile.get("active_topics", [])
+            if active:
+                parts.append(f"- 当前讨论知识点：{', '.join(active[:5])}")
 
-        # Schedule is intentionally NOT included here
         return "\n".join(parts)
+
     def get_status(self) -> Dict[str, Any]:
         return {
             "agents": [
@@ -762,55 +714,12 @@ class Orchestrator:
 
     # ==================== 错题本 ====================
 
-    def _maybe_record_mistake(self, user_id: str, question: str, answer: str, context: dict) -> None:
-        import asyncio, json, re
-        logger.warning("MistakeBook: ENTER, user=[%s]", user_id[:20] if user_id else "EMPTY")
-        if not user_id or not user_id.strip():
-            logger.warning("MistakeBook: SKIP - empty user_id")
-            return
-        if not self.llm:
-            logger.warning("MistakeBook: SKIP - no llm")
-            return
-        # Rule-based pre-check: only record if AI corrected the student
-        correction_patterns = ["??", "??", "???", "???", "???", "??", "??", "??", "??"]
-        ai_first_line = answer[:100].strip()
-        is_correction = any(p in ai_first_line for p in correction_patterns)
-        if not is_correction:
-            logger.warning("MistakeBook: SKIP - AI did not correct student")
-            return
-        async def _check():
-            try:
-                prompt = "Extract mistake from: Student=" + question[:200] + " AI=" + answer[:150] + " Output ONLY: {\"has_mistake\":true,\"core_question\":\"<15 chars>\",\"student_misconception\":\"<20 chars>\",\"correct_answer\":\"<25 chars>\",\"topic\":\"<10 chars>\"}"
-                msgs = [{"role": "user", "content": prompt}]
-                result = await self.llm.chat(msgs)
-                logger.warning("Mistake LLM: %s", result[:200] if result else "EMPTY")
-                m = re.search(r'\{[^{}]*" + "(?:\{[^{}]*\}[^{}]*)*\}', result)
-                if not m:
-                    logger.warning("MistakeBook: LLM empty, using rule defaults")
-                    # Fallback: use question itself, extract key part
-                    q = question[:40].replace("???", "").replace("??", "").replace("?", "").replace("?", "").replace("?", "").strip() or question[:20]
-                    mb2 = await self._ensure_mistake_book()
-                    await mb2.add_mistake(user_id=user_id, question=q, student_answer="", reference_answer="", error_category="concept_unclear", knowledge_name="??????", course_id=context.get("course_id") if context else None)
-                    logger.warning("MistakeBook: rule-based record, q=%s", q)
-                    return
-                d = json.loads(m.group())
-                mb = await self._ensure_mistake_book()
-                await mb.add_mistake(user_id=user_id, question=str(d.get("core_question", question[:100]))[:40], student_answer=str(d.get("student_misconception", ""))[:50], reference_answer=str(d.get("correct_answer", ""))[:60], error_category="concept_unclear", error_pattern=str(d.get("student_misconception", ""))[:50], knowledge_name=str(d.get("topic", ""))[:30], course_id=context.get("course_id") if context else None)
-                logger.warning("MistakeBook: RECORDED topic=%s", d.get("topic", "?"))
-            except Exception as e:
-                logger.warning("MistakeBook: error %s", e)
-        try:
-            loop = asyncio.get_running_loop()
-            loop.create_task(_check())
-        except Exception as e:
-            logger.warning("MistakeBook: schedule error %s", e)
-
     async def _ensure_mistake_book(self):
         """懒加载错题本"""
         if not hasattr(self, "_mistake_book"):
             from ..memory.mistake_book import MistakeBook
-            from ...db.database import async_session_factory
-            self._mistake_book = MistakeBook(async_session_factory)
+            await self._ensure_redis()
+            self._mistake_book = MistakeBook(self._redis_client)
         return self._mistake_book
 
     async def add_mistake(self, user_id: str, question: str, student_answer: str, correct_answer: str = "", error_category: str = "concept_unclear", course_id: Optional[int] = None, knowledge_id: Optional[int] = None, knowledge_name: str = "") -> Dict[str, Any]:
@@ -1060,112 +969,21 @@ class Orchestrator:
             chat_history=chat_history,
             study_records=study_records or [],
         )
-
-    async def update_profile_from_activity(
-        self,
-        user_id: str,
-        current_profile: Dict[str, Any],
-        new_signals: Dict[str, Any] | None = None,
-        evaluation_results: List[Dict[str, Any]] | None = None,
-    ) -> Dict[str, Any]:
-        """Merge new learning signals/into existing profile"""
-        result = await self._call_agent_safe(
-            "profile_agent", self.profile_agent, "update_from_activity",
-            fallback={
-                "learning_style": current_profile.get("learningStyle", "VISUAL"),
-                "grade_level": current_profile.get("gradeLevel", "BEGINNER"),
-                "strengths": [],
-                "weaknesses": [],
-                "interests": [],
-                "change_summary": "",
-            },
-            current_profile=current_profile,
-            new_signals=new_signals or {},
-            evaluation_results=evaluation_results or [],
-        )
-        # Invalidate cached profile and dimensions
-        await self._ensure_redis()
-        if self._profile_cache:
-            await self._profile_cache.invalidate_user_all(user_id)
-        return result
-
-    async def analyze_profile_dimensions(
-        self,
-        user_id: str,
-        basic_profile: Dict[str, Any],
-        study_records: List[Dict[str, Any]] | None = None,
-        evaluation_history: List[Dict[str, Any]] | None = None,
-        chat_signals: Dict[str, Any] | None = None,
-        learning_path_progress: Dict[str, Any] | None = None,
-    ) -> Dict[str, Any]:
-        """Generate 5-dimension ability scores from learning data (data-driven radar)"""
-        await self._ensure_redis()
-        result = await self._call_agent_safe(
-            "profile_agent", self.profile_agent, "analyze_dimensions",
-            fallback={
-                "dimensions": {
-                    "theoretical_knowledge": {"score": 50, "label": "Theory", "description": "Fallback"},
-                    "practical_ability": {"score": 50, "label": "Practice", "description": "Fallback"},
-                    "problem_solving": {"score": 50, "label": "Problem Solving", "description": "Fallback"},
-                    "innovative_thinking": {"score": 50, "label": "Innovation", "description": "Fallback"},
-                    "collaboration": {"score": 50, "label": "Collaboration", "description": "Fallback"},
-                },
-                "overall_assessment": "",
-                "confidence": 0.0,
-            },
-            basic_profile=basic_profile,
-            study_records=study_records or [],
-            evaluation_history=evaluation_history or [],
-            chat_signals=chat_signals or {},
-            learning_path_progress=learning_path_progress or {},
-        )
-        if self._profile_cache and "error" not in result:
-            cached = dict(result)
-            cached["_type"] = "dimensions"
-            await self._profile_cache.set(user_id, cached, course_id=None)
-        return result
-
-
     async def generate_learning_path(
         self,
         basic_profile: Dict[str, Any],
         course_title: str,
         course_knowledge: List[Dict[str, Any]],
-        course_description: str = "",
         goal: str = "掌握课程核心知识",
-        schedule: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """生成学习路径（委托给 PlannerAgent）"""
-
-        # RAG 检索：为每个知识库条目获取实际内容
-        enriched_knowledge = list(course_knowledge)  # shallow copy
-        if self.rag and enriched_knowledge:
-            for item in enriched_knowledge:
-                kid = item.get("id")
-                if kid is None:
-                    continue
-                try:
-                    results = await self.rag.retrieve(
-                        query=item.get("title", ""),
-                        top_k=3,
-                        knowledge_ids=[kid],
-                    )
-                    if results:
-                        content_snippets = [r["content"] for r in results]
-                        item["content"] = "\n".join(content_snippets)
-                except Exception as e:
-                    logger.debug("RAG 检索知识库内容失败: knowledge_id=%s, %s", kid, e)
-
         return await self._call_agent_safe(
             "planner_agent", self.planner_agent, "generate_path",
             fallback={"title": course_title, "steps": [], "error": "planner_failed"},
-            timeout=180.0,
-            student_profile=basic_profile,
+            student_profile=student_profile,
             course_title=course_title,
-            course_description=course_description,
-            course_knowledge=enriched_knowledge,
+            course_knowledge=course_knowledge,
             goal=goal,
-            schedule=schedule,
         )
 
     async def generate_resource(
@@ -1175,13 +993,11 @@ class Orchestrator:
         knowledge_ids: Optional[List[int]] = None,
         difficulty: str = "medium",
         count: int = 5,
-        question_type: str = "mixed",
-        student_profile: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Generate teaching resources (delegated to ResourceAgent, profile-aware)"""
+        """生成教学资源（委托给 ResourceAgent）"""
         task_type = RESOURCE_TYPE_MAP.get(resource_type)
         if not task_type:
-            return {"error": f"Unsupported resource type: {resource_type}"}
+            return {"error": f"不支持的资源类型: {resource_type}"}
 
         return await self._call_agent_safe(
             "resource_agent", self.resource_agent, task_type,
@@ -1190,9 +1006,8 @@ class Orchestrator:
             knowledge_ids=knowledge_ids,
             difficulty=difficulty,
             count=count,
-            question_type=question_type,
-            student_profile=student_profile or {},
         )
+
     async def evaluate_answer(
         self,
         question: str,
@@ -1231,7 +1046,6 @@ class Orchestrator:
         context = context or {}
         knowledge_ids = context.get("knowledge_ids")
         basic_profile = context.get("basic_profile")
-        course_title = context.get("course_title", "")
         user_id = context.get("user_id", "")
         course_id = context.get("course_id")
 
@@ -1328,9 +1142,8 @@ class Orchestrator:
             except Exception as e:
                 logger.warning("自动记录错题失败: %s", e)
 
-        # 保存对话历史 + 更新画像信号
+        # 保存对话历史
         await self._save_chat_message(session_id, question, best_answer)
-        await self._extract_and_update_signals(user_id, session_id or "", question, best_answer)
 
         return {
             "answer": best_answer,
@@ -1451,7 +1264,6 @@ class Orchestrator:
         messages: List[Dict[str, str]],
         course_id: Optional[str] = None,
         course_title: str = "",
-        course_description: str = "",
         user_id: str = "",
     ) -> Dict[str, Any]:
         """
@@ -1517,7 +1329,7 @@ class Orchestrator:
                         seen_ids.add(kid)
                         knowledge_items.append({
                             "id": kid,
-                            "content": r["content"][:600],
+                            "content": r["content"][:300],
                             "source": r.get("source", ""),
                             "score": r.get("score", 0),
                         })
@@ -1552,9 +1364,8 @@ class Orchestrator:
 
         # Step 5: 调用 PlannerAgent 生成学习路径
         path_result = await self.generate_learning_path(
-            basic_profile=student_profile,
+            student_profile=student_profile,
             course_title=course_title,
-            course_description=course_description,
             course_knowledge=course_knowledge,
             goal=goal,
         )

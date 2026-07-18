@@ -97,8 +97,7 @@ export const chatApi = {
 };
 
 export const learningApi = {
-    generatePath(data) { return http.post('/learning/paths/generate', data, { timeout: 120000 }); },
-    generatePathFromChat(data) { return http.post('/learning/paths/generate-from-chat', data, { timeout: 120000 }); },
+    generatePath(data) { return http.post('/learning/paths/generate', data); },
     listPaths(includeArchived = false) { return http.get('/learning/paths/', { params: { includeArchived } }); },
     getPathById(id) { return http.get(`/learning/paths/${id}`); },
     updateStepStatus(pathId, stepId, status) {
@@ -109,9 +108,7 @@ export const learningApi = {
     toggleArchive(id) { return http.put(`/learning/paths/${id}/archive`); },
     getProfile() { return http.get('/profile/'); },
     updateProfile(data) { return http.put('/profile/', data); },
-
     getRadarData() { return http.get('/profile/radar'); },
-    getProfileHistory(limit = 10) { return http.get('/profile/history', { params: { limit } }); },
     recordStudy(data) { return http.post('/study/records/', data); },
     listRecords(page = 1, size = 10) { return http.get('/study/records/', { params: { page, size } }); },
     getStudyStats() { return http.get('/study/records/stats'); },
@@ -123,8 +120,8 @@ export const learningApi = {
 };
 
 export const knowledgeApi = {
-    upload(file, courseId, name, description) { const formData = new FormData(); formData.append("file", file); if (courseId != null) formData.append("courseId", courseId); if (name) formData.append("name", name); if (description) formData.append("description", description); return http.post("/knowledge/upload", formData, { timeout: 600000 }); },
-    uploadBatch(files, courseId, name, description) { const formData = new FormData(); files.forEach(f => formData.append("files", f)); if (courseId != null) formData.append("courseId", courseId); if (name) formData.append("name", name); if (description) formData.append("description", description); return http.post("/knowledge/upload-batch", formData, { timeout: 600000 }); },
+    upload(file) { const formData = new FormData(); formData.append("file", file); return http.post("/knowledge/upload", formData, { headers: { "Content-Type": "multipart/form-data" } }); },
+    uploadBatch(files) { const formData = new FormData(); files.forEach(f => formData.append("files", f)); return http.post("/knowledge/upload-batch", formData, { headers: { "Content-Type": "multipart/form-data" } }); },
     list(courseId) { return http.get('/knowledge', { params: { courseId } }); },
     listAll() { return http.get('/knowledge/all'); },
     listPending() { return http.get('/knowledge/pending'); },
@@ -199,19 +196,13 @@ export const agentApi = {
     },
     async *streamChatWithQualityCheck(message, context = {}, sessionId = null, signal = null) {
         const token = localStorage.getItem('accessToken');
-        const url = sessionId
-            ? `/api/chat/sessions/${sessionId}/messages/qa-stream`
-            : '/agent/chat/stream-quality-check';
-        const body = sessionId
-            ? JSON.stringify({ message })
-            : JSON.stringify({ message, context, session_id: sessionId });
-        const response = await fetch(url, {
+        const response = await fetch('/agent/chat/stream-quality-check', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 ...(token ? { Authorization: 'Bearer ' + token } : {}),
             },
-            body,
+            body: JSON.stringify({ message, context, session_id: sessionId }),
             signal,
         });
         if (!response.ok) throw new Error('HTTP ' + response.status);
@@ -244,26 +235,4 @@ export const agentApi = {
     },
 };
 
-
-// 步骤学习 API
-export const stepApi = {
-    generateContent(pathId, stepId) {
-        return http.post(`/learning/paths/${pathId}/steps/${stepId}/content`, null, { timeout: 120000 });
-    },
-    generateExercises(pathId, stepId, count = 3) {
-        return http.post(`/learning/paths/${pathId}/steps/${stepId}/exercises`, null, { params: { count }, timeout: 120000 });
-    },
-    evaluateExercises(pathId, stepId, answers) {
-        return http.post(`/learning/paths/${pathId}/steps/${stepId}/evaluate`, answers, { timeout: 120000 });
-    },
-    generateCheckpoint(pathId, stepId, questionCount = 10) {
-        return http.post(`/learning/paths/${pathId}/steps/${stepId}/checkpoint`, null, { params: { questionCount }, timeout: 120000 });
-    },
-    evaluateCheckpoint(pathId, stepId, answers) {
-        return http.post(`/learning/paths/${pathId}/steps/${stepId}/checkpoint/evaluate`, answers, { timeout: 120000 });
-    },
-    recordStudyTime(pathId, minutes) {
-        return http.post(`/learning/paths/${pathId}/study-time`, null, { params: { minutes } });
-    },
-};
 export default http;

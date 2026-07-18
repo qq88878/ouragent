@@ -25,22 +25,16 @@
       </div>
     </div>
 
-    <div class="filter-bar">
-      <el-input v-model="searchKeyword" placeholder="搜索文件名..." clearable style="width:200px">
-        <template #prefix><el-icon :size="14"><Search /></el-icon></template>
+    <div class="search-bar">
+      <el-input v-model="searchKeyword" placeholder="按文件名搜索..." clearable class="search-input" @keyup.enter="doSearch" @clear="doSearch">
+        <template #prefix><el-icon :size="16"><Search /></el-icon></template>
+        <template #append>
+          <el-button @click="doSearch" :loading="loading">搜索</el-button>
+        </template>
       </el-input>
-      <el-select v-model="filterCourseId" placeholder="按课程筛选" clearable style="width:160px">
-        <el-option v-for="c in courses" :key="c.id" :label="c.title" :value="c.id" />
-      </el-select>
-      <el-select v-model="filterFileType" placeholder="文件类型" clearable style="width:120px">
-        <el-option label="PDF" value="pdf" />
-        <el-option label="DOCX" value="docx" />
-        <el-option label="Markdown" value="md" />
-        <el-option label="TXT" value="txt" />
-      </el-select>
     </div>
 
-    <el-table :data="filteredKnowledgeList" v-loading="loading" stripe class="kb-table" @selection-change="handleSelectionChange">
+    <el-table :data="knowledgeList" v-loading="loading" stripe class="kb-table" @selection-change="handleSelectionChange">
       <template #empty>
         <el-empty v-if="!loading" description="暂无知识库文件" :image-size="80" />
       </template>
@@ -60,9 +54,6 @@
         <template #default="{ row }">
           <el-tag size="small" effect="plain" round>{{ row.fileType }}</el-tag>
         </template>
-      </el-table-column>
-      <el-table-column label="所属课程" width="140">
-        <template #default="{ row }">{{ row.courseName || '-' }}</template>
       </el-table-column>
       <el-table-column label="大小" width="90">
         <template #default="{ row }">{{ formatSize(row.fileSize) }}</template>
@@ -100,13 +91,6 @@
 
     <!-- 上传弹窗 -->
     <el-dialog v-if="isTeacherOrAdmin" v-model="showUploadDialog" title="上传知识库文件" width="480px">
-      <el-form label-width="70px" style="margin-bottom:12px">
-        <el-form-item label="所属课程">
-          <el-select v-model="uploadForm.courseId" placeholder="选择课程（可选）" clearable style="width:100%">
-            <el-option v-for="c in courses" :key="c.id" :label="c.title" :value="c.id" />
-          </el-select>
-        </el-form-item>
-      </el-form>
       <el-upload
         ref="uploadRef"
         drag
@@ -180,28 +164,12 @@ const isAdmin = computed(() => auth.user?.role === 'ADMIN');
 const isTeacherOrAdmin = computed(() => isTeacher.value || isAdmin.value);
 
 const knowledgeList = ref([]);
-const filteredKnowledgeList = computed(() => {
-  let list = knowledgeList.value;
-  if (searchKeyword.value) {
-    const kw = searchKeyword.value.toLowerCase();
-    list = list.filter(item => (item.name || '').toLowerCase().includes(kw));
-  }
-  if (filterCourseId.value) {
-    list = list.filter(item => item.courseId === filterCourseId.value);
-  }
-  if (filterFileType.value) {
-    list = list.filter(item => (item.fileType || '').toLowerCase() === filterFileType.value);
-  }
-  return list;
-});
 const loading = ref(false);
 const searchKeyword = ref('');
-const filterCourseId = ref(null);
-const filterFileType = ref('');
 const approvalFilter = ref('');
 
 const showUploadDialog = ref(false);
-const uploadForm = reactive({ files: [], fileList: [], courseId: null });
+const uploadForm = reactive({ files: [], fileList: [] });
 const uploading = ref(false);
 
 const showContentDialog = ref(false);
@@ -220,7 +188,9 @@ const courses = ref([]);
 
 onMounted(async () => {
   await loadKnowledge();
-  try { const r = await courseApi.list({ page: 1, size: 100 }); courses.value = r.data?.records || []; } catch {}
+  if (isTeacherOrAdmin.value) {
+    try { const r = await courseApi.list({ page: 1, size: 100 }); courses.value = r.data?.records || []; } catch {}
+  }
 });
 
 function canEdit(row) {
@@ -290,7 +260,7 @@ async function doUpload() {
   if (uploadForm.files.length === 0) { ElMessage.warning('请选择文件'); return; }
   uploading.value = true;
   try {
-    const res = await knowledgeApi.uploadBatch(uploadForm.files, uploadForm.courseId);
+    const res = await knowledgeApi.uploadBatch(uploadForm.files);
     if (res.code === 200) {
       ElMessage.success('上传成功');
       showUploadDialog.value = false;
