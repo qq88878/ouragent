@@ -73,6 +73,8 @@
       </el-col>
     </el-row>
 
+    <!-- Profile History -->
+    <ProfileHistoryPanel v-if="isStudent" class="questionnaire-section" />
     <StudentQuestionnaire v-if="isStudent" class="questionnaire-section" />
   </div>
 </template>
@@ -81,6 +83,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useAuthStore } from '@/stores/auth';
 import StudentQuestionnaire from '@/components/StudentQuestionnaire.vue';
+import ProfileHistoryPanel from '@/components/ProfileHistoryPanel.vue';
 import { userApi, authApi } from '@/api';
 import { ElMessage } from 'element-plus';
 import { Message, CircleCheckFilled } from '@element-plus/icons-vue';

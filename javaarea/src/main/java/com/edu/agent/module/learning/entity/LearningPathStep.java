@@ -15,6 +15,13 @@ public class LearningPathStep extends BaseEntity {
     private String stepType; // CONCEPT/PRACTICE/REVIEW/PROJECT
     private Integer estimatedHours;
 
+    private String content;
+    private String exercises;
+    private String exerciseResults;
+    private String knowledgeIds;
+    private Integer isCheckpoint;
+    private String checkpointScope;
+
     @java.lang.SuppressWarnings("all")
     public LearningPathStep() {
     }
@@ -98,6 +105,44 @@ public class LearningPathStep extends BaseEntity {
     public void setEstimatedHours(final Integer estimatedHours) {
         this.estimatedHours = estimatedHours;
     }
+
+
+    @java.lang.SuppressWarnings("all")
+    public String getContent() { return this.content; }
+
+    @java.lang.SuppressWarnings("all")
+    public void setContent(final String content) { this.content = content; }
+
+    @java.lang.SuppressWarnings("all")
+    public String getExercises() { return this.exercises; }
+
+    @java.lang.SuppressWarnings("all")
+    public void setExercises(final String exercises) { this.exercises = exercises; }
+
+    @java.lang.SuppressWarnings("all")
+    public String getExerciseResults() { return this.exerciseResults; }
+
+    @java.lang.SuppressWarnings("all")
+    public void setExerciseResults(final String exerciseResults) { this.exerciseResults = exerciseResults; }
+
+    @java.lang.SuppressWarnings("all")
+    public String getKnowledgeIds() { return this.knowledgeIds; }
+
+    @java.lang.SuppressWarnings("all")
+    public void setKnowledgeIds(final String knowledgeIds) { this.knowledgeIds = knowledgeIds; }
+
+    @java.lang.SuppressWarnings("all")
+    public Integer getIsCheckpoint() { return this.isCheckpoint; }
+
+    @java.lang.SuppressWarnings("all")
+    public void setIsCheckpoint(final Integer isCheckpoint) { this.isCheckpoint = isCheckpoint; }
+
+    @java.lang.SuppressWarnings("all")
+    public String getCheckpointScope() { return this.checkpointScope; }
+
+    @java.lang.SuppressWarnings("all")
+    public void setCheckpointScope(final String checkpointScope) { this.checkpointScope = checkpointScope; }
+
 
     @java.lang.Override
     @java.lang.SuppressWarnings("all")

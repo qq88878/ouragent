@@ -1,4 +1,4 @@
-"""Orchestrator - 多 Agent 协作编排器，系统总入口"""
+﻿"""Orchestrator - 多 Agent 协作编排器，系统总入口"""
 
 from __future__ import annotations
 
@@ -181,6 +181,24 @@ class Orchestrator:
                 history = await conv.get_recent_context_for_llm(max_messages=10)
                 await self._session_manager.touch_session(session_id)
 
+                # Auto-create session in Redis if not exists (for signal tracking)
+                existing = await self._session_manager.get_session(session_id)
+                logger.info("Session %s: existing=%s, user_id=%s", session_id, existing, context.get("user_id"))
+                if not existing and context.get("user_id"):
+                    from datetime import datetime
+                    meta = {
+                        "session_id": session_id,
+                        "user_id": str(context["user_id"]),
+                        "course_id": context.get("course_id"),
+                        "created_at": datetime.now().isoformat(),
+                        "last_active": datetime.now().isoformat(),
+                        "message_count": 0,
+                    }
+                    await self._session_manager.redis.set_json(
+                        self._session_manager._meta_key(session_id),
+                        meta,
+                        ttl=7*24*3600,
+                    )
                 # 加载会话级学习信号
                 session_meta = await self._session_manager.get_session(session_id)
                 if session_meta:
@@ -992,6 +1010,72 @@ class Orchestrator:
             chat_history=chat_history,
             study_records=study_records or [],
         )
+
+    async def update_profile_from_activity(
+        self,
+        user_id: str,
+        current_profile: Dict[str, Any],
+        new_signals: Dict[str, Any] | None = None,
+        evaluation_results: List[Dict[str, Any]] | None = None,
+    ) -> Dict[str, Any]:
+        """Merge new learning signals/into existing profile"""
+        result = await self._call_agent_safe(
+            "profile_agent", self.profile_agent, "update_from_activity",
+            fallback={
+                "learning_style": current_profile.get("learningStyle", "VISUAL"),
+                "grade_level": current_profile.get("gradeLevel", "BEGINNER"),
+                "strengths": [],
+                "weaknesses": [],
+                "interests": [],
+                "change_summary": "",
+            },
+            current_profile=current_profile,
+            new_signals=new_signals or {},
+            evaluation_results=evaluation_results or [],
+        )
+        # Invalidate cached profile and dimensions
+        await self._ensure_redis()
+        if self._profile_cache:
+            await self._profile_cache.invalidate_user_all(user_id)
+        return result
+
+    async def analyze_profile_dimensions(
+        self,
+        user_id: str,
+        basic_profile: Dict[str, Any],
+        study_records: List[Dict[str, Any]] | None = None,
+        evaluation_history: List[Dict[str, Any]] | None = None,
+        chat_signals: Dict[str, Any] | None = None,
+        learning_path_progress: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        """Generate 5-dimension ability scores from learning data (data-driven radar)"""
+        await self._ensure_redis()
+        result = await self._call_agent_safe(
+            "profile_agent", self.profile_agent, "analyze_dimensions",
+            fallback={
+                "dimensions": {
+                    "theoretical_knowledge": {"score": 50, "label": "Theory", "description": "Fallback"},
+                    "practical_ability": {"score": 50, "label": "Practice", "description": "Fallback"},
+                    "problem_solving": {"score": 50, "label": "Problem Solving", "description": "Fallback"},
+                    "innovative_thinking": {"score": 50, "label": "Innovation", "description": "Fallback"},
+                    "collaboration": {"score": 50, "label": "Collaboration", "description": "Fallback"},
+                },
+                "overall_assessment": "",
+                "confidence": 0.0,
+            },
+            basic_profile=basic_profile,
+            study_records=study_records or [],
+            evaluation_history=evaluation_history or [],
+            chat_signals=chat_signals or {},
+            learning_path_progress=learning_path_progress or {},
+        )
+        if self._profile_cache and "error" not in result:
+            cached = dict(result)
+            cached["_type"] = "dimensions"
+            await self._profile_cache.set(user_id, cached, course_id=None)
+        return result
+
+
     async def generate_learning_path(
         self,
         basic_profile: Dict[str, Any],
@@ -1041,11 +1125,13 @@ class Orchestrator:
         knowledge_ids: Optional[List[int]] = None,
         difficulty: str = "medium",
         count: int = 5,
+        question_type: str = "mixed",
+        student_profile: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """生成教学资源（委托给 ResourceAgent）"""
+        """Generate teaching resources (delegated to ResourceAgent, profile-aware)"""
         task_type = RESOURCE_TYPE_MAP.get(resource_type)
         if not task_type:
-            return {"error": f"不支持的资源类型: {resource_type}"}
+            return {"error": f"Unsupported resource type: {resource_type}"}
 
         return await self._call_agent_safe(
             "resource_agent", self.resource_agent, task_type,
@@ -1054,8 +1140,9 @@ class Orchestrator:
             knowledge_ids=knowledge_ids,
             difficulty=difficulty,
             count=count,
+            question_type=question_type,
+            student_profile=student_profile or {},
         )
-
     async def evaluate_answer(
         self,
         question: str,

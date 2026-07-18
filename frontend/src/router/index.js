@@ -1,4 +1,4 @@
-﻿import { createRouter, createWebHistory } from 'vue-router';
+import { createRouter, createWebHistory } from 'vue-router';
 import MistakeBookView from '@/views/MistakeBookView.vue';
 
 const ChatView = () => import('@/views/ChatView.vue');
@@ -51,6 +51,24 @@ const routes = [
     path: '/mistake-book',
     name: 'MistakeBook',
     component: MistakeBookView,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/learning/:pathId',
+    name: 'PathDetail',
+    component: () => import('@/views/PathDetailView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/learning/:pathId/test',
+    name: 'PathTest',
+    component: () => import('@/views/PathTestView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/learning/:pathId/report',
+    name: 'PathReport',
+    component: () => import('@/views/PathReportView.vue'),
     meta: { requiresAuth: true },
   },
   {

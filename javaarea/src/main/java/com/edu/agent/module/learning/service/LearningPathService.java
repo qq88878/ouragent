@@ -25,4 +25,14 @@ public interface LearningPathService {
     void toggleStar(Long pathId);
 
     void toggleArchive(Long pathId);
+
+    // ===== Step Content & Exercises =====
+
+    LearningPathDTO generateStepContent(Long pathId, Long stepId);
+    LearningPathDTO generateStepExercises(Long pathId, Long stepId, int count);
+    Map<String, Object> evaluateStepExercises(Long pathId, Long stepId, Map<String, String> answers);
+    LearningPathDTO generateCheckpointTest(Long pathId, Long stepId, int questionCount);
+    Map<String, Object> evaluateCheckpointTest(Long pathId, Long stepId, Map<String, String> answers);
+    void recordStudyTime(Long pathId, int minutes);
+
 }

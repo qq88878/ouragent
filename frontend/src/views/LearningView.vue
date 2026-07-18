@@ -13,7 +13,7 @@
     <el-empty v-if="paths.length === 0 && !loading" description="暂无学习路径，进入课程后在AI对话中说出你的学习目标即可自动生成" :image-size="100" />
 
     <div v-loading="loading" class="paths-list">
-      <div v-for="path in paths" :key="path.id" class="path-card" :class="{ 'path-archived': path.archived === 1 }">
+      <div v-for="path in paths" :key="path.id" class="path-card" @click="router.push(`/learning/${path.id}`)" style="cursor:pointer" :class="{ 'path-archived': path.archived === 1 }">
         <div class="path-header">
           <div class="path-info">
             <h4>
@@ -156,11 +156,7 @@ function cycleStep(pathId, step) {
 }
 
 function startLearning(step) {
-  if (step.knowledgeBaseId) {
-    router.push({ path: '/knowledge', query: { id: step.knowledgeBaseId } });
-  } else {
-    ElMessage.info('该步骤暂未关联知识库内容');
-  }
+  router.push(`/learning/${path.id}`);
 }
 
 async function toggleStar(id) {

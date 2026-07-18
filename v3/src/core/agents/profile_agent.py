@@ -20,6 +20,8 @@ class ProfileAgent(BaseAgent):
 
     TASK_ANALYZE_BASIC = "analyze_basic"
     TASK_ANALYZE_COURSE = "analyze_course"
+    TASK_ANALYZE_DIMENSIONS = "analyze_dimensions"
+    TASK_UPDATE_FROM_ACTIVITY = "update_from_activity"
 
     @property
     def system_prompt(self) -> str:
@@ -43,6 +45,20 @@ class ProfileAgent(BaseAgent):
                 basic_profile=kwargs.get("basic_profile", {}),
                 chat_history=kwargs.get("chat_history", []),
                 study_records=kwargs.get("study_records", []),
+            )
+        elif task_type == self.TASK_ANALYZE_DIMENSIONS:
+            return await self.analyze_dimensions(
+                basic_profile=kwargs.get("basic_profile", {}),
+                study_records=kwargs.get("study_records", []),
+                evaluation_history=kwargs.get("evaluation_history", []),
+                chat_signals=kwargs.get("chat_signals", {}),
+                learning_path_progress=kwargs.get("learning_path_progress", {}),
+            )
+        elif task_type == self.TASK_UPDATE_FROM_ACTIVITY:
+            return await self.update_profile_from_activity(
+                current_profile=kwargs.get("current_profile", {}),
+                new_signals=kwargs.get("new_signals", {}),
+                evaluation_results=kwargs.get("evaluation_results", []),
             )
         else:
             raise ValueError(f"ProfileAgent 不支持任务类型: {task_type}")
@@ -189,3 +205,117 @@ class ProfileAgent(BaseAgent):
                       len(result.get("course_strengths", [])),
                       len(result.get("course_weaknesses", [])))
         return result
+
+    # ======================== Dimension Scoring (data-driven for radar chart) ========================
+
+    async def analyze_dimensions(
+        self,
+        basic_profile: Dict[str, Any],
+        study_records: List[Dict[str, Any]],
+        evaluation_history: List[Dict[str, Any]],
+        chat_signals: Dict[str, Any] | None = None,
+        learning_path_progress: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        """Generate 5-dimension ability scores from learning data"""
+        profile_text = json.dumps(basic_profile, ensure_ascii=False)
+        records_text = json.dumps(study_records[-20:] if study_records else [], ensure_ascii=False)
+        eval_text = json.dumps(evaluation_history[-10:] if evaluation_history else [], ensure_ascii=False)
+        signals_text = json.dumps(chat_signals or {}, ensure_ascii=False)
+        progress_text = json.dumps(learning_path_progress or {}, ensure_ascii=False)
+
+        prompt = f"""Student Ability Dimension Assessment
+
+Evaluate the student on 5 dimensions (0-100) based on the data below.
+
+[Basic Profile]
+{profile_text}
+
+[Study Records (last 20)] 
+{records_text}
+
+[Evaluation History (last 10)]
+{eval_text}
+
+[Chat Signals]
+{signals_text}
+
+[Learning Path Progress]
+{progress_text}
+
+Output JSON:
+{{
+  "dimensions": {{
+    "theoretical_knowledge": {{"score": 0-100, "label": "Theory", "description": "reasoning"}},
+    "practical_ability": {{"score": 0-100, "label": "Practice", "description": "reasoning"}},
+    "problem_solving": {{"score": 0-100, "label": "Problem Solving", "description": "reasoning"}},
+    "innovative_thinking": {{"score": 0-100, "label": "Innovation", "description": "reasoning"}},
+    "collaboration": {{"score": 0-100, "label": "Collaboration", "description": "reasoning"}}
+  }},
+  "overall_assessment": "2-3 sentence summary",
+  "confidence": 0.0-1.0
+}}
+
+Rules: base scores on actual data; use 50 as default when no data."""
+        response = await self.chat(prompt)
+        result = parse_llm_json(response, fallback={
+            "dimensions": {
+                "theoretical_knowledge": {"score": 50, "label": "Theory", "description": "No data"},
+                "practical_ability": {"score": 50, "label": "Practice", "description": "No data"},
+                "problem_solving": {"score": 50, "label": "Problem Solving", "description": "No data"},
+                "innovative_thinking": {"score": 50, "label": "Innovation", "description": "No data"},
+                "collaboration": {"score": 50, "label": "Collaboration", "description": "No data"},
+            },
+            "overall_assessment": "",
+            "confidence": 0.0,
+        })
+        logger.info("Dimension analysis complete: confidence=%.2f", result.get("confidence", 0))
+        return result
+
+    async def update_profile_from_activity(
+        self,
+        current_profile: Dict[str, Any],
+        new_signals: Dict[str, Any],
+        evaluation_results: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Merge new learning signals into existing profile"""
+        signals_text = json.dumps(new_signals, ensure_ascii=False)
+        eval_text = json.dumps(evaluation_results, ensure_ascii=False)
+        profile_text = json.dumps(current_profile, ensure_ascii=False)
+
+        prompt = f"""Merge new learning signals into the student's profile.
+
+[Current Profile]
+{profile_text}
+
+[New Chat Signals]
+{signals_text}
+
+[Recent Evaluations]
+{eval_text}
+
+Output JSON (only updated fields):
+{{
+  "learning_style": "current or updated",
+  "grade_level": "current or updated",
+  "strengths": ["updated strengths"],
+  "weaknesses": ["updated weaknesses"],
+  "interests": ["updated interests"],
+  "recommended_strategy": "updated strategy (optional)",
+  "change_summary": "1-2 sentences describing what changed and why",
+  "confidence": 0.0-1.0
+}}
+
+Rules: only change fields where there is clear evidence. If no change, return current values."""
+        response = await self.chat(prompt)
+        result = parse_llm_json(response, fallback={
+            "learning_style": current_profile.get("learning_style", "VISUAL"),
+            "grade_level": current_profile.get("grade_level", "BEGINNER"),
+            "strengths": current_profile.get("strengths", []),
+            "weaknesses": current_profile.get("weaknesses", []),
+            "interests": current_profile.get("interests", []),
+            "change_summary": "",
+            "confidence": 0.0,
+        })
+        logger.info("Profile update: change_summary=%s", result.get("change_summary", ""))
+        return result
+

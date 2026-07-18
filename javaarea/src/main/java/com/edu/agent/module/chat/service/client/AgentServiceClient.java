@@ -28,6 +28,7 @@ import java.util.Map;
 import com.edu.agent.module.learning.dto.QuestionnaireDTO;
 
 @Service
+@SuppressWarnings({"unchecked", "rawtypes"})
 public class AgentServiceClient {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(AgentServiceClient.class);
 
@@ -372,7 +373,122 @@ public class AgentServiceClient {
         );
     }
 
+
+    // ===== Step Content & Exercises =====
+
+    /**
+     * ????????
+     * POST /agent/generate with type=generate_summary
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> generateStepContent(String topic, List<Integer> knowledgeIds) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("type", "generate_summary");
+        body.put("topic", topic);
+        if (knowledgeIds != null && !knowledgeIds.isEmpty()) {
+            body.put("knowledge_ids", knowledgeIds);
+        }
+
+        try {
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, createHeaders());
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    agentServiceUrl + "/agent/generate", request, Map.class);
+            return response.getBody() != null ? response.getBody() : new HashMap<>();
+        } catch (Exception e) {
+            log.error("??????????: topic={}", topic, e);
+            Map<String, Object> fallback = new HashMap<>();
+            fallback.put("topic", topic);
+            fallback.put("summary", "?AI ????????????");
+            return fallback;
+        }
+    }
+
+    /**
+     * ???????
+     * POST /agent/generate with type=generate_questions
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> generateExercises(String topic, List<Integer> knowledgeIds, String difficulty, int count) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("type", "generate_questions");
+        body.put("topic", topic);
+        body.put("difficulty", difficulty != null ? difficulty : "medium");
+        body.put("count", count);
+        body.put("question_type", "mixed");
+        if (knowledgeIds != null && !knowledgeIds.isEmpty()) {
+            body.put("knowledge_ids", knowledgeIds);
+        }
+
+        try {
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, createHeaders());
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    agentServiceUrl + "/agent/generate", request, Map.class);
+            return response.getBody() != null ? response.getBody() : new HashMap<>();
+        } catch (Exception e) {
+            log.error("???????: topic={}", topic, e);
+            return new HashMap<>();
+        }
+    }
+
+    /**
+     * ????????
+     * POST /agent/evaluate
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> evaluateExerciseAnswer(String question, String studentAnswer, String referenceAnswer, String knowledgeContext) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("question", question);
+        body.put("student_answer", studentAnswer);
+        if (referenceAnswer != null && !referenceAnswer.isEmpty()) {
+            body.put("reference_answer", referenceAnswer);
+        }
+        if (knowledgeContext != null && !knowledgeContext.isEmpty()) {
+            body.put("knowledge_context", knowledgeContext);
+        }
+
+        try {
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, createHeaders());
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    agentServiceUrl + "/agent/evaluate", request, Map.class);
+            return response.getBody() != null ? response.getBody() : new HashMap<>();
+        } catch (Exception e) {
+            log.error("??????: question={}", question, e);
+            Map<String, Object> fallback = new HashMap<>();
+            fallback.put("score", 0);
+            fallback.put("is_correct", false);
+            return fallback;
+        }
+    }
+
+    /**
+     * ??????
+     * POST /agent/generate with type=generate_questions
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> generateCheckpointTest(String topic, List<Integer> knowledgeIds, int questionCount) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("type", "generate_questions");
+        body.put("topic", topic);
+        body.put("difficulty", "mixed");
+        body.put("count", questionCount > 0 ? questionCount : 10);
+        body.put("question_type", "mixed");
+        if (knowledgeIds != null && !knowledgeIds.isEmpty()) {
+            body.put("knowledge_ids", knowledgeIds);
+        }
+
+        try {
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, createHeaders());
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    agentServiceUrl + "/agent/generate", request, Map.class);
+            return response.getBody() != null ? response.getBody() : new HashMap<>();
+        } catch (Exception e) {
+            log.error("????????: topic={}", topic, e);
+            return new HashMap<>();
+        }
+    }
+
     // ===== Profile Analysis =====
+
 
     /**
      * 基础画像分析 — 简洁问卷 → LLM
@@ -400,6 +516,33 @@ public class AgentServiceClient {
         }
     }
 
+    // ===== Dimensions Scoring (data-driven radar) =====
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> analyzeProfileDimensions(String userId, Map<String, Object> basicProfile,
+                                                            List<Map<String, Object>> studyRecords,
+                                                            List<Map<String, Object>> evaluationHistory,
+                                                            Map<String, Object> chatSignals,
+                                                            Map<String, Object> learningPathProgress) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("user_id", userId);
+        body.put("basic_profile", basicProfile != null ? basicProfile : Collections.emptyMap());
+        body.put("study_records", studyRecords != null ? studyRecords : Collections.emptyList());
+        body.put("evaluation_history", evaluationHistory != null ? evaluationHistory : Collections.emptyList());
+        body.put("chat_signals", chatSignals != null ? chatSignals : Collections.emptyMap());
+        body.put("learning_path_progress", learningPathProgress != null ? learningPathProgress : Collections.emptyMap());
+
+        try {
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>((Map<String, Object>) body, createHeaders());
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    agentServiceUrl + "/agent/profile/dimensions", request, Map.class);
+            return response.getBody() != null ? response.getBody() : new HashMap<>();
+        } catch (Exception e) {
+            log.error("Dimension scoring failed: userId={}", userId, e);
+            return new HashMap<>();
+        }
+    }
+
     // ===== Phase 5: Mistake Book =====
 
     /**
@@ -422,6 +565,29 @@ public class AgentServiceClient {
             return response.getBody() != null ? response.getBody() : new HashMap<>();
         } catch (Exception e) {
             log.error("调用错题诊断失败: userId={}", userId, e);
+            return new HashMap<>();
+        }
+    }
+
+    // ===== Profile Update (dynamic evolution) =====
+
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> updateProfileFromActivity(String userId, Map<String, Object> currentProfile,
+                                                              Map<String, Object> newSignals,
+                                                              List<Map<String, Object>> evaluationResults) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("user_id", userId);
+        body.put("current_profile", currentProfile != null ? currentProfile : Collections.emptyMap());
+        body.put("new_signals", newSignals != null ? newSignals : Collections.emptyMap());
+        body.put("evaluation_results", evaluationResults != null ? evaluationResults : Collections.emptyList());
+
+        try {
+            HttpEntity<Map<String, Object>> request = new HttpEntity<>(body, createHeaders());
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    agentServiceUrl + "/agent/profile/update", request, Map.class);
+            return response.getBody() != null ? response.getBody() : new HashMap<>();
+        } catch (Exception e) {
+            log.warn("Profile update failed: userId={}", userId, e);
             return new HashMap<>();
         }
     }

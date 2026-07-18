@@ -34,39 +34,6 @@
           <span>点击上方按钮创建新对话</span>
         </div>
       </div>
-
-      <!-- 学习画像面板 -->
-      <div v-if="currentSessionId && signals" class="signals-panel">
-        <div class="signals-header">学习画像</div>
-
-        <div v-if="signals.active_topics?.length" class="signals-section">
-          <div class="signals-label">讨论知识点</div>
-          <div class="signals-tags">
-            <el-tag v-for="(t, i) in signals.active_topics.slice(0, 6)" :key="i" size="small" effect="plain" type="primary">{{ t }}</el-tag>
-          </div>
-        </div>
-
-        <div v-if="signals.difficulty_distribution" class="signals-section">
-          <div class="signals-label">难度感知</div>
-          <div class="signals-difficulty">
-            <span class="difficulty-bar">
-              <span class="difficulty-fill beginner" :style="{ width: difficultyPercent('beginner') }"></span>
-              <span class="difficulty-fill neutral" :style="{ width: difficultyPercent('neutral') }"></span>
-              <span class="difficulty-fill advanced" :style="{ width: difficultyPercent('advanced') }"></span>
-            </span>
-            <span class="difficulty-text">{{ difficultyLabel }}</span>
-          </div>
-        </div>
-
-        <div v-if="signals.gap_keywords?.length" class="signals-section">
-          <div class="signals-label">困惑点</div>
-          <div class="signals-tags">
-            <el-tag v-for="(g, i) in signals.gap_keywords.slice(0, 3)" :key="i" size="small" effect="plain" type="warning">{{ g }}</el-tag>
-          </div>
-        </div>
-
-        <div class="signals-meta">已对话 {{ signals.exchange_count || 0 }} 轮</div>
-      </div>
     </div>
     <div class="chat-main">
       <div v-if="!currentSessionId" class="chat-empty">
@@ -146,6 +113,7 @@
           <div class="input-wrapper">
             <el-input
               v-model="inputMessage"
+              ref="chatInputRef"
               type="textarea"
               :rows="1"
               :autosize="{ minRows: 1, maxRows: 4 }"
@@ -161,6 +129,9 @@
         </div>
       </template>
     </div>
+
+    <!-- 用户画像右侧面板 -->
+    <ProfilePanel v-if="currentSessionId" :session-id="currentSessionId" :signals="signals" />
 
     <!-- 学习路径弹窗 -->
     <el-dialog v-model="pathDialogVisible" title="基于对话的个性化学习路径" width="680px" top="5vh" destroy-on-close>
@@ -240,6 +211,8 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { chatApi, courseApi, agentApi, learningApi } from '@/api';
+import { useProfileStore } from '@/stores/profile';
+import ProfilePanel from '@/components/ProfilePanel.vue';
 import { useChatStore } from '@/stores/chat';
 import { useAuthStore } from '@/stores/auth';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -249,6 +222,7 @@ const route = useRoute();
 const router = useRouter();
 const chatStore = useChatStore();
 const authStore = useAuthStore();
+const profileStore = useProfileStore();
 
 const userInitial = computed(() => (authStore.user?.nickname || authStore.user?.username || '?')[0]);
 
@@ -284,6 +258,7 @@ const deepMode = ref(false);
 
 // 实时学习画像
 const signals = ref(null);
+const chatInputRef = ref(null);
 
 // 学习路径
 const pathDialogVisible = ref(false);
@@ -294,6 +269,7 @@ let abortController = null;
 
 onMounted(async () => {
   await Promise.all([loadSessions(), loadCourses()]);
+  profileStore.loadBasicProfile();
   const saved = localStorage.getItem('chatCourseId');
   if (saved) selectedCourseId.value = Number(saved);
   if (route.params.sessionId) selectSession(Number(route.params.sessionId));
@@ -319,15 +295,15 @@ async function loadSignals(sessionId) {
   if (!sessionId) { signals.value = null; return; }
   try {
     const r = await chatApi.getSignals(sessionId);
-    signals.value = r.code === 200 ? r.data?.signals : null;
-  } catch { signals.value = null; }
+    signals.value = (r.code === 200 && r.data?.signals) ? r.data.signals : { active_topics: [], topic_history: [], difficulty_distribution: { beginner: 0, neutral: 0, advanced: 0 }, question_count: 0, gap_keywords: [], question_type_dist: {}, exchange_count: 0, last_updated: null };
+  } catch { signals.value = { active_topics: [], topic_history: [], difficulty_distribution: { beginner: 0, neutral: 0, advanced: 0 }, question_count: 0, gap_keywords: [], question_type_dist: {}, exchange_count: 0, last_updated: null }; }
 }
 function onCourseChange() { if (selectedCourseId.value) { localStorage.setItem('chatCourseId', String(selectedCourseId.value)); } else { localStorage.removeItem('chatCourseId'); } }
 
 async function createSession() {
   try {
     const res = await chatApi.createSession(selectedCourseId.value || null);
-    if (res.code === 200) { await loadSessions(); selectSession(res.data.id); router.replace('/chat/' + res.data.id); }
+    if (res.code === 200) { await loadSessions(); await selectSession(res.data.id); nextTick(() => { const el = chatInputRef.value?.$el?.querySelector('textarea'); if (el) el.focus(); }); router.replace('/chat/' + res.data.id); }
   } catch { ElMessage.error('创建失败'); }
 }
 
@@ -340,7 +316,9 @@ async function selectSession(id) {
     messages.value = (res.data?.records || []).map(m => ({ ...m, streaming: false }));
     await nextTick();
     scrollToBottom();
-    loadSignals(id);
+    await loadSignals(id);
+    await profileStore.loadSessionSignals(id);
+    nextTick(() => { const el = chatInputRef.value?.$el?.querySelector('textarea'); if (el) el.focus(); });
   } catch { messages.value = []; }
 }
 
@@ -379,9 +357,11 @@ async function sendMessage() {
     assistantMsg.streaming = false;
     assistantMsg.createTime = new Date().toISOString();
     sending.value = false;
+    nextTick(() => { const el = chatInputRef.value?.$el?.querySelector('textarea'); if (el) el.focus(); });
     abortController = null;
     loadSessions();
-    loadSignals(currentSessionId.value);
+    await loadSignals(currentSessionId.value);
+    await profileStore.loadSessionSignals(currentSessionId.value);
     nextTick().then(scrollToBottom);
     return;
   }
@@ -463,9 +443,9 @@ async function sendMessage() {
             assistantMsg.createTime = new Date().toISOString();
             clearInterval(timer);
             sending.value = false;
+    nextTick(() => { const el = chatInputRef.value?.$el?.querySelector('textarea'); if (el) el.focus(); });
             abortController = null;
             loadSessions();
-            loadSignals(currentSessionId.value);
             nextTick().then(scrollToBottom);
             resolve();
           }
@@ -474,12 +454,18 @@ async function sendMessage() {
     };
 
     await Promise.all([readAll(), displayLoop()]);
+    loadSessions();
+    loadSignals(currentSessionId.value);
+    profileStore.loadSessionSignals(currentSessionId.value);
+    profileStore.loadBasicProfile();
+    nextTick(() => { const el = chatInputRef.value?.$el?.querySelector('textarea'); if (el) el.focus(); });
   } catch (e) {
     if (e.name !== 'AbortError') {
       assistantMsg.content = assistantMsg.content || '抱歉，请求失败了，请检查后端服务。';
     }
     assistantMsg.streaming = false;
     sending.value = false;
+    nextTick(() => { const el = chatInputRef.value?.$el?.querySelector('textarea'); if (el) el.focus(); });
     abortController = null;
   }
 }

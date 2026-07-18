@@ -109,7 +109,9 @@ export const learningApi = {
     toggleArchive(id) { return http.put(`/learning/paths/${id}/archive`); },
     getProfile() { return http.get('/profile/'); },
     updateProfile(data) { return http.put('/profile/', data); },
+
     getRadarData() { return http.get('/profile/radar'); },
+    getProfileHistory(limit = 10) { return http.get('/profile/history', { params: { limit } }); },
     recordStudy(data) { return http.post('/study/records/', data); },
     listRecords(page = 1, size = 10) { return http.get('/study/records/', { params: { page, size } }); },
     getStudyStats() { return http.get('/study/records/stats'); },
@@ -242,4 +244,26 @@ export const agentApi = {
     },
 };
 
+
+// 步骤学习 API
+export const stepApi = {
+    generateContent(pathId, stepId) {
+        return http.post(`/learning/paths/${pathId}/steps/${stepId}/content`, null, { timeout: 120000 });
+    },
+    generateExercises(pathId, stepId, count = 3) {
+        return http.post(`/learning/paths/${pathId}/steps/${stepId}/exercises`, null, { params: { count }, timeout: 120000 });
+    },
+    evaluateExercises(pathId, stepId, answers) {
+        return http.post(`/learning/paths/${pathId}/steps/${stepId}/evaluate`, answers, { timeout: 120000 });
+    },
+    generateCheckpoint(pathId, stepId, questionCount = 10) {
+        return http.post(`/learning/paths/${pathId}/steps/${stepId}/checkpoint`, null, { params: { questionCount }, timeout: 120000 });
+    },
+    evaluateCheckpoint(pathId, stepId, answers) {
+        return http.post(`/learning/paths/${pathId}/steps/${stepId}/checkpoint/evaluate`, answers, { timeout: 120000 });
+    },
+    recordStudyTime(pathId, minutes) {
+        return http.post(`/learning/paths/${pathId}/study-time`, null, { params: { minutes } });
+    },
+};
 export default http;

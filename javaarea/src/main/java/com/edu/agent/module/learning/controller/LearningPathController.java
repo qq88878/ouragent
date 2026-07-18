@@ -76,4 +76,50 @@ public class LearningPathController {
         learningPathService.toggleArchive(id);
         return Result.success();
     }
+
+
+    // ===== Step Content & Exercises =====
+
+    @PostMapping("/{pathId}/steps/{stepId}/content")
+    public Result<LearningPathDTO> generateStepContent(
+            @PathVariable Long pathId, @PathVariable Long stepId) {
+        return Result.success(learningPathService.generateStepContent(pathId, stepId));
+    }
+
+    @PostMapping("/{pathId}/steps/{stepId}/exercises")
+    public Result<LearningPathDTO> generateStepExercises(
+            @PathVariable Long pathId, @PathVariable Long stepId,
+            @RequestParam(defaultValue = "3") int count) {
+        return Result.success(learningPathService.generateStepExercises(pathId, stepId, count));
+    }
+
+    @PostMapping("/{pathId}/steps/{stepId}/evaluate")
+    public Result<Map<String, Object>> evaluateStepExercises(
+            @PathVariable Long pathId, @PathVariable Long stepId,
+            @RequestBody Map<String, String> answers) {
+        return Result.success(learningPathService.evaluateStepExercises(pathId, stepId, answers));
+    }
+
+    @PostMapping("/{pathId}/steps/{stepId}/checkpoint")
+    public Result<LearningPathDTO> generateCheckpointTest(
+            @PathVariable Long pathId, @PathVariable Long stepId,
+            @RequestParam(defaultValue = "10") int questionCount) {
+        return Result.success(learningPathService.generateCheckpointTest(pathId, stepId, questionCount));
+    }
+
+    @PostMapping("/{pathId}/steps/{stepId}/checkpoint/evaluate")
+    public Result<Map<String, Object>> evaluateCheckpointTest(
+            @PathVariable Long pathId, @PathVariable Long stepId,
+            @RequestBody Map<String, String> answers) {
+        return Result.success(learningPathService.evaluateCheckpointTest(pathId, stepId, answers));
+    }
+
+    @PostMapping("/{pathId}/study-time")
+    public Result<Void> recordStudyTime(
+            @PathVariable Long pathId,
+            @RequestParam int minutes) {
+        learningPathService.recordStudyTime(pathId, minutes);
+        return Result.success();
+    }
+
 }

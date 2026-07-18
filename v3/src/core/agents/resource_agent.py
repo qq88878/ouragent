@@ -57,16 +57,19 @@ class ResourceAgent(BaseAgent):
                 difficulty=kwargs.get("difficulty", "medium"),
                 count=kwargs.get("count", 5),
                 question_type=kwargs.get("question_type", "mixed"),
+                student_profile=kwargs.get("student_profile", {}),
             )
         elif task_type == self.TASK_GENERATE_MINDMAP:
             return await self.generate_mindmap(
                 topic=kwargs.get("topic", ""),
                 knowledge_ids=kwargs.get("knowledge_ids"),
+                student_profile=kwargs.get("student_profile", {}),
             )
         elif task_type == self.TASK_GENERATE_SUMMARY:
             return await self.generate_summary(
                 topic=kwargs.get("topic", ""),
                 knowledge_ids=kwargs.get("knowledge_ids"),
+                student_profile=kwargs.get("student_profile", {}),
             )
         else:
             raise ValueError(f"ResourceAgent 不支持任务类型: {task_type}")
@@ -78,6 +81,7 @@ class ResourceAgent(BaseAgent):
         difficulty: str = "medium",
         count: int = 5,
         question_type: str = "mixed",
+        student_profile: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """生成练习题"""
         context = ""
@@ -124,6 +128,7 @@ class ResourceAgent(BaseAgent):
         self,
         topic: str,
         knowledge_ids: Optional[List[int]] = None,
+        student_profile: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         """生成思维导图"""
         context = ""
@@ -166,6 +171,7 @@ class ResourceAgent(BaseAgent):
         self,
         topic: str,
         knowledge_ids: Optional[List[int]] = None,
+        student_profile: Dict[str, Any] | None = None,
     ) -> Dict[str, str]:
         """生成学习摘要"""
         context = ""

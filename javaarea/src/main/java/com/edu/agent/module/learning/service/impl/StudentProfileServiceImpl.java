@@ -7,6 +7,9 @@ import com.edu.agent.common.result.ResultCode;
 import com.edu.agent.module.learning.entity.StudentProfile;
 import com.edu.agent.module.learning.mapper.StudentProfileMapper;
 import com.edu.agent.module.learning.service.StudentProfileService;
+import com.edu.agent.module.chat.service.client.AgentServiceClient;
+import com.edu.agent.module.learning.service.ProfileHistoryService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,6 +22,18 @@ public class StudentProfileServiceImpl
         extends ServiceImpl<StudentProfileMapper, StudentProfile>
         implements StudentProfileService {
     private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(StudentProfileServiceImpl.class);
+    private final AgentServiceClient agentServiceClient;
+    private ProfileHistoryService profileHistoryService;
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    public StudentProfileServiceImpl(AgentServiceClient agentServiceClient) {
+        this.agentServiceClient = agentServiceClient;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setProfileHistoryService(ProfileHistoryService profileHistoryService) {
+        this.profileHistoryService = profileHistoryService;
+    }
 
     @Override
     public StudentProfile getProfile(Long userId) {
@@ -67,6 +82,8 @@ public class StudentProfileServiceImpl
             if (profile.getPreferences() != null) {
                 existing.setPreferences(profile.getPreferences());
             }
+            // Save profile history snapshot before update
+            saveProfileHistory(userId, existing, "manual");
             updateById(existing);
         }
 
@@ -84,19 +101,40 @@ public class StudentProfileServiceImpl
         radarData.put("interests", profile.getInterests());
         radarData.put("gradeLevel", profile.getGradeLevel());
 
-        // Build radar chart dimensions
-        Map<String, Integer> dimensions = new HashMap<>();
+        // Fast-path: use keyword-based dimensions for instant response
+        // AI deep analysis available via /agent/profile/dimensions
+        Map<String, Object> dimensions = new HashMap<>();
         String strengths = profile.getStrengths() != null ? profile.getStrengths() : "";
         String weaknesses = profile.getWeaknesses() != null ? profile.getWeaknesses() : "";
-
-        dimensions.put("理论知识", calculateDimension(strengths, weaknesses, "理论"));
-        dimensions.put("实践能力", calculateDimension(strengths, weaknesses, "实践"));
-        dimensions.put("问题解决", calculateDimension(strengths, weaknesses, "问题"));
-        dimensions.put("创新思维", calculateDimension(strengths, weaknesses, "创新"));
-        dimensions.put("协作能力", calculateDimension(strengths, weaknesses, "协作"));
+        dimensions.put("\u7406\u8bba\u77e5\u8bc6", calculateDimension(strengths, weaknesses, "\u7406\u8bba"));
+        dimensions.put("\u5b9e\u8df5\u80fd\u529b", calculateDimension(strengths, weaknesses, "\u5b9e\u8df5"));
+        dimensions.put("\u95ee\u9898\u89e3\u51b3", calculateDimension(strengths, weaknesses, "\u95ee\u9898"));
+        dimensions.put("\u521b\u65b0\u601d\u7ef4", calculateDimension(strengths, weaknesses, "\u521b\u65b0"));
+        dimensions.put("\u534f\u4f5c\u80fd\u529b", calculateDimension(strengths, weaknesses, "\u534f\u4f5c"));
 
         radarData.put("dimensions", dimensions);
+        radarData.put("source", "keyword");
         return radarData;
+    }
+
+
+
+
+    private void saveProfileHistory(Long userId, StudentProfile profile, String triggerSource) {
+        if (profileHistoryService == null) return;
+        try {
+            Map<String, Object> snapshot = new HashMap<>();
+            snapshot.put("learningStyle", profile.getLearningStyle());
+            snapshot.put("strengths", profile.getStrengths());
+            snapshot.put("weaknesses", profile.getWeaknesses());
+            snapshot.put("interests", profile.getInterests());
+            snapshot.put("gradeLevel", profile.getGradeLevel());
+            snapshot.put("preferences", profile.getPreferences());
+            String json = objectMapper.writeValueAsString(snapshot);
+            profileHistoryService.saveHistory(userId, json, "Profile updated via " + triggerSource, triggerSource);
+        } catch (Exception e) {
+            log.warn("Failed to save profile history: {}", e.getMessage());
+        }
     }
 
     private int calculateDimension(String strengths, String weaknesses, String keyword) {

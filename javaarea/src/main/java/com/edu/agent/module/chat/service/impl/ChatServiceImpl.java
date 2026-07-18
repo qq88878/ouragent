@@ -147,6 +147,7 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
 
         // Build context
         Map<String, Object> context = buildContext(session);
+        context.put("user_id", String.valueOf(userId));
 
         // Call agent service
         String agentResponse;
@@ -203,6 +204,7 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
 
         // Build context
         Map<String, Object> context = buildContext(session);
+        context.put("user_id", String.valueOf(userId));
 
         // Update session title if first message
         if ("新对话".equals(session.getTitle())) {
@@ -272,6 +274,7 @@ public class ChatServiceImpl extends ServiceImpl<ChatSessionMapper, ChatSession>
 
         // Build context (same as normal chat)
         Map<String, Object> context = buildContext(session);
+        context.put("user_id", String.valueOf(userId));
 
         // Update session title if first message
         if ("新对话".equals(session.getTitle())) {

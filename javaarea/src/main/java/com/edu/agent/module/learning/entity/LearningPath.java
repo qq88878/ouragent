@@ -17,6 +17,11 @@ public class LearningPath extends BaseEntity {
     private Integer archived;
     private Integer starred;
 
+    private Integer totalStudyMinutes;
+    private Integer totalExercisesDone;
+    private java.math.BigDecimal correctRate;
+    private java.time.LocalDateTime lastStudiedAt;
+
     @java.lang.SuppressWarnings("all")
     public LearningPath() {
     }
@@ -120,6 +125,32 @@ public class LearningPath extends BaseEntity {
     public void setStarred(final Integer starred) {
         this.starred = starred;
     }
+
+
+    @java.lang.SuppressWarnings("all")
+    public Integer getTotalStudyMinutes() { return this.totalStudyMinutes; }
+
+    @java.lang.SuppressWarnings("all")
+    public void setTotalStudyMinutes(final Integer totalStudyMinutes) { this.totalStudyMinutes = totalStudyMinutes; }
+
+    @java.lang.SuppressWarnings("all")
+    public Integer getTotalExercisesDone() { return this.totalExercisesDone; }
+
+    @java.lang.SuppressWarnings("all")
+    public void setTotalExercisesDone(final Integer totalExercisesDone) { this.totalExercisesDone = totalExercisesDone; }
+
+    @java.lang.SuppressWarnings("all")
+    public java.math.BigDecimal getCorrectRate() { return this.correctRate; }
+
+    @java.lang.SuppressWarnings("all")
+    public void setCorrectRate(final java.math.BigDecimal correctRate) { this.correctRate = correctRate; }
+
+    @java.lang.SuppressWarnings("all")
+    public java.time.LocalDateTime getLastStudiedAt() { return this.lastStudiedAt; }
+
+    @java.lang.SuppressWarnings("all")
+    public void setLastStudiedAt(final java.time.LocalDateTime lastStudiedAt) { this.lastStudiedAt = lastStudiedAt; }
+
 
     @java.lang.Override
     @java.lang.SuppressWarnings("all")

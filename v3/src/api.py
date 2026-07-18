@@ -1,4 +1,4 @@
-"""
+﻿"""
 Agent 微服务 API - 供 Java 后端调用
 
 接口清单（对齐 Java AgentServiceClient）:
@@ -147,12 +147,19 @@ class PlanRequest(BaseModel):
 
 
 class GenerateRequest(BaseModel):
-    type: Literal["question", "mindmap", "summary"]
+    type: str = Field(..., min_length=1, description="question|mindmap|summary|generate_questions|generate_mindmap|generate_summary")
     topic: str = Field(..., min_length=1, max_length=200)
     knowledge_ids: Optional[List[int]] = None
-    difficulty: Literal["easy", "medium", "hard"] = "medium"
+    difficulty: str = Field(default="medium", description="easy|medium|hard|mixed")
     count: int = Field(default=5, ge=1, le=20)
+    question_type: str = Field(default="mixed")
+    student_profile: Dict[str, Any] = Field(default_factory=dict, description="Optional student profile for personalization")
 
+    @field_validator("type", mode="before")
+    @classmethod
+    def normalize_type(cls, v: str) -> str:
+        mapping = {"generate_questions": "question", "generate_mindmap": "mindmap", "generate_summary": "summary"}
+        return mapping.get(v, v)
 
 class EvaluateRequest(BaseModel):
     question: str = Field(..., min_length=1, max_length=5000)
@@ -643,6 +650,76 @@ async def analyze_basic_profile(request: BasicProfileRequest, _: dict = Depends(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ================= Dimensions Scoring (data-driven radar) =================
+
+class DimensionsRequest(BaseModel):
+    """5-dimension scoring request - data-driven radar chart"""
+    user_id: str = Field(..., min_length=1, max_length=100)
+    basic_profile: Dict[str, Any] = Field(default_factory=dict)
+    study_records: List[Dict[str, Any]] = Field(default_factory=list)
+    evaluation_history: List[Dict[str, Any]] = Field(default_factory=list)
+    chat_signals: Dict[str, Any] = Field(default_factory=dict)
+    learning_path_progress: Dict[str, Any] = Field(default_factory=dict)
+
+
+# =============== Profile Update (dynamic evolution) ===============
+
+class ProfileUpdateRequest(BaseModel):
+    """Profile update request - merges new signals into existing profile"""
+    user_id: str = Field(..., min_length=1, max_length=100)
+    current_profile: Dict[str, Any] = Field(default_factory=dict)
+    new_signals: Dict[str, Any] = Field(default_factory=dict, description="Chat signals, quiz results, etc.")
+    evaluation_results: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+@app.post("/agent/profile/update")
+async def update_profile(request: ProfileUpdateRequest, _: dict = Depends(get_current_user)):
+    """
+    Update student profile based on new learning activity.
+
+    Merges new chat signals and evaluation results into the existing profile.
+    This enables dynamic profile evolution over time.
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+    try:
+        result = await orchestrator.update_profile_from_activity(
+            user_id=request.user_id,
+            current_profile=request.current_profile,
+            new_signals=request.new_signals,
+            evaluation_results=request.evaluation_results,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/agent/profile/dimensions")
+async def analyze_profile_dimensions(request: DimensionsRequest, _: dict = Depends(get_current_user)):
+    """
+    5-dimension ability scoring (data-driven radar chart)
+
+    Generates 0-100 scores for 5 dimensions based on actual learning data:
+      - Theoretical Knowledge
+      - Practical Ability
+      - Problem Solving
+      - Innovative Thinking
+      - Collaboration
+    """
+    if not orchestrator:
+        raise HTTPException(status_code=503, detail="Agent not initialized")
+    try:
+        result = await orchestrator.analyze_profile_dimensions(
+            user_id=request.user_id,
+            basic_profile=request.basic_profile,
+            study_records=request.study_records,
+            evaluation_history=request.evaluation_history,
+            chat_signals=request.chat_signals,
+            learning_path_progress=request.learning_path_progress,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/agent/profile/course")
 async def analyze_course_profile(request: AnalyzeRequest, _: dict = Depends(get_current_user)):
     """
@@ -692,14 +769,12 @@ async def generate_plan(request: PlanRequest, _: dict = Depends(get_current_user
 @app.post("/agent/generate")
 async def generate_resource(request: GenerateRequest, _: dict = Depends(get_current_user)):
     """
-    生成教学资源（题目/思维导图/摘要）
+    Generate teaching resources (profile-aware)
 
-    Java 调用示例:
-      POST /agent/generate
-      {"type": "question", "topic": "Python列表", "difficulty": "medium", "count": 5}
+    Accepts optional student_profile for personalized content generation.
     """
     if not orchestrator:
-        raise HTTPException(status_code=503, detail="Agent 未初始化")
+        raise HTTPException(status_code=503, detail="Agent not initialized")
 
     try:
         result = await orchestrator.generate_resource(
@@ -708,11 +783,12 @@ async def generate_resource(request: GenerateRequest, _: dict = Depends(get_curr
             knowledge_ids=request.knowledge_ids,
             difficulty=request.difficulty,
             count=request.count,
+            question_type=request.question_type,
+            student_profile=request.student_profile if request.student_profile else None,
         )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @app.post("/agent/evaluate")
 async def evaluate_answer(request: EvaluateRequest, _: dict = Depends(get_current_user)):
@@ -968,11 +1044,11 @@ async def get_chat_signals(
         await orchestrator._ensure_redis()
         session_meta = await orchestrator.session_manager.get_session(session_id)
         if not session_meta:
-            return {"signals": None, "message": "会话不存在或已过期"}
+            return {"session_id": session_id, "signals": {"active_topics": [], "topic_history": [], "difficulty_distribution": {"beginner": 0, "neutral": 0, "advanced": 0}, "question_count": 0, "gap_keywords": [], "question_type_dist": {}, "exchange_count": 0, "last_updated": None}}
 
         user_id = str(session_meta.get("user_id", ""))
         if not user_id or not orchestrator._signals_cache:
-            return {"signals": None}
+            return {"session_id": session_id, "signals": {"active_topics": [], "topic_history": [], "difficulty_distribution": {"beginner": 0, "neutral": 0, "advanced": 0}, "question_count": 0, "gap_keywords": [], "question_type_dist": {}, "exchange_count": 0, "last_updated": None}}
 
         signals = await orchestrator._signals_cache.get_signals(user_id, session_id)
         return {"session_id": session_id, "signals": signals}

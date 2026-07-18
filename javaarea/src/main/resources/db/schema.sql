@@ -214,6 +214,22 @@ CREATE TABLE IF NOT EXISTS `student_profile` (
     UNIQUE KEY `uk_user_id` (`user_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 -- -----------------------------------------------------------
+-- 9b. student_profile_history (profile version tracking)
+-- -----------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `student_profile_history` (
+    `id`                BIGINT        NOT NULL AUTO_INCREMENT,
+    `user_id`           BIGINT        NOT NULL,
+    `profile_snapshot`  JSON          NOT NULL COMMENT 'Full profile snapshot at this version',
+    `change_summary`    VARCHAR(512)  DEFAULT NULL COMMENT 'What changed and why',
+    `trigger_source`    VARCHAR(64)   DEFAULT NULL COMMENT 'questionnaire|evaluation|chat|manual|ai_dimensions',
+    `version`           INT           NOT NULL DEFAULT 1,
+    `create_time`       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_user_version` (`user_id`, `version`),
+    KEY `idx_user_time` (`user_id`, `create_time`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------
 -- 10. student_profile_questionnaire (?????????????)
 -- -----------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `student_profile_questionnaire` (

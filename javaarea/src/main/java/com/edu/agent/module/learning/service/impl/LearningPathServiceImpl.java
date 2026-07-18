@@ -197,6 +197,13 @@ public class LearningPathServiceImpl
             step.setTitle(stepData.getTitle() != null ? stepData.getTitle() : "步骤 " + (i + 1));
             step.setDescription(stepData.getDescription() != null ? stepData.getDescription() : "");
             step.setStatus(0);
+            if (stepData.getKnowledgeIds() != null && !stepData.getKnowledgeIds().isEmpty()) {
+                step.setKnowledgeIds(stepData.getKnowledgeIds().stream()
+                        .map(String::valueOf).collect(java.util.stream.Collectors.joining(",")));
+            }
+            if (stepData.getEstimatedHours() != null) {
+                step.setEstimatedHours(stepData.getEstimatedHours());
+            }
             step.setStepType(inferStepType(stepData.getTitle(), stepData.getDescription()));
             step.setEstimatedHours(stepData.getEstimatedHours() != null ? stepData.getEstimatedHours() : 2);
             if (stepData.getKnowledgeIds() != null && !stepData.getKnowledgeIds().isEmpty()) {
@@ -297,6 +304,13 @@ public class LearningPathServiceImpl
             step.setTitle(stepData.getTitle() != null ? stepData.getTitle() : "步骤 " + (i + 1));
             step.setDescription(stepData.getDescription() != null ? stepData.getDescription() : "");
             step.setStatus(0);
+            if (stepData.getKnowledgeIds() != null && !stepData.getKnowledgeIds().isEmpty()) {
+                step.setKnowledgeIds(stepData.getKnowledgeIds().stream()
+                        .map(String::valueOf).collect(java.util.stream.Collectors.joining(",")));
+            }
+            if (stepData.getEstimatedHours() != null) {
+                step.setEstimatedHours(stepData.getEstimatedHours());
+            }
             step.setStepType(inferStepType(stepData.getTitle(), stepData.getDescription()));
             step.setEstimatedHours(stepData.getEstimatedHours() != null ? stepData.getEstimatedHours() : 2);
             if (stepData.getKnowledgeIds() != null && !stepData.getKnowledgeIds().isEmpty()) {
@@ -457,6 +471,10 @@ public class LearningPathServiceImpl
         dto.setVersion(path.getVersion());
         dto.setArchived(path.getArchived());
         dto.setStarred(path.getStarred());
+        dto.setTotalStudyMinutes(path.getTotalStudyMinutes());
+        dto.setTotalExercisesDone(path.getTotalExercisesDone());
+        dto.setCorrectRate(path.getCorrectRate());
+        dto.setLastStudiedAt(path.getLastStudiedAt());
 
         if (includeSteps) {
             LambdaQueryWrapper<LearningPathStep> wrapper = new LambdaQueryWrapper<>();
@@ -500,7 +518,298 @@ public class LearningPathServiceImpl
         dto.setStatus(step.getStatus());
         dto.setStepType(step.getStepType());
         dto.setEstimatedHours(step.getEstimatedHours());
+        dto.setContent(step.getContent());
+        dto.setExercises(step.getExercises());
+        dto.setExerciseResults(step.getExerciseResults());
+        dto.setKnowledgeIds(step.getKnowledgeIds());
+        dto.setIsCheckpoint(step.getIsCheckpoint());
+        dto.setCheckpointScope(step.getCheckpointScope());
         return dto;
+    }
+
+
+
+
+    // ==================== Step Content & Exercises ====================
+
+    @Override
+    @Transactional
+    public LearningPathDTO generateStepContent(Long pathId, Long stepId) {
+        LearningPathStep step = stepMapper.selectById(stepId);
+        if (step == null || !step.getPathId().equals(pathId)) {
+            throw new BizException(ResultCode.NOT_FOUND, "?????");
+        }
+        LearningPath path = getById(pathId);
+        if (path == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "???????");
+        }
+
+        List<Integer> knowledgeIds = parseKnowledgeIds(step.getKnowledgeIds());
+        Map<String, Object> contentResult = agentServiceClient.generateStepContent(step.getTitle(), knowledgeIds);
+
+        String summary = contentResult.get("summary") != null ? contentResult.get("summary").toString() : "";
+
+        if ((summary == null || summary.isEmpty()) && step.getKnowledgeBaseId() != null) {
+            try {
+                KnowledgeDTO knowledge = knowledgeService.getKnowledgeById(step.getKnowledgeBaseId());
+                if (knowledge != null && knowledge.getDescription() != null) {
+                    summary = knowledge.getDescription();
+                }
+            } catch (Exception e) {
+                log.warn("?????????: knowledgeId={}", step.getKnowledgeBaseId());
+            }
+        }
+
+        if (summary.isEmpty()) {
+            summary = "## " + step.getTitle() + "\n\n" + step.getDescription() + "\n\n*?AI ?????????????????*";
+        }
+
+        step.setContent(summary);
+        step.setUpdateTime(java.time.LocalDateTime.now());
+        stepMapper.updateById(step);
+
+        path.setLastStudiedAt(java.time.LocalDateTime.now());
+        updateById(path);
+
+        return getPathById(pathId);
+    }
+
+    @Override
+    @Transactional
+    public LearningPathDTO generateStepExercises(Long pathId, Long stepId, int count) {
+        LearningPathStep step = stepMapper.selectById(stepId);
+        if (step == null || !step.getPathId().equals(pathId)) {
+            throw new BizException(ResultCode.NOT_FOUND, "?????");
+        }
+        LearningPath path = getById(pathId);
+
+        if (step.getExercises() != null && !step.getExercises().isEmpty()) {
+            return getPathById(pathId);
+        }
+
+        List<Integer> knowledgeIds = parseKnowledgeIds(step.getKnowledgeIds());
+        String difficulty = "easy";
+        if (step.getStepType() != null) {
+            switch (step.getStepType()) {
+                case "CONCEPT": difficulty = "easy"; break;
+                case "PRACTICE": difficulty = "medium"; break;
+                case "REVIEW": difficulty = "medium"; break;
+                case "PROJECT": difficulty = "hard"; break;
+            }
+        }
+
+        Map<String, Object> exercisesResult = agentServiceClient.generateExercises(
+                step.getTitle(), knowledgeIds, difficulty, count > 0 ? count : 3);
+
+        try {
+            String exercisesJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(exercisesResult);
+            step.setExercises(exercisesJson);
+        } catch (Exception e) {
+            log.error("????????", e);
+            step.setExercises("{}");
+        }
+
+        step.setUpdateTime(java.time.LocalDateTime.now());
+        stepMapper.updateById(step);
+
+        if (path != null) {
+            path.setLastStudiedAt(java.time.LocalDateTime.now());
+            updateById(path);
+        }
+
+        return getPathById(pathId);
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> evaluateStepExercises(Long pathId, Long stepId, Map<String, String> answers) {
+        LearningPathStep step = stepMapper.selectById(stepId);
+        if (step == null || !step.getPathId().equals(pathId)) {
+            throw new BizException(ResultCode.NOT_FOUND, "?????");
+        }
+        LearningPath path = getById(pathId);
+
+        Map<String, Object> exercisesMap = parseJson(step.getExercises());
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> questions = (List<Map<String, Object>>) exercisesMap.getOrDefault("questions", java.util.Collections.emptyList());
+
+        int totalScore = 0;
+        int correctCount = 0;
+        List<Map<String, Object>> results = new java.util.ArrayList<>();
+        String knowledgeContext = step.getContent() != null ? step.getContent() : "";
+
+        for (Map<String, Object> question : questions) {
+            String qText = (String) question.get("question");
+            String qCorrect = (String) question.get("answer");
+            String userAnswer = answers.getOrDefault("q_" + question.hashCode(), "");
+
+            Map<String, Object> evaluation = agentServiceClient.evaluateExerciseAnswer(
+                    qText, userAnswer, qCorrect, knowledgeContext);
+
+            int score = evaluation.get("score") != null ? ((Number) evaluation.get("score")).intValue() : 0;
+            boolean isCorrect = evaluation.get("is_correct") != null && (Boolean) evaluation.get("is_correct");
+
+            totalScore += score;
+            if (isCorrect) correctCount++;
+
+            Map<String, Object> result = new java.util.HashMap<>();
+            result.put("question", qText);
+            result.put("user_answer", userAnswer);
+            result.put("correct_answer", qCorrect);
+            result.put("score", score);
+            result.put("is_correct", isCorrect);
+            result.put("suggestions", evaluation.getOrDefault("suggestions", java.util.Collections.emptyList()));
+            result.put("encouragement", evaluation.getOrDefault("encouragement", ""));
+            results.add(result);
+        }
+
+        try {
+            Map<String, Object> resultsWrapper = new java.util.HashMap<>();
+            resultsWrapper.put("questions", results);
+            resultsWrapper.put("total_score", totalScore);
+            resultsWrapper.put("correct_count", correctCount);
+            resultsWrapper.put("total_count", questions.size());
+            String resultsJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(resultsWrapper);
+            step.setExerciseResults(resultsJson);
+            stepMapper.updateById(step);
+        } catch (Exception e) {
+            log.error("????????", e);
+        }
+
+        if (path != null) {
+            path.setTotalExercisesDone((path.getTotalExercisesDone() != null ? path.getTotalExercisesDone() : 0) + questions.size());
+            if (questions.size() > 0) {
+                double newRate = (double) correctCount / questions.size() * 100;
+                path.setCorrectRate(java.math.BigDecimal.valueOf(newRate));
+            }
+            path.setLastStudiedAt(java.time.LocalDateTime.now());
+            updateById(path);
+        }
+
+        Map<String, Object> response = new java.util.HashMap<>();
+        response.put("results", results);
+        response.put("total_score", totalScore);
+        response.put("correct_count", correctCount);
+        response.put("total_count", questions.size());
+        response.put("passed", correctCount >= questions.size() * 0.6);
+
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public LearningPathDTO generateCheckpointTest(Long pathId, Long stepId, int questionCount) {
+        LearningPathStep step = stepMapper.selectById(stepId);
+        if (step == null || !step.getPathId().equals(pathId)) {
+            throw new BizException(ResultCode.NOT_FOUND, "?????");
+        }
+        LearningPath path = getById(pathId);
+
+        List<Integer> allKnowledgeIds = new java.util.ArrayList<>();
+        if (step.getCheckpointScope() != null && !step.getCheckpointScope().isEmpty()) {
+            String[] scopeSteps = step.getCheckpointScope().split("\s*,\s*");
+            for (String scopeStep : scopeSteps) {
+                try {
+                    int stepOrder = Integer.parseInt(scopeStep.trim());
+                    LambdaQueryWrapper<LearningPathStep> wrapper = new LambdaQueryWrapper<>();
+                    wrapper.eq(LearningPathStep::getPathId, pathId).eq(LearningPathStep::getStepOrder, stepOrder);
+                    LearningPathStep scopeStepEntity = stepMapper.selectOne(wrapper);
+                    if (scopeStepEntity != null) {
+                        allKnowledgeIds.addAll(parseKnowledgeIds(scopeStepEntity.getKnowledgeIds()));
+                    }
+                } catch (NumberFormatException ignored) {}
+            }
+        }
+        if (allKnowledgeIds.isEmpty()) {
+            allKnowledgeIds = parseKnowledgeIds(step.getKnowledgeIds());
+        }
+
+        String topic = "????: " + step.getTitle();
+        Map<String, Object> testResult = agentServiceClient.generateCheckpointTest(topic, allKnowledgeIds, questionCount > 0 ? questionCount : 10);
+
+        try {
+            String exercisesJson = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(testResult);
+            step.setExercises(exercisesJson);
+            step.setUpdateTime(java.time.LocalDateTime.now());
+            stepMapper.updateById(step);
+        } catch (Exception e) {
+            log.error("?????????", e);
+        }
+
+        return getPathById(pathId);
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> evaluateCheckpointTest(Long pathId, Long stepId, Map<String, String> answers) {
+        Map<String, Object> result = evaluateStepExercises(pathId, stepId, answers);
+        LearningPathStep step = stepMapper.selectById(stepId);
+        LearningPath path = getById(pathId);
+
+        int correctCount = ((Number) result.get("correct_count")).intValue();
+        int totalCount = ((Number) result.get("total_count")).intValue();
+        boolean passed = correctCount >= totalCount * 0.6;
+
+        result.put("is_checkpoint", true);
+        result.put("passed", passed);
+
+        if (passed && step != null) {
+            step.setStatus(2);
+            step.setUpdateTime(java.time.LocalDateTime.now());
+            stepMapper.updateById(step);
+
+            if (path != null) {
+                LambdaQueryWrapper<LearningPathStep> wrapper = new LambdaQueryWrapper<>();
+                wrapper.eq(LearningPathStep::getPathId, pathId).eq(LearningPathStep::getStatus, 2);
+                long completedCount = stepMapper.selectCount(wrapper);
+                path.setCompletedSteps((int) completedCount);
+                if (completedCount >= path.getTotalSteps()) {
+                    path.setStatus(1);
+                }
+                path.setLastStudiedAt(java.time.LocalDateTime.now());
+                updateById(path);
+            }
+        }
+
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public void recordStudyTime(Long pathId, int minutes) {
+        LearningPath path = getById(pathId);
+        if (path != null) {
+            path.setTotalStudyMinutes((path.getTotalStudyMinutes() != null ? path.getTotalStudyMinutes() : 0) + minutes);
+            path.setLastStudiedAt(java.time.LocalDateTime.now());
+            updateById(path);
+        }
+    }
+
+    // ==================== Helper Methods ====================
+
+    private List<Integer> parseKnowledgeIds(String knowledgeIdsStr) {
+        if (knowledgeIdsStr == null || knowledgeIdsStr.isEmpty()) {
+            return java.util.Collections.emptyList();
+        }
+        List<Integer> ids = new java.util.ArrayList<>();
+        for (String part : knowledgeIdsStr.split("\s*,\s*")) {
+            try {
+                ids.add(Integer.parseInt(part.trim()));
+            } catch (NumberFormatException ignored) {}
+        }
+        return ids;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> parseJson(String json) {
+        if (json == null || json.isEmpty()) {
+            return new java.util.HashMap<>();
+        }
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, Map.class);
+        } catch (Exception e) {
+            return new java.util.HashMap<>();
+        }
     }
 
 
@@ -534,6 +843,67 @@ public class LearningPathServiceImpl
         int last = sorted.get(sorted.size() - 1);
         if (first == last) return "\u7b2c" + first + "\u5468";
         return "\u7b2c" + first + "-" + last + "\u5468";
+    }
+
+
+    // ====== Profile Evolution Helper ======
+
+    private void triggerProfileUpdateFromEvaluation(Long pathId, Long userId, Map<String, Object> evalResult) {
+        try {
+            LearningPath path = getById(pathId);
+            if (path == null) return;
+
+            StudentProfile profile = studentProfileService.getProfile(userId);
+            Map<String, Object> currentProfile = new HashMap<>();
+            currentProfile.put("learningStyle", profile.getLearningStyle());
+            currentProfile.put("strengths", profile.getStrengths());
+            currentProfile.put("weaknesses", profile.getWeaknesses());
+            currentProfile.put("interests", profile.getInterests());
+            currentProfile.put("gradeLevel", profile.getGradeLevel());
+
+            // Build new signals from evaluation
+            Map<String, Object> newSignals = new HashMap<>();
+            newSignals.put("path_title", path.getTitle());
+            int correctCount = evalResult.containsKey("correct_count") ?
+                    ((Number) evalResult.get("correct_count")).intValue() : 0;
+            int totalCount = evalResult.containsKey("total_count") ?
+                    ((Number) evalResult.get("total_count")).intValue() : 0;
+            newSignals.put("quiz_correct", correctCount);
+            newSignals.put("quiz_total", totalCount);
+            newSignals.put("quiz_passed", evalResult.getOrDefault("passed", false));
+            newSignals.put("activity_type", "checkpoint_evaluation");
+
+            // Call Python Agent to merge profile
+            Map<String, Object> updatedProfile = agentServiceClient.updateProfileFromActivity(
+                    String.valueOf(userId), currentProfile, newSignals, java.util.Collections.emptyList());
+
+            // Apply updates to StudentProfile
+            if (updatedProfile != null && !updatedProfile.isEmpty() && !updatedProfile.containsKey("error")) {
+                boolean changed = false;
+                if (updatedProfile.get("learning_style") != null) {
+                    profile.setLearningStyle(updatedProfile.get("learning_style").toString());
+                    changed = true;
+                }
+                if (updatedProfile.get("strengths") instanceof List) {
+                    @SuppressWarnings("unchecked")
+                    List<String> strs = (List<String>) updatedProfile.get("strengths");
+                    profile.setStrengths(String.join(",", strs));
+                    changed = true;
+                }
+                if (updatedProfile.get("weaknesses") instanceof List) {
+                    @SuppressWarnings("unchecked")
+                    List<String> wks = (List<String>) updatedProfile.get("weaknesses");
+                    profile.setWeaknesses(String.join(",", wks));
+                    changed = true;
+                }
+                if (changed) {
+                    studentProfileService.updateProfile(userId, profile);
+                    log.info("Profile evolved from evaluation: userId={}, pathId={}", userId, pathId);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Profile evolution trigger failed: userId={}, pathId={}", userId, pathId, e);
+        }
     }
 
 }
