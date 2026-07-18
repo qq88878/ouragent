@@ -31,6 +31,13 @@ def parse_llm_json(response: str, fallback: Dict[str, Any] | None = None) -> Dic
     except json.JSONDecodeError:
         pass
 
+    # Remove BOM if present
+    cleaned = cleaned.lstrip('\ufeff')
+    # Try again after cleaning
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
     # Try to find JSON object in the text
     import re
     match = re.search(r'\{[\s\S]*\}', cleaned)

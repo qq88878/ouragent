@@ -10,10 +10,29 @@
       </div>
     </div>
 
-    <el-empty v-if="paths.length === 0 && !loading" description="暂无学习路径，进入课程后在AI对话中说出你的学习目标即可自动生成" :image-size="100" />
+    <el-empty v-if="paths.length === 0 && !loading && !hasGenerating" description="暂无学习路径，进入课程后在AI对话中说出你的学习目标即可自动生成" :image-size="100" />
 
     <div v-loading="loading" class="paths-list">
-      <div v-for="path in paths" :key="path.id" class="path-card" @click="router.push(`/learning/${path.id}`)" style="cursor:pointer" :class="{ 'path-archived': path.archived === 1 }">
+      <template v-for="path in paths" :key="path ? path.id : 'empty'">
+      <!-- Generating placeholder card -->
+      <div v-if="path && path.status === 3" class="path-card path-generating">
+        <div class="generating-content">
+          <div class="gen-icon">
+            <svg viewBox="0 0 48 48" width="48" height="48">
+              <circle cx="24" cy="24" r="20" fill="none" stroke="var(--color-primary)" stroke-width="2" stroke-dasharray="100" stroke-linecap="round" class="gen-spin"/>
+              <text x="24" y="28" text-anchor="middle" font-size="18">AI</text>
+            </svg>
+          </div>
+          <h4>{{ path.title }}</h4>
+          <p>{{ path.description }}</p>
+          <div class="gen-progress-bar">
+            <div class="gen-progress-fill"></div>
+          </div>
+          <span class="gen-hint">AI 正在分析对话内容，生成个性化学习路径...</span>
+        </div>
+      </div>
+      <!-- Normal path card -->
+      <div v-else-if="path && path.status !== 3" class="path-card" @click="router.push(`/learning/${path.id}`)" style="cursor:pointer" :class="{ 'path-archived': path.archived === 1 }">
         <div class="path-header">
           <div class="path-info">
             <h4>
@@ -24,8 +43,8 @@
             <p>{{ path.description }}</p>
           </div>
           <div class="path-meta">
-            <el-tag :type="['warning', 'success', 'info'][path.status]" size="small" effect="plain" round>
-              {{ ['进行中', '已完成', '已放弃'][path.status] }}
+            <el-tag :type="['warning', 'success', 'info', ''][path.status]" size="small" effect="plain" round>
+              {{ ['进行中', '已完成', '已放弃', '生成中'][path.status] }}
             </el-tag>
             <el-button text size="small" :type="path.starred === 1 ? 'warning' : 'default'" @click="toggleStar(path.id)">
               <el-icon :size="14"><Star /></el-icon>
@@ -100,12 +119,13 @@
           </div>
         </div>
       </div>
+    </template>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { learningApi } from '@/api';
 import { ElMessage, ElMessageBox } from 'element-plus';
@@ -125,14 +145,42 @@ const progressGradient = [
   { color: '#5B8C5A', percentage: 100 },
 ];
 
-onMounted(() => loadPaths());
+let pollTimer = null;
+const hasGenerating = computed(() => Array.isArray(paths.value) && paths.value.some(p => p && p.status === 3));
+
+function startPolling() {
+  if (pollTimer) return;
+  pollTimer = setInterval(async () => {
+    if (!hasGenerating.value) { stopPolling(); return; }
+    try {
+      const r = await learningApi.listPaths(showArchived.value);
+      const data = r.data ?? r;
+      paths.value = (Array.isArray(data) ? data : []).filter(p => p != null);
+      if (!hasGenerating.value) stopPolling();
+    } catch {}
+  }, 3000);
+}
+
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+}
+
+onMounted(() => {
+  loadPaths().then(() => { if (hasGenerating.value) startPolling(); });
+});
+
+onUnmounted(() => stopPolling());
 
 async function loadPaths() {
   loading.value = true;
   try {
     const r = await learningApi.listPaths(showArchived.value);
-    if (r.code === 200) paths.value = r.data || [];
-  } catch {} finally {
+    const data = r?.data ?? r;
+    paths.value = (Array.isArray(data) ? data : []).filter(p => p != null);
+    if (hasGenerating.value) startPolling();
+  } catch {
+    paths.value = [];
+  } finally {
     loading.value = false;
   }
   await nextTick();
@@ -140,8 +188,9 @@ async function loadPaths() {
 }
 
 function scrollToCurrent() {
+  if (!Array.isArray(paths.value)) return;
   for (const path of paths.value) {
-    if (!path.steps) continue;
+    if (!path || !path.steps) continue;
     const current = path.steps.find(s => s.isCurrent);
     if (current && stepRefs.value[current.id]) {
       stepRefs.value[current.id].scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -262,4 +311,31 @@ async function removePath(id) {
 .start-btn { margin-top: 8px; }
 
 .step-status-badge { flex-shrink: 0; padding-top: 3px; }
+
+/* Generating card */
+.path-generating { cursor: default !important; border: 2px dashed var(--color-primary); opacity: 0.85; }
+.path-generating:hover { box-shadow: var(--shadow-card); border-color: var(--color-primary); }
+.generating-content { text-align: center; padding: 10px 0; }
+.gen-icon { margin-bottom: 16px; }
+.gen-spin { animation: gen-spin 2s linear infinite; transform-origin: 24px 24px; }
+@keyframes gen-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.generating-content h4 { font-size: 18px; font-weight: 700; color: var(--color-text); margin-bottom: 8px; }
+.generating-content p { font-size: 13px; color: var(--color-text-muted); margin-bottom: 18px; }
+.gen-progress-bar {
+  width: 260px; height: 6px; margin: 0 auto 12px;
+  background: var(--color-bg); border-radius: 3px; overflow: hidden;
+}
+.gen-progress-fill {
+  width: 40%; height: 100%;
+  background: linear-gradient(90deg, var(--color-primary), #E6A23C, var(--color-primary));
+  background-size: 200% 100%;
+  animation: gen-slide 1.5s ease-in-out infinite;
+  border-radius: 3px;
+}
+@keyframes gen-slide {
+  0% { background-position: 100% 0; width: 30%; }
+  50% { background-position: 0 0; width: 80%; }
+  100% { background-position: 100% 0; width: 30%; }
+}
+.gen-hint { font-size: 12px; color: var(--color-text-muted); }
 </style>

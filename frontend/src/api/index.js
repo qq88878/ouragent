@@ -262,6 +262,9 @@ export const stepApi = {
     evaluateCheckpoint(pathId, stepId, answers) {
         return http.post(`/learning/paths/${pathId}/steps/${stepId}/checkpoint/evaluate`, answers, { timeout: 120000 });
     },
+    regenerateExercises(pathId, stepId) {
+        return http.post(`/learning/paths/${pathId}/steps/${stepId}/exercises/regenerate`, null, { timeout: 120000 });
+    },
     recordStudyTime(pathId, minutes) {
         return http.post(`/learning/paths/${pathId}/study-time`, null, { params: { minutes } });
     },

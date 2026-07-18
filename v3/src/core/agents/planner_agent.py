@@ -102,61 +102,21 @@ class PlannerAgent(BaseAgent):
                 lines.append(f"  {day}: {', '.join(courses)}")
             schedule_text = "\n".join(lines)
 
-        prompt = f"""请为以下学生生成一份详细的、个性化的学习路径方案。
+        prompt = f"""你是教育规划专家。为课程"{course_title}"生成个性化学习路径。
+{f"课程描述: {course_description}\n" if course_description else ""}目标: {goal}
+学生画像: {profile_summary}
+知识库: {knowledge_summary}
+{f"课表: {schedule_text}\n" if schedule_text else ""}
+要求: 分3-5阶段(phases),每阶段3-8步,共15-30步。每阶段末至少1步设is_checkpoint=true。
+每步必含:order,title,description(含学什么/怎么学/学到什么程度,200字以上),knowledge_ids(知识库id数组),key_points(3-5个要点),estimated_hours(概念0.5-1h,练习1-2h,复习1-2h,项目2-3h),resources(推荐资源数组),milestone(is_checkpoint=true时必填),is_checkpoint。
+输出纯JSON(不要markdown代码块,不要额外文字):
+{{"title":"路径标题","description":"概述(200字)","phases":[{{"phase_name":"阶段名","phase_goal":"目标","phase_order":1,"steps":[{{"order":1,"title":"步骤","description":"详细描述","knowledge_ids":[1],"key_points":["要点1"],"estimated_hours":0.5,"resources":["资源"],"milestone":"里程碑","is_checkpoint":false}}]}}],"total_estimated_hours":30}}"""
 
-【课程名称】{course_title}
-{f"【课程简介】{course_description}" if course_description else ""}
-【学习目标】{goal}
-
-【学生画像】
-{profile_summary}
-
-【知识库资料】
-以下是课程关联的知识库内容，请基于这些内容规划学习路径：
-{knowledge_summary}
-
-{"【课表安排】" + chr(10) + schedule_text + chr(10) if schedule_text else ""}要求：
-1. 生成 4-6 个学习步骤，由浅入深，循序渐进
-2. 每个步骤的 title 要简洁明了（如"第一章：Python基础语法"）
-3. 每个步骤的 description 必须详细说明：
-   - 本步骤要学什么具体内容（列出 3-5 个具体知识点）
-   - 每个知识点要说明：是什么、为什么重要、怎么学
-   - 学到什么程度算掌握（给出可衡量的标准）
-   - 推荐的学习方法和技巧
-4. 每个步骤必须关联 knowledge_ids（从知识库中选取最相关的）
-5. 根据学生画像调整学习方式：
-   - 视觉型 → 多推荐图表、思维导图、视频
-   - 听觉型 → 多推荐讲解视频、讨论
-   - 阅读型 → 多推荐文档、书籍
-   - 动手型 → 多推荐编程练习、项目实战
-6. estimated_hours 要合理（基础步骤 2-3h，进阶步骤 3-5h）
-7. 每个步骤的 resources 要推荐具体的学习资源（如"知识库中的XX文档"、"官方文档"等）
-8. 如果有课表信息，合理安排学习节奏
-
-只输出 JSON，格式：
-{{
-  "title": "学习路径标题（要具体，如'Python从入门到实战学习路径'）",
-  "description": "路径概述（说明整体规划思路、为什么这样安排、适合什么样的学生）",
-  "knowledge_points_summary": "本课程需要掌握的核心知识点总结（200字左右，概括全貌）",
-  "steps": [
-    {{
-      "order": 1,
-      "title": "步骤标题",
-      "description": "详细说明（至少200字）：要学什么、怎么学、学到什么程度",
-      "knowledge_ids": [1, 2],
-      "key_points": ["知识点1: 简要说明", "知识点2: 简要说明", "知识点3: 简要说明"],
-      "estimated_hours": 2,
-      "resources": ["推荐资源1", "推荐资源2"],
-      "milestone": "完成标志（如：能独立完成XX练习）"
-    }}
-  ]
-}}"""
-
-        response = await self.chat(prompt, max_tokens=4096)
+        response = await self.chat(prompt, max_tokens=8192)
         return parse_llm_json(response, fallback={"title": course_title, "steps": []})
 
     def _build_profile_summary(self, profile: Dict[str, Any]) -> str:
-        """将画像字典转为可读文本"""
+        """Convert profile dict to readable text, supports enriched profile"""
         if not profile:
             return "暂无画像数据"
 
@@ -171,24 +131,58 @@ class PlannerAgent(BaseAgent):
             }
             parts.append(f"学习风格: {style_map.get(style, style)}")
 
-        strengths = profile.get("strengths", "")
-        if strengths:
-            parts.append(f"优势: {strengths}")
+        level = profile.get("gradeLevel") or profile.get("grade_level", "")
+        if not level:
+            level = profile.get("estimated_course_level", "")
+        if level:
+            parts.append(f"当前水平: {level}")
 
-        weaknesses = profile.get("weaknesses", "")
-        if weaknesses:
-            parts.append(f"薄弱点: {weaknesses}")
+        pace = profile.get("recommended_pace", "")
+        if pace:
+            pace_map = {"slow": "慢速细致", "moderate": "正常进度", "fast": "快速推进"}
+            parts.append(f"推荐学习节奏: {pace_map.get(pace, pace)}")
 
-        interests = profile.get("interests", "")
+        course_strengths = profile.get("course_specific_strengths", [])
+        if course_strengths:
+            parts.append(f"本课程已掌握: {', '.join(course_strengths)}")
+
+        course_weaknesses = profile.get("course_specific_weaknesses", [])
+        if course_weaknesses:
+            parts.append(f"本课程薄弱点: {', '.join(course_weaknesses)}")
+
+        gaps = profile.get("knowledge_gaps", [])
+        if gaps:
+            parts.append(f"知识盲区: {', '.join(gaps)}")
+
+        interests = profile.get("topic_interests") or profile.get("interests", "")
         if interests:
-            parts.append(f"兴趣: {interests}")
+            if isinstance(interests, list):
+                parts.append(f"兴趣主题: {', '.join(interests)}")
+            else:
+                parts.append(f"兴趣: {interests}")
 
-        grade = profile.get("gradeLevel") or profile.get("grade_level", "")
-        if grade:
-            parts.append(f"年级: {grade}")
+        if not course_strengths:
+            strengths = profile.get("strengths", "")
+            if strengths:
+                parts.append(f"优势: {strengths}")
+        if not course_weaknesses:
+            weaknesses = profile.get("weaknesses", "")
+            if weaknesses:
+                parts.append(f"薄弱点: {weaknesses}")
+
+        strategy = profile.get("recommended_strategy", "")
+        if strategy:
+            parts.append(f"学习策略: {strategy}")
+
+        attention = profile.get("attention_points", [])
+        if attention:
+            parts.append(f"重点关注: {', '.join(attention)}")
+
+        pref_resources = profile.get("preferred_resource_types", [])
+        if pref_resources:
+            parts.append(f"偏好资源: {', '.join(pref_resources)}")
 
         return "\n".join(parts) if parts else "暂无画像数据"
-
     def _build_knowledge_summary(self, knowledge: List[Dict[str, Any]]) -> str:
         """将知识库条目转为可读文本"""
         if not knowledge:
@@ -196,7 +190,7 @@ class PlannerAgent(BaseAgent):
 
         lines = []
         total_len = 0
-        max_len = 6000  # 支持更多内容
+        max_len = 8000  # 支持更多内容
 
         for item in knowledge:
             kid = item.get("id", "?")

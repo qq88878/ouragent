@@ -1,4 +1,4 @@
-﻿"""
+"""
 Agent 微服务 API - 供 Java 后端调用
 
 接口清单（对齐 Java AgentServiceClient）:
@@ -133,6 +133,11 @@ class PlanRequest(BaseModel):
     course_knowledge: List[Dict[str, Any]] = Field(default_factory=list, max_length=500)
     goal: str = Field(default="掌握课程核心知识", max_length=500)
     schedule: Optional[Dict[str, Any]] = Field(default=None, description="课表信息")
+
+    chat_signals: Dict[str, Any] = Field(default_factory=dict, description="对话信号，用于画像增强")
+    study_records: List[Dict[str, Any]] = Field(default_factory=list, max_length=100, description="本课程学习记录")
+    evaluation_history: List[Dict[str, Any]] = Field(default_factory=list, max_length=100, description="评估历史")
+    prior_paths: List[Dict[str, Any]] = Field(default_factory=list, max_length=50, description="历史学习路径")
 
     @model_validator(mode="before")
     @classmethod
@@ -760,6 +765,10 @@ async def generate_plan(request: PlanRequest, _: dict = Depends(get_current_user
             course_knowledge=request.course_knowledge,
             goal=request.goal,
             schedule=request.schedule,
+            chat_signals=request.chat_signals if request.chat_signals else None,
+            study_records=request.study_records if request.study_records else None,
+            evaluation_history=request.evaluation_history if request.evaluation_history else None,
+            prior_paths=request.prior_paths if request.prior_paths else None,
         )
         return result
     except Exception as e:

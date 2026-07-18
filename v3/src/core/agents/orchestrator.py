@@ -1,4 +1,4 @@
-﻿"""Orchestrator - 多 Agent 协作编排器，系统总入口"""
+"""Orchestrator - 多 Agent 协作编排器，系统总入口"""
 
 from __future__ import annotations
 
@@ -1053,7 +1053,7 @@ class Orchestrator:
         course_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         """构建课程画像（不持久化，每次从对话历史动态构建）"""
-        return await self._call_agent_safe(
+        result = await self._call_agent_safe(
             "profile_agent", self.profile_agent, "analyze_course",
             fallback={"course_strengths": [], "course_weaknesses": []},
             basic_profile=basic_profile,
@@ -1134,11 +1134,52 @@ class Orchestrator:
         course_description: str = "",
         goal: str = "掌握课程核心知识",
         schedule: Optional[Dict[str, Any]] = None,
+        chat_signals: Dict[str, Any] | None = None,
+        study_records: List[Dict[str, Any]] | None = None,
+        evaluation_history: List[Dict[str, Any]] | None = None,
+        prior_paths: List[Dict[str, Any]] | None = None,
     ) -> Dict[str, Any]:
-        """生成学习路径（委托给 PlannerAgent）"""
+        """生成学习路径（委托给 PlannerAgent，先增强用户画像）"""
 
-        # RAG 检索：为每个知识库条目获取实际内容
-        enriched_knowledge = list(course_knowledge)  # shallow copy
+        # Step 0: Enrich profile with course-specific context
+        enriched_profile = dict(basic_profile)
+        if self.profile_agent and (chat_signals or study_records or evaluation_history):
+            try:
+                knowledge_snippets = []
+                if self.rag and course_knowledge:
+                    for item in course_knowledge[:5]:
+                        try:
+                            results = await self.rag.retrieve(
+                                query=item.get("title", ""), top_k=2,
+                                knowledge_ids=[item.get("id")] if item.get("id") else None,
+                            )
+                            for r in results:
+                                knowledge_snippets.append(r["content"][:300])
+                        except Exception:
+                            pass
+                knowledge_context = "\n".join(knowledge_snippets[:10]) if knowledge_snippets else ""
+
+                enriched_result = await self._call_agent_safe(
+                    "profile_agent", self.profile_agent, "enrich_for_path",
+                    fallback=basic_profile,
+                    basic_profile=basic_profile,
+                    course_title=course_title,
+                    course_description=course_description,
+                    chat_signals=chat_signals or {},
+                    study_records=study_records or [],
+                    evaluation_history=evaluation_history or [],
+                    prior_paths=prior_paths or [],
+                    knowledge_context=knowledge_context,
+                )
+                if enriched_result and not isinstance(enriched_result, str) and not enriched_result.get("error"):
+                    enriched_profile.update(enriched_result)
+                    logger.info("Profile enriched for path generation: %s", 
+                                enriched_result.get("change_summary", ""))
+            except Exception as e:
+                logger.debug("Profile enrichment skipped: %s", e)
+
+        # Step 1: RAG enrich knowledge items with actual content
+        enriched_knowledge = list(course_knowledge)
         if self.rag and enriched_knowledge:
             for item in enriched_knowledge:
                 kid = item.get("id")
@@ -1156,17 +1197,37 @@ class Orchestrator:
                 except Exception as e:
                     logger.debug("RAG 检索知识库内容失败: knowledge_id=%s, %s", kid, e)
 
-        return await self._call_agent_safe(
+        result = await self._call_agent_safe(
             "planner_agent", self.planner_agent, "generate_path",
             fallback={"title": course_title, "steps": [], "error": "planner_failed"},
             timeout=180.0,
-            student_profile=basic_profile,
+            student_profile=enriched_profile,
             course_title=course_title,
             course_description=course_description,
             course_knowledge=enriched_knowledge,
             goal=goal,
             schedule=schedule,
         )
+
+        # Flatten phases into steps for backward compatibility
+        if result and "phases" in result and "steps" not in result:
+            flat_steps = []
+            step_order = 0
+            for phase in result.get("phases", []):
+                for step in phase.get("steps", []):
+                    step_order += 1
+                    step["order"] = step_order
+                    step["phase_name"] = phase.get("phase_name", "")
+                    step["phase_goal"] = phase.get("phase_goal", "")
+                    flat_steps.append(step)
+            result["steps"] = flat_steps
+            result["total_estimated_hours"] = result.get("total_estimated_hours", sum(
+                s.get("estimated_hours", 0) for s in flat_steps
+            ))
+            logger.info("Flattened %d phases into %d steps", 
+                        len(result.get("phases", [])), len(flat_steps))
+
+        return result
 
     async def generate_resource(
         self,
@@ -1183,7 +1244,7 @@ class Orchestrator:
         if not task_type:
             return {"error": f"Unsupported resource type: {resource_type}"}
 
-        return await self._call_agent_safe(
+        result = await self._call_agent_safe(
             "resource_agent", self.resource_agent, task_type,
             fallback={"topic": topic, "questions": [], "error": "resource_failed"},
             topic=topic,
@@ -1201,7 +1262,7 @@ class Orchestrator:
         knowledge_context: str = "",
     ) -> Dict[str, Any]:
         """评估学生答案（委托给 EvaluatorAgent）"""
-        return await self._call_agent_safe(
+        result = await self._call_agent_safe(
             "evaluator_agent", self.evaluator_agent, "evaluate_answer",
             fallback={"score": 0, "is_correct": False, "error": "evaluator_failed"},
             question=question,

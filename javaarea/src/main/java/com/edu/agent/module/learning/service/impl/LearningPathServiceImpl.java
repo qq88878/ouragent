@@ -26,7 +26,9 @@ import com.edu.agent.module.schedule.service.ScheduleService;
 import com.edu.agent.module.knowledge.dto.KnowledgeDTO;
 import com.edu.agent.module.knowledge.service.KnowledgeService;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.stereotype.Service;
+
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
@@ -45,6 +47,7 @@ public class LearningPathServiceImpl
     private final ScheduleService scheduleService;
     private final StudentProfileQuestionnaireMapper questionnaireMapper;
     private final KnowledgeService knowledgeService;
+    
     public LearningPathServiceImpl(LearningPathStepMapper stepMapper, AgentServiceClient agentServiceClient, StudentProfileService studentProfileService, CourseMapper courseMapper, ScheduleService scheduleService, StudentProfileQuestionnaireMapper questionnaireMapper, KnowledgeService knowledgeService) {
         this.stepMapper = stepMapper;
         this.agentServiceClient = agentServiceClient;
@@ -53,7 +56,7 @@ public class LearningPathServiceImpl
         this.scheduleService = scheduleService;
         this.questionnaireMapper = questionnaireMapper;
         this.knowledgeService = knowledgeService;
-    }
+            }
 
     @Override
     @Transactional
@@ -219,108 +222,79 @@ public class LearningPathServiceImpl
     @Override
     @Transactional
     public LearningPathDTO generatePathFromChat(Long userId, Long courseId, List<Map<String, String>> messages) {
-        // 获取课程信息
         String courseTitle = "课程";
-        if (courseId != null) {
-            Course course = courseMapper.selectById(courseId);
-            if (course != null) {
-                courseTitle = course.getTitle();
-            }
-        }
-
-        // 调用 Python agent 基于对话生成路径
-        AgentLearningPathResponse agentResponse;
-        try {
-            String cidStr = courseId != null ? String.valueOf(courseId) : null;
-            String courseDesc = "";
-            if (courseId != null) {
-                Course course = courseMapper.selectById(courseId);
-                if (course != null) {
-                    StringBuilder desc = new StringBuilder();
-                    if (course.getDescription() != null && !course.getDescription().isEmpty()) {
-                        desc.append(course.getDescription());
-                    }
-                    if (course.getCategory() != null && !course.getCategory().isEmpty()) {
-                        if (desc.length() > 0) desc.append("。");
-                        desc.append("分类: ").append(course.getCategory());
-                    }
-                    if (course.getDifficulty() != null && !course.getDifficulty().isEmpty()) {
-                        if (desc.length() > 0) desc.append("。");
-                        desc.append("难度: ").append(course.getDifficulty());
-                    }
-                    courseDesc = desc.toString();
-                }
-            }
-            agentResponse = agentServiceClient.generatePathFromChat(messages, cidStr, courseTitle, courseDesc);
-        } catch (Exception e) {
-            log.error("调用 Agent 基于对话生成学习路径失败", e);
-            agentResponse = generateDefaultPath(courseTitle);
-        }
-
-        // 版本管理：归档同课程已有路径
-        int maxVersion = 0;
-        LambdaQueryWrapper<LearningPath> existingWrapper = new LambdaQueryWrapper<>();
-        existingWrapper.eq(LearningPath::getUserId, userId)
-                .eq(LearningPath::getArchived, 0);
-        if (courseId != null) {
-            existingWrapper.eq(LearningPath::getCourseId, courseId);
-        } else {
-            existingWrapper.isNull(LearningPath::getCourseId);
-        }
-        List<LearningPath> existingPaths = list(existingWrapper);
-        for (LearningPath old : existingPaths) {
-            old.setArchived(1);
-            if (old.getVersion() != null && old.getVersion() > maxVersion) {
-                maxVersion = old.getVersion();
-            }
-            updateById(old);
-        }
-
-        // 保存路径
+        String courseDesc = "";
+        if (courseId != null) { Course c = courseMapper.selectById(courseId); if (c != null) { courseTitle = c.getTitle(); if (c.getDescription() != null) courseDesc = c.getDescription(); } }
+        int mv = 0;
+        LambdaQueryWrapper<LearningPath> ew = new LambdaQueryWrapper<>();
+        ew.eq(LearningPath::getUserId, userId).eq(LearningPath::getArchived, 0);
+        if (courseId != null) ew.eq(LearningPath::getCourseId, courseId); else ew.isNull(LearningPath::getCourseId);
+        for (LearningPath old : list(ew)) { old.setArchived(1); if (old.getVersion() != null && old.getVersion() > mv) mv = old.getVersion(); updateById(old); }
         LearningPath path = new LearningPath();
-        path.setUserId(userId);
-        path.setCourseId(courseId);
-        String title = agentResponse.getTitle();
-        path.setTitle(title != null ? title : courseTitle + " - 学习路径");
-        String desc = agentResponse.getDescription();
-        path.setDescription(desc != null ? desc : "基于对话生成的个性化学习路径");
-        path.setStatus(0);
-        path.setVersion(maxVersion + 1);
-        path.setArchived(0);
-        path.setStarred(0);
+        path.setUserId(userId); path.setCourseId(courseId);
+        path.setTitle(courseTitle + " - 个性化学习路径");
+        path.setDescription("AI正在分析对话内容，生成个性化学习路径...");
+        path.setStatus(3); path.setVersion(mv + 1); path.setArchived(0); path.setStarred(0); path.setTotalSteps(0); path.setCompletedSteps(0);
         save(path);
+        Long pid = path.getId();
+        String cid = courseId != null ? String.valueOf(courseId) : null;
 
-        // 保存步骤
-        List<AgentLearningPathResponse.Step> steps = agentResponse.getStepsSafe();
-        path.setTotalSteps(steps.size());
-        path.setCompletedSteps(0);
-        updateById(path);
+        // Sync LLM call
+        AgentLearningPathResponse ar = null;
+        try {
+            ar = agentServiceClient.generatePathFromChat(messages, cid, courseTitle, courseDesc);
+        } catch (Exception e) {
+            log.error("LLM call failed for pathId={}, using fallback", pid, e);
+        }
+        if (ar == null) ar = generateDefaultPath(courseTitle);
 
+        path.setTitle(ar.getTitle() != null ? ar.getTitle() : courseTitle + " - 学习路径");
+        path.setDescription(ar.getDescription() != null ? ar.getDescription() : "基于对话生成");
+        path.setStatus(0);
+        List<AgentLearningPathResponse.Step> steps = ar.getStepsSafe();
+        path.setTotalSteps(steps.size()); updateById(path);
+        if (steps.isEmpty()) {
+            // If LLM returned empty (timeout fallback), use default
+            ar = generateDefaultPath(courseTitle);
+            steps = ar.getStepsSafe();
+            path.setTitle(ar.getTitle()); path.setTotalSteps(steps.size()); updateById(path);
+        }
         for (int i = 0; i < steps.size(); i++) {
-            AgentLearningPathResponse.Step stepData = steps.get(i);
+            AgentLearningPathResponse.Step sd = steps.get(i);
             LearningPathStep step = new LearningPathStep();
-            step.setPathId(path.getId());
-            step.setStepOrder(i + 1);
-            step.setTitle(stepData.getTitle() != null ? stepData.getTitle() : "步骤 " + (i + 1));
-            step.setDescription(stepData.getDescription() != null ? stepData.getDescription() : "");
+            step.setPathId(pid); step.setStepOrder(i + 1);
+            step.setTitle(sd.getTitle() != null ? sd.getTitle() : "步骤 " + (i + 1));
+            step.setDescription(sd.getDescription() != null ? sd.getDescription() : "");
             step.setStatus(0);
-            if (stepData.getKnowledgeIds() != null && !stepData.getKnowledgeIds().isEmpty()) {
-                step.setKnowledgeIds(stepData.getKnowledgeIds().stream()
-                        .map(String::valueOf).collect(java.util.stream.Collectors.joining(",")));
-            }
-            if (stepData.getEstimatedHours() != null) {
-                step.setEstimatedHours(stepData.getEstimatedHours());
-            }
-            step.setStepType(inferStepType(stepData.getTitle(), stepData.getDescription()));
-            step.setEstimatedHours(stepData.getEstimatedHours() != null ? stepData.getEstimatedHours() : 2);
-            if (stepData.getKnowledgeIds() != null && !stepData.getKnowledgeIds().isEmpty()) {
-                step.setKnowledgeBaseId(stepData.getKnowledgeIds().get(0).longValue());
-            }
+            if (sd.getKnowledgeIds() != null && !sd.getKnowledgeIds().isEmpty()) step.setKnowledgeIds(sd.getKnowledgeIds().stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(",")));
+            step.setEstimatedHours(sd.getEstimatedHours() != null ? sd.getEstimatedHours() : 2);
+            step.setStepType(inferStepType(sd.getTitle(), sd.getDescription()));
+            if (sd.getPhaseName() != null) step.setPhaseName(sd.getPhaseName());
+            if (sd.getIsCheckpoint() != null) step.setIsCheckpoint(sd.getIsCheckpoint() ? 1 : 0);
             stepMapper.insert(step);
         }
+        log.info("Path generation complete: pathId={}, steps={}", pid, steps.size());
 
-        log.info("基于对话生成学习路径成功: pathId={}, userId={}, courseId={}", path.getId(), userId, courseId);
-        return getPathById(path.getId());
+        return getPathById(pid);
+    }
+
+    private void autoGenerateContentAndExercises(Long pathId) {
+        List<LearningPathStep> steps = stepMapper.selectList(new LambdaQueryWrapper<LearningPathStep>().eq(LearningPathStep::getPathId, pathId));
+        for (LearningPathStep step : steps) { try {
+            if (step.getContent() == null || step.getContent().isEmpty()) {
+                List<Integer> kids = parseKnowledgeIds(step.getKnowledgeIds());
+                Map<String, Object> cr = agentServiceClient.generateStepContent(step.getTitle(), kids);
+                step.setContent(cr.getOrDefault("content", "").toString());
+            }
+            if (step.getExercises() == null || step.getExercises().isEmpty() || "{}".equals(step.getExercises())) {
+                String diff = "easy";
+                if (step.getStepType() != null) switch (step.getStepType()) { case "CONCEPT": diff = "easy"; break; case "PRACTICE": case "REVIEW": diff = "medium"; break; case "PROJECT": diff = "hard"; break; }
+                List<Integer> kids = parseKnowledgeIds(step.getKnowledgeIds());
+                step.setExercises(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(agentServiceClient.generateExercises(step.getTitle(), kids, diff, 3)));
+            }
+            step.setUpdateTime(java.time.LocalDateTime.now()); stepMapper.updateById(step);
+        } catch (Exception e) { log.warn("Auto-gen step {}: {}", step.getId(), e.getMessage()); } }
+        log.info("Auto-gen complete: pathId={}", pathId);
     }
 
     @Override
@@ -523,10 +497,10 @@ public class LearningPathServiceImpl
         dto.setExerciseResults(step.getExerciseResults());
         dto.setKnowledgeIds(step.getKnowledgeIds());
         dto.setIsCheckpoint(step.getIsCheckpoint());
+        dto.setPhaseName(step.getPhaseName());
         dto.setCheckpointScope(step.getCheckpointScope());
         return dto;
     }
-
 
 
 
@@ -812,7 +786,6 @@ public class LearningPathServiceImpl
         }
     }
 
-
     private String formatPeriodRange(List<Integer> indexes, List<ScheduleConfigDTO.PeriodConfig> periods) {
         if (indexes == null || indexes.isEmpty()) return "";
         if (indexes.size() == 1) {
@@ -844,7 +817,6 @@ public class LearningPathServiceImpl
         if (first == last) return "\u7b2c" + first + "\u5468";
         return "\u7b2c" + first + "-" + last + "\u5468";
     }
-
 
     // ====== Profile Evolution Helper ======
 
@@ -904,6 +876,70 @@ public class LearningPathServiceImpl
         } catch (Exception e) {
             log.warn("Profile evolution trigger failed: userId={}, pathId={}", userId, pathId, e);
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    @Transactional
+    public LearningPathDTO regenerateStepExercises(Long pathId, Long stepId) {
+        LearningPathStep step = stepMapper.selectById(stepId);
+        if (step == null || !step.getPathId().equals(pathId)) {
+            throw new BizException(ResultCode.NOT_FOUND, "Step not found");
+        }
+        LearningPath path = getById(pathId);
+
+        // Analyse previous exercise results for weak topics
+        String focusTopic = step.getTitle();
+        if (step.getExerciseResults() != null && !step.getExerciseResults().isEmpty()) {
+            Map<String, Object> prevResults = parseJson(step.getExerciseResults());
+            List<Map<String, Object>> prevQuestions = (List<Map<String, Object>>)
+                    prevResults.getOrDefault("questions", java.util.Collections.emptyList());
+            List<String> wrongTopics = new java.util.ArrayList<>();
+            for (Map<String, Object> q : prevQuestions) {
+                Boolean ok = (Boolean) q.get("is_correct");
+                if (ok == null || !ok) {
+                    String qt = (String) q.get("question");
+                    if (qt != null) { wrongTopics.add(qt.length() > 50 ? qt.substring(0, 50) : qt); }
+                }
+            }
+            if (!wrongTopics.isEmpty()) {
+                focusTopic = String.join(", ", wrongTopics.subList(0, Math.min(3, wrongTopics.size())));
+            }
+        }
+
+        List<Integer> knowledgeIds = parseKnowledgeIds(step.getKnowledgeIds());
+        String difficulty = "medium";
+        if (step.getStepType() != null) {
+            switch (step.getStepType()) {
+                case "CONCEPT": difficulty = "easy"; break;
+                case "PRACTICE": difficulty = "medium"; break;
+                case "REVIEW": difficulty = "medium"; break;
+                case "PROJECT": difficulty = "hard"; break;
+            }
+        }
+
+        Map<String, Object> exercisesResult = agentServiceClient.generateExercises(
+                focusTopic, knowledgeIds, difficulty, 3);
+
+        try {
+            step.setExercises(new com.fasterxml.jackson.databind.ObjectMapper()
+                    .writeValueAsString(exercisesResult));
+            step.setExerciseResults(null);
+        } catch (Exception e) {
+            log.error("Failed to serialize regenerated exercises", e);
+            step.setExercises("{}");
+        }
+
+        step.setUpdateTime(java.time.LocalDateTime.now());
+        stepMapper.updateById(step);
+
+        if (path != null) {
+            path.setLastStudiedAt(java.time.LocalDateTime.now());
+            updateById(path);
+        }
+
+        log.info("Exercises regenerated for step: pathId={}, stepId={}", pathId, stepId);
+        return getPathById(pathId);
     }
 
 }

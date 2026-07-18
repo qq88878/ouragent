@@ -102,7 +102,7 @@
               size="small"
               plain
               :icon="MapLocation"
-              :loading="pathLoading"
+              :loading="pathGenerating"
               :disabled="messages.length === 0"
               @click="generateLearningPath"
               style="margin-left: auto;"
@@ -133,77 +133,26 @@
     <!-- 用户画像右侧面板 -->
     <ProfilePanel v-if="currentSessionId" :session-id="currentSessionId" :signals="signals" />
 
-    <!-- 学习路径弹窗 -->
-    <el-dialog v-model="pathDialogVisible" title="基于对话的个性化学习路径" width="680px" top="5vh" destroy-on-close>
-      <div v-if="pathLoading" class="path-loading">
-        <el-skeleton :rows="6" animated />
-      </div>
-      <div v-else-if="pathData" class="path-content">
-        <div class="path-header">
-          <h3>{{ pathData.title }}</h3>
-          <p>{{ pathData.description }}</p>
-        </div>
 
-        <!-- 已讨论知识点 -->
-        <div v-if="pathData.discussed_topics?.length" class="path-section">
-          <h4 class="section-title">
-            <el-icon><ChatDotRound /></el-icon>
-            已讨论的知识点（{{ pathData.discussed_topics.length }}）
-          </h4>
-          <div class="discussed-tags">
-            <el-tag v-for="(t, i) in pathData.discussed_topics" :key="i" type="success" effect="plain" size="default">
-              {{ t.topic }}
-              <span class="tag-count">({{ t.message_count || 0 }}次)</span>
-            </el-tag>
-          </div>
+    <!-- 路径生成加载遮罩 -->
+    <div v-if="pathGenerating" class="path-generating-overlay">
+      <div class="generating-dialog">
+        <div class="gen-spinner">
+          <svg viewBox="0 0 48 48" width="64" height="64">
+            <circle cx="24" cy="24" r="20" fill="none" stroke="#409EFF" stroke-width="3" stroke-dasharray="100" stroke-linecap="round">
+              <animateTransform attributeName="transform" type="rotate" from="0 24 24" to="360 24 24" dur="2s" repeatCount="indefinite"/>
+            </circle>
+          </svg>
+          <span class="gen-spinner-text">AI</span>
         </div>
-
-        <!-- 学习步骤时间线 -->
-        <div class="path-section">
-          <h4 class="section-title">
-            <el-icon><MapLocation /></el-icon>
-            学习路径（{{ pathData.total_steps || pathData.steps?.length || 0 }}步）
-          </h4>
-          <div class="path-timeline">
-            <div v-for="(step, idx) in pathData.steps" :key="idx" class="timeline-item" :class="{ completed: step.status === 'completed' }">
-              <div class="timeline-dot" :class="{ completed: step.status === 'completed' }">
-                <span v-if="step.status === 'completed'">✓</span>
-                <span v-else>{{ step.order || idx + 1 }}</span>
-              </div>
-              <div class="timeline-line" v-if="idx < pathData.steps.length - 1"></div>
-              <div class="timeline-content">
-                <div class="step-header">
-                  <span class="step-title">{{ step.title }}</span>
-                  <el-tag v-if="step.status === 'completed'" type="success" size="small" effect="plain">已讨论</el-tag>
-                  <el-tag v-else type="info" size="small" effect="plain">待学习</el-tag>
-                  <span v-if="step.estimated_hours" class="step-hours">{{ step.estimated_hours }}h</span>
-                </div>
-                <p class="step-desc">{{ step.description }}</p>
-                <div v-if="step.checkpoint" class="step-checkpoint">
-                  <strong>检验方式：</strong>{{ step.checkpoint }}
-                </div>
-                <!-- 关联知识库内容 -->
-                <el-collapse v-if="step.knowledge_items?.length" class="step-knowledge">
-                  <el-collapse-item :title="`关联知识库内容（${step.knowledge_items.length}条）`">
-                    <div v-for="(ki, kiIdx) in step.knowledge_items" :key="kiIdx" class="knowledge-item">
-                      <div class="ki-source">{{ ki.source || `知识片段 #${ki.id}` }}</div>
-                      <div class="ki-content">{{ ki.content }}</div>
-                    </div>
-                  </el-collapse-item>
-                </el-collapse>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="path-footer">
-          <span class="path-meta">共检索到 {{ pathData.knowledge_items_count || 0 }} 条知识库内容</span>
+        <h3>AI 正在分析对话内容</h3>
+        <p>正在调用大模型分析对话，生成个性化学习路径...</p>
+        <p class="gen-subtitle">请耐心等待，通常需要 30-60 秒</p>
+        <div class="gen-bar">
+          <div class="gen-bar-fill"></div>
         </div>
       </div>
-      <template #footer>
-        <el-button @click="pathDialogVisible = false">关闭</el-button>
-      </template>
-    </el-dialog>
+    </div>
   </div>
 </template>
 
@@ -261,10 +210,8 @@ const signals = ref(null);
 const chatInputRef = ref(null);
 
 // 学习路径
-const pathDialogVisible = ref(false);
-const pathLoading = ref(false);
-const pathData = ref(null);
 
+const pathGenerating = ref(false);
 let abortController = null;
 
 onMounted(async () => {
@@ -477,47 +424,40 @@ async function deleteSession(id) {
 async function generateLearningPath() {
   if (messages.value.length === 0) return;
 
-  // 检查问卷完成状态
+  // 检查问卷状态
   try {
     const qs = await learningApi.getQuestionnaireStatus();
     if (!qs.data || !qs.data.completed) {
       try {
-        await ElMessageBox.confirm('完成学习画像问卷可获得更精准的个性化路径，是否先去完成？', '提示', {
-          confirmButtonText: '去完成问卷',
-          cancelButtonText: '跳过，直接生成',
+        await ElMessageBox.confirm('您还未完成学生画像问卷，建议先填写问卷以获得更精准的学习路径。是否前往填写？', '提示', {
+          confirmButtonText: '前往填写',
+          cancelButtonText: '暂时跳过',
           type: 'info',
         });
         router.push('/profile');
         return;
       } catch {
-        // 用户点了"跳过"，继续生成
+        // 用户点击"取消"，继续生成
       }
     }
   } catch {
-    // 接口失败不阻塞生成
+    // 问卷状态查询失败，继续生成
   }
 
-  pathDialogVisible.value = true;
-  pathLoading.value = true;
-  pathData.value = null;
-
-  const currentCourse = courses.value.find(c => c.id === selectedCourseId.value);
+  pathGenerating.value = true;
   const chatMessages = messages.value.map(m => ({ role: m.role, content: m.content }));
-
   try {
     const res = await learningApi.generatePathFromChat({
       messages: chatMessages,
       courseId: selectedCourseId.value || null,
     });
-    pathData.value = res.data || res;
+    ElMessage.success('已开始生成学习路径，即将跳转...');
+    setTimeout(() => router.push('/learning'), 500);
   } catch (e) {
-    ElMessage.error('生成学习路径失败: ' + (e.response?.data?.detail || e.message || '网络错误'));
-    pathDialogVisible.value = false;
-  } finally {
-    pathLoading.value = false;
+    ElMessage.error('生成失败: ' + (e.response?.data?.detail || e.message || '请重试'));
+    pathGenerating.value = false;
   }
 }
-
 function handleKeydown(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }
 function scrollToBottom() { if (messagesArea.value) { messagesArea.value.scrollTop = messagesArea.value.scrollHeight; } }
 
@@ -673,4 +613,39 @@ function formatMsgTime(time) {
 .difficulty-fill.advanced { background: #F56C6C; }
 .difficulty-text { font-size: 11px; color: var(--color-text-secondary); white-space: nowrap; }
 .signals-meta { color: var(--color-text-muted); font-size: 11px; margin-top: 4px; }
+
+.path-generating-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6); z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+}
+.generating-dialog {
+  background: #fff; border-radius: 16px; padding: 40px 48px;
+  text-align: center; max-width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+}
+.gen-spinner { position: relative; width: 64px; height: 64px; margin: 0 auto 20px; }
+.gen-spinner-text {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 18px; font-weight: 700; color: #409EFF;
+}
+.generating-dialog h3 { font-size: 20px; font-weight: 700; color: #303133; margin-bottom: 8px; }
+.generating-dialog p { font-size: 14px; color: #606266; margin-bottom: 4px; }
+.gen-subtitle { font-size: 12px !important; color: #909399 !important; }
+.gen-bar {
+  width: 100%; height: 4px; margin-top: 20px;
+  background: #E4E7ED; border-radius: 2px; overflow: hidden;
+}
+.gen-bar-fill {
+  width: 30%; height: 100%;
+  background: linear-gradient(90deg, #409EFF, #67C23A, #409EFF);
+  background-size: 200% 100%;
+  animation: gen-bar-slide 1.5s ease-in-out infinite;
+  border-radius: 2px;
+}
+@keyframes gen-bar-slide {
+  0% { background-position: 100% 0; width: 20%; }
+  50% { background-position: 0 0; width: 80%; }
+  100% { background-position: 100% 0; width: 20%; }
+}
+
 </style>

@@ -19,6 +19,7 @@ public class LearningPathStepDTO {
     private String exerciseResults;
     private String knowledgeIds;
     private Integer isCheckpoint;
+    private String phaseName;
     private String checkpointScope;
 
     @java.lang.SuppressWarnings("all")
@@ -198,6 +199,8 @@ public class LearningPathStepDTO {
 
     @java.lang.SuppressWarnings("all")
     public void setIsCheckpoint(final Integer isCheckpoint) { this.isCheckpoint = isCheckpoint; }
+    public String getPhaseName() { return this.phaseName; }
+    public void setPhaseName(final String phaseName) { this.phaseName = phaseName; }
 
     @java.lang.SuppressWarnings("all")
     public String getCheckpointScope() { return this.checkpointScope; }

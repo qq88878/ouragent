@@ -22,6 +22,7 @@ class ProfileAgent(BaseAgent):
     TASK_ANALYZE_COURSE = "analyze_course"
     TASK_ANALYZE_DIMENSIONS = "analyze_dimensions"
     TASK_UPDATE_FROM_ACTIVITY = "update_from_activity"
+    TASK_ENRICH_FOR_PATH = "enrich_for_path"
 
     @property
     def system_prompt(self) -> str:
@@ -59,6 +60,17 @@ class ProfileAgent(BaseAgent):
                 current_profile=kwargs.get("current_profile", {}),
                 new_signals=kwargs.get("new_signals", {}),
                 evaluation_results=kwargs.get("evaluation_results", []),
+            )
+        elif task_type == self.TASK_ENRICH_FOR_PATH:
+            return await self.enrich_for_path_generation(
+                basic_profile=kwargs.get("basic_profile", {}),
+                course_title=kwargs.get("course_title", ""),
+                course_description=kwargs.get("course_description", ""),
+                chat_signals=kwargs.get("chat_signals", {}),
+                study_records=kwargs.get("study_records", []),
+                evaluation_history=kwargs.get("evaluation_history", []),
+                prior_paths=kwargs.get("prior_paths", []),
+                knowledge_context=kwargs.get("knowledge_context", ""),
             )
         else:
             raise ValueError(f"ProfileAgent 不支持任务类型: {task_type}")
@@ -153,8 +165,10 @@ class ProfileAgent(BaseAgent):
         basic_profile: Dict[str, Any],
         chat_history: List[Dict[str, str]],
         study_records: List[Dict[str, Any]] | None = None,
+        knowledge_context: str = "",
+        chat_signals: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
-        """构建课程级画像（不持久化，每次从对话历史动态构建）"""
+        """结合基础画像、对话历史、知识库上下文，动态构建课程学生画像（不持久化）"""
         if not chat_history:
             return {
                 "course_strengths": [],
@@ -168,6 +182,8 @@ class ProfileAgent(BaseAgent):
             f"{m['role']}: {m['content'][:200]}" for m in chat_history[-30:]
         )
         records_text = json.dumps(study_records, ensure_ascii=False) if study_records else "暂无学习记录"
+        knowledge_text = knowledge_context[:1000] if knowledge_context else "暂无知识库上下文"
+        signals_text = json.dumps(chat_signals or {}, ensure_ascii=False) if chat_signals else "暂无信号"
         profile_text = json.dumps(basic_profile, ensure_ascii=False)
 
         prompt = f"""请根据学生的基础画像和本课程的对话历史，生成该课程特有的学生理解。
@@ -180,6 +196,12 @@ class ProfileAgent(BaseAgent):
 
 【本课程学习记录】
 {records_text}
+
+【课程知识库】
+{knowledge_text}
+
+【对话信号】
+{signals_text}
 
 请输出 JSON 格式的课程画像:
 {{
@@ -317,5 +339,85 @@ Rules: only change fields where there is clear evidence. If no change, return cu
             "confidence": 0.0,
         })
         logger.info("Profile update: change_summary=%s", result.get("change_summary", ""))
+        return result
+
+    async def enrich_for_path_generation(
+        self,
+        basic_profile: Dict[str, Any],
+        course_title: str,
+        course_description: str = "",
+        chat_signals: Dict[str, Any] | None = None,
+        study_records: List[Dict[str, Any]] | None = None,
+        evaluation_history: List[Dict[str, Any]] | None = None,
+        prior_paths: List[Dict[str, Any]] | None = None,
+        knowledge_context: str = "",
+    ) -> Dict[str, Any]:
+        """
+        ?????????????????
+
+        ?????? + ?????? + ???? + ???? + ???????
+        ???????? PlannerAgent ????????????????????
+        """
+        profile_text = json.dumps(basic_profile, ensure_ascii=False)
+        signals_text = json.dumps(chat_signals or {}, ensure_ascii=False)
+        records_text = json.dumps((study_records or [])[-10:], ensure_ascii=False)
+        eval_text = json.dumps((evaluation_history or [])[-10:], ensure_ascii=False)
+        paths_text = json.dumps((prior_paths or [])[-3:], ensure_ascii=False)
+        knowledge_snippet = knowledge_context[:1500] if knowledge_context else "?"
+
+        prompt = f"""????????"{course_title}"?????????????????????????
+
+??????
+{profile_text}
+
+?????????
+{signals_text}
+
+?????????
+{records_text}
+
+?????????
+{eval_text}
+
+????????
+{paths_text}
+
+???????????
+{knowledge_snippet}
+
+??? JSON?
+{{
+  "learning_style": "VISUAL/AUDITORY/READING/KINESTHETIC",
+  "grade_level": "ZERO_BASIC/BEGINNER/INTERMEDIATE/ADVANCED",
+  "course_specific_strengths": ["??????????"],
+  "course_specific_weaknesses": ["????????"],
+  "knowledge_gaps": ["?????????????"],
+  "topic_interests": ["??????????"],
+  "estimated_course_level": "??/??/??",
+  "recommended_pace": "slow/moderate/fast",
+  "recommended_strategy": "??????????????????????",
+  "attention_points": ["???????????"],
+  "preferred_resource_types": ["??/??/??/??"],
+  "change_summary": "???????????????????"
+}}"""
+
+        response = await self.chat(prompt, max_tokens=2048)
+        result = parse_llm_json(response, fallback={
+            "learning_style": basic_profile.get("learning_style", "VISUAL"),
+            "grade_level": basic_profile.get("grade_level", "BEGINNER"),
+            "course_specific_strengths": [],
+            "course_specific_weaknesses": [],
+            "knowledge_gaps": [],
+            "topic_interests": [],
+            "estimated_course_level": "??",
+            "recommended_pace": "moderate",
+            "recommended_strategy": "??????????",
+            "attention_points": [],
+            "preferred_resource_types": ["??", "??"],
+            "change_summary": "",
+        })
+        logger.info("Path enrichment: course=%s, gaps=%d, style=%s",
+                      course_title, len(result.get("knowledge_gaps", [])),
+                      result.get("learning_style", ""))
         return result
 

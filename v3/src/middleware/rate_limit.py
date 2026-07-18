@@ -36,9 +36,9 @@ DEFAULT_CONFIG = RateLimitConfig(requests=100, window=60)
 ENDPOINT_CONFIGS: Dict[str, RateLimitConfig] = {
     "/agent/chat": RateLimitConfig(requests=30, window=60),
     "/agent/chat/context": RateLimitConfig(requests=30, window=60),
-    "/agent/generate": RateLimitConfig(requests=10, window=60),
+    "/agent/generate": RateLimitConfig(requests=100, window=60),
     "/agent/analyze": RateLimitConfig(requests=20, window=60),
-    "/agent/plan": RateLimitConfig(requests=10, window=60),
+    "/agent/plan": RateLimitConfig(requests=100, window=60),
     "/agent/sessions": RateLimitConfig(requests=50, window=60),
 }
 

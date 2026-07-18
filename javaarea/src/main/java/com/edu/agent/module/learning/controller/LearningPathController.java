@@ -107,6 +107,12 @@ public class LearningPathController {
         return Result.success(learningPathService.generateCheckpointTest(pathId, stepId, questionCount));
     }
 
+    @PostMapping("/{pathId}/steps/{stepId}/exercises/regenerate")
+    public Result<LearningPathDTO> regenerateStepExercises(
+            @PathVariable Long pathId, @PathVariable Long stepId) {
+        return Result.success(learningPathService.regenerateStepExercises(pathId, stepId));
+    }
+
     @PostMapping("/{pathId}/steps/{stepId}/checkpoint/evaluate")
     public Result<Map<String, Object>> evaluateCheckpointTest(
             @PathVariable Long pathId, @PathVariable Long stepId,

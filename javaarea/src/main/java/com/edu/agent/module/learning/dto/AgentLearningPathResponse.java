@@ -20,6 +20,10 @@ public class AgentLearningPathResponse {
         private Integer order;
         private String title;
         private String description;
+        @JsonProperty("phase_name")
+        private String phaseName;
+        @JsonProperty("is_checkpoint")
+        private Boolean isCheckpoint;
         @JsonProperty("knowledge_ids")
         private List<Integer> knowledgeIds;
         @JsonProperty("estimated_hours")
@@ -43,6 +47,16 @@ public class AgentLearningPathResponse {
         @java.lang.SuppressWarnings("all")
         public String getDescription() {
             return this.description;
+        }
+
+        @java.lang.SuppressWarnings("all")
+        public String getPhaseName() {
+            return this.phaseName;
+        }
+
+        @java.lang.SuppressWarnings("all")
+        public Boolean getIsCheckpoint() {
+            return this.isCheckpoint;
         }
 
         @java.lang.SuppressWarnings("all")
@@ -73,6 +87,16 @@ public class AgentLearningPathResponse {
         @java.lang.SuppressWarnings("all")
         public void setDescription(final String description) {
             this.description = description;
+        }
+
+        @java.lang.SuppressWarnings("all")
+        public void setPhaseName(final String phaseName) {
+            this.phaseName = phaseName;
+        }
+
+        @java.lang.SuppressWarnings("all")
+        public void setIsCheckpoint(final Boolean isCheckpoint) {
+            this.isCheckpoint = isCheckpoint;
         }
 
         @java.lang.SuppressWarnings("all")
@@ -109,6 +133,12 @@ public class AgentLearningPathResponse {
             final java.lang.Object this$description = this.getDescription();
             final java.lang.Object other$description = other.getDescription();
             if (this$description == null ? other$description != null : !this$description.equals(other$description)) return false;
+            final java.lang.Object this$phaseName = this.getPhaseName();
+            final java.lang.Object other$phaseName = other.getPhaseName();
+            if (this$phaseName == null ? other$phaseName != null : !this$phaseName.equals(other$phaseName)) return false;
+            final java.lang.Object this$isCheckpoint = this.getIsCheckpoint();
+            final java.lang.Object other$isCheckpoint = other.getIsCheckpoint();
+            if (this$isCheckpoint == null ? other$isCheckpoint != null : !this$isCheckpoint.equals(other$isCheckpoint)) return false;
             final java.lang.Object this$knowledgeIds = this.getKnowledgeIds();
             final java.lang.Object other$knowledgeIds = other.getKnowledgeIds();
             if (this$knowledgeIds == null ? other$knowledgeIds != null : !this$knowledgeIds.equals(other$knowledgeIds)) return false;
@@ -136,6 +166,10 @@ public class AgentLearningPathResponse {
             result = result * PRIME + ($title == null ? 43 : $title.hashCode());
             final java.lang.Object $description = this.getDescription();
             result = result * PRIME + ($description == null ? 43 : $description.hashCode());
+            final java.lang.Object $phaseName = this.getPhaseName();
+            result = result * PRIME + ($phaseName == null ? 43 : $phaseName.hashCode());
+            final java.lang.Object $isCheckpoint = this.getIsCheckpoint();
+            result = result * PRIME + ($isCheckpoint == null ? 43 : $isCheckpoint.hashCode());
             final java.lang.Object $knowledgeIds = this.getKnowledgeIds();
             result = result * PRIME + ($knowledgeIds == null ? 43 : $knowledgeIds.hashCode());
             final java.lang.Object $resources = this.getResources();
@@ -146,10 +180,18 @@ public class AgentLearningPathResponse {
         @java.lang.Override
         @java.lang.SuppressWarnings("all")
         public java.lang.String toString() {
-            return "AgentLearningPathResponse.Step(order=" + this.getOrder() + ", title=" + this.getTitle() + ", description=" + this.getDescription() + ", knowledgeIds=" + this.getKnowledgeIds() + ", estimatedHours=" + this.getEstimatedHours() + ", resources=" + this.getResources() + ")";
+            return "AgentLearningPathResponse.Step(order=" + this.getOrder()
+                + ", title=" + this.getTitle()
+                + ", description=" + this.getDescription()
+                + ", phaseName=" + this.getPhaseName()
+                + ", isCheckpoint=" + this.getIsCheckpoint()
+                + ", knowledgeIds=" + this.getKnowledgeIds()
+                + ", estimatedHours=" + this.getEstimatedHours()
+                + ", resources=" + this.getResources() + ")";
         }
     }
 
+    
     public List<Step> getStepsSafe() {
         return steps != null ? steps : Collections.emptyList();
     }
