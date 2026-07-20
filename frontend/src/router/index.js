@@ -4,7 +4,7 @@ import MistakeBookView from '@/views/MistakeBookView.vue';
 const ChatView = () => import('@/views/ChatView.vue');
 
 const routes = [
-  { path: '/', redirect: '/dashboard' },
+  { path: '/', redirect: '/login' },
   {
     path: '/login',
     name: 'Login',
